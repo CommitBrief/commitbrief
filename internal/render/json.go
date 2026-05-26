@@ -13,26 +13,30 @@ import (
 //
 // Versioning policy (see docs/json-schema.md):
 //   - v1 (current): top-level shape locked at {schema, content, findings,
-//     summary, meta}. `findings` and `summary` are reserved arrays/objects;
-//     v1 always emits them empty, and v1.x consumers MUST tolerate non-empty
-//     additions of well-known shapes within them.
+//     summary, meta}. `findings` is populated from the parsed LLM response
+//     under ADR-0014. `summary` and `content` remain in the schema for
+//     backwards compatibility:
+//   - `content` is populated only on graceful degrade (LLM produced
+//     unparseable output); empty on the happy path.
+//   - `summary` is reserved for a future LLM-authored prose summary; v1
+//     always emits it as `{}`.
 //   - Additive changes (new optional fields in `meta`, new keys in
-//     `summary`, new elements in `findings`) are NOT a version bump.
+//     `summary`, new fields on a Finding) are NOT a version bump.
 //     Consumers MUST ignore unknown fields.
 //   - Renaming, removing, or changing the type of any documented field IS
 //     a breaking change and requires bumping SchemaVersion to 2.
 const SchemaVersion = 1
 
 type jsonDocument struct {
-	Schema   int      `json:"schema"`
-	Content  string   `json:"content"`
-	Findings []any    `json:"findings"`
-	Summary  Summary  `json:"summary"`
-	Meta     jsonMeta `json:"meta"`
+	Schema   int       `json:"schema"`
+	Content  string    `json:"content"`
+	Findings []Finding `json:"findings"`
+	Summary  Summary   `json:"summary"`
+	Meta     jsonMeta  `json:"meta"`
 }
 
 type Summary struct {
-	// Placeholder for Phase 10's structured summary. v1 leaves it empty.
+	// Placeholder for a future LLM-authored prose summary. v1 leaves it empty.
 }
 
 type jsonMeta struct {
@@ -53,10 +57,24 @@ type jsonUsage struct {
 }
 
 func JSON(w io.Writer, p Payload) error {
+	// Findings happy path: structured response parsed cleanly. Emit findings
+	// and leave content empty (vestigial under ADR-0014 — removed in v2).
+	//
+	// Degrade path (p.Findings == nil): preserve the raw response in
+	// content so downstream tools can see what the LLM actually returned,
+	// and emit findings as an empty array so consumers can rely on its
+	// presence and type.
+	findings := p.Findings
+	content := ""
+	if findings == nil {
+		findings = []Finding{}
+		content = p.Content
+	}
+
 	doc := jsonDocument{
 		Schema:   SchemaVersion,
-		Content:  p.Content,
-		Findings: []any{},
+		Content:  content,
+		Findings: findings,
 		Meta: jsonMeta{
 			Provider:  p.Meta.Provider,
 			Model:     p.Meta.Model,

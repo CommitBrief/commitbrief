@@ -139,7 +139,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 				LinesRemoved: parsed.DeletedLines(),
 				RulesLoaded:  loaded.Source != rules.SourceDefault,
 			}
-			return renderResult(cmd, entry.Result.Content, meta)
+			return renderResult(cmd, entry.Result.Content, outputLoaded.Content, meta)
 		}
 	}
 
@@ -188,7 +188,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 			},
 		})
 	}
-	return renderResult(cmd, resp.Content, meta)
+	return renderResult(cmd, resp.Content, outputLoaded.Content, meta)
 }
 
 func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, cat *i18n.Catalog) (git.Diff, error) {
@@ -239,11 +239,24 @@ func openCache(repoRoot string) (*cache.Cache, error) {
 	})
 }
 
-func renderResult(cmd *cobra.Command, content string, meta render.Meta) error {
+func renderResult(cmd *cobra.Command, content, outputTemplate string, meta render.Meta) error {
+	// Try to parse the LLM response as structured findings (ADR-0014). On
+	// parse failure we emit a stderr warning and continue with Findings nil
+	// so each renderer falls back to its degrade path (raw Content). The
+	// retry-once provider-side recovery lives in Stage 4; here we deal only
+	// with what the cache/provider actually handed us.
+	findings, parseErr := render.ParseFindings(content)
+	if parseErr != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), "warning: LLM produced malformed JSON; falling back to plain-text view.")
+		findings = nil
+	}
+
 	payload := render.Payload{
-		Content: content,
-		Meta:    meta,
-		Verbose: global.verbose,
+		Content:        content,
+		Findings:       findings,
+		OutputTemplate: outputTemplate,
+		Meta:           meta,
+		Verbose:        global.verbose,
 	}
 
 	w, closer, err := openOutput(cmd)

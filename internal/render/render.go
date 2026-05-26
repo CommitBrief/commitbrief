@@ -28,7 +28,22 @@ func (f Format) String() string {
 }
 
 type Payload struct {
+	// Content is the raw provider response — under ADR-0014 a JSON string
+	// matching the findings schema; on graceful degrade it may be free-form
+	// markdown left over from a malformed JSON response. Cached as-is.
 	Content string
+
+	// Findings is the parsed structured response from the LLM. A non-nil
+	// empty slice means "no review-worthy issues"; a nil slice signals
+	// graceful degrade — the JSON parse failed and renderers must fall
+	// back to rendering Content directly (Stage A behavior).
+	Findings []Finding
+
+	// OutputTemplate is the loaded OUTPUT.md template body, consumed by the
+	// Markdown renderer. Empty string falls back to emitting Content
+	// unchanged (also the path used during degrade).
+	OutputTemplate string
+
 	Meta    Meta
 	Verbose bool
 }
