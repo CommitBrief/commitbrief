@@ -235,3 +235,151 @@ func TestTestConnectionSuccess(t *testing.T) {
 		t.Errorf("TestConnection: %v", err)
 	}
 }
+
+// fakeStreamingChatServer serves an SSE stream of ChatCompletionChunk
+// events. The final chunk includes usage info (because we request
+// include_usage=true on streaming requests).
+func fakeStreamingChatServer(t *testing.T, deltas []string, prompt, completion, cached int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/chat/completions") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+
+		writeData := func(payload map[string]any) {
+			data, _ := json.Marshal(payload)
+			_, _ = w.Write([]byte("data: " + string(data) + "\n\n"))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+
+		base := map[string]any{
+			"id":      "chatcmpl-stream-test",
+			"object":  "chat.completion.chunk",
+			"created": 1700000000,
+			"model":   ModelGPT4o,
+		}
+
+		// First chunk: role announcement.
+		first := map[string]any{}
+		for k, v := range base {
+			first[k] = v
+		}
+		first["choices"] = []map[string]any{{
+			"index":         0,
+			"delta":         map[string]any{"role": "assistant", "content": ""},
+			"finish_reason": nil,
+		}}
+		writeData(first)
+
+		// Content delta chunks.
+		for _, d := range deltas {
+			chunk := map[string]any{}
+			for k, v := range base {
+				chunk[k] = v
+			}
+			chunk["choices"] = []map[string]any{{
+				"index":         0,
+				"delta":         map[string]any{"content": d},
+				"finish_reason": nil,
+			}}
+			writeData(chunk)
+		}
+
+		// Final finish chunk (empty delta, finish_reason set).
+		finish := map[string]any{}
+		for k, v := range base {
+			finish[k] = v
+		}
+		finish["choices"] = []map[string]any{{
+			"index":         0,
+			"delta":         map[string]any{},
+			"finish_reason": "stop",
+		}}
+		writeData(finish)
+
+		// Usage chunk (empty choices, populated usage; only present when
+		// stream_options.include_usage=true).
+		usage := map[string]any{}
+		for k, v := range base {
+			usage[k] = v
+		}
+		usage["choices"] = []map[string]any{}
+		usage["usage"] = map[string]any{
+			"prompt_tokens":     prompt,
+			"completion_tokens": completion,
+			"total_tokens":      prompt + completion,
+			"prompt_tokens_details": map[string]any{
+				"cached_tokens": cached,
+			},
+		}
+		writeData(usage)
+
+		// OpenAI signals end with [DONE].
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}))
+}
+
+func TestReviewStreamAssemblesDeltas(t *testing.T) {
+	srv := fakeStreamingChatServer(t, []string{"hello ", "world", "!"}, 100, 50, 0)
+	defer srv.Close()
+
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	ch, err := c.ReviewStream(context.Background(), provider.Request{
+		Model:      ModelGPT4o,
+		UserPrompt: "test",
+	})
+	if err != nil {
+		t.Fatalf("ReviewStream: %v", err)
+	}
+
+	var content strings.Builder
+	var usage provider.Usage
+	var sawDone bool
+	for ev := range ch {
+		switch ev.Type {
+		case provider.EventDelta:
+			content.WriteString(ev.Delta)
+		case provider.EventUsage:
+			usage = ev.Usage
+		case provider.EventDone:
+			sawDone = true
+		case provider.EventError:
+			t.Fatalf("unexpected error event: %v", ev.Err)
+		}
+	}
+	if content.String() != "hello world!" {
+		t.Errorf("assembled = %q, want %q", content.String(), "hello world!")
+	}
+	if !sawDone {
+		t.Error("expected EventDone")
+	}
+	if usage.InputTokens != 100 || usage.OutputTokens != 50 {
+		t.Errorf("Usage = %+v, want input=100 output=50", usage)
+	}
+}
+
+func TestReviewStreamCachedTokensReported(t *testing.T) {
+	srv := fakeStreamingChatServer(t, []string{"x"}, 1024, 5, 768)
+	defer srv.Close()
+
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	ch, _ := c.ReviewStream(context.Background(), provider.Request{Model: ModelGPT4o})
+
+	var usage provider.Usage
+	for ev := range ch {
+		if ev.Type == provider.EventUsage {
+			usage = ev.Usage
+		}
+	}
+	if usage.CachedInputTokens != 768 {
+		t.Errorf("CachedInputTokens = %d, want 768", usage.CachedInputTokens)
+	}
+}
