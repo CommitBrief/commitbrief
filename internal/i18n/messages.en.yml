@@ -32,6 +32,9 @@ cost.aborted_user: "aborted: cost preflight"
 cost.aborted_non_interactive: "Aborted (non-interactive); pass --no-cost-check or raise cost.warn_threshold_usd to override."
 cost.bypassed_yes: "ℹ Cost preflight bypassed by --yes (estimate: $%.4f)."
 
+fail_on.threshold_reached: "%d finding(s) at or above '%s' severity"
+fail_on.degraded_skipped: "ℹ --fail-on skipped: LLM produced unparseable output, no findings to evaluate."
+
 cache.hit: "(cached)"
 cache.disabled: "(cache disabled)"
 

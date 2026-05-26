@@ -11,6 +11,17 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **`--fail-on=<severity>` flag** — CI-actionable exit code gate. After
+  rendering the review, the CLI compares the parsed findings against
+  the requested threshold and exits 1 if any finding meets or exceeds
+  it. Accepted values: `critical`, `high`, `medium`, `low`, `info`,
+  `any` (one finding of any severity is enough), `none`/empty (off).
+  Typos are rejected loudly. On graceful degrade (LLM produced
+  unparseable output, no findings to evaluate) the check is skipped
+  with a stderr notice — refusing to fail on missing data is the
+  safer default for CI gates. The rendered review is printed *before*
+  the exit code is decided, so the consumer can see which findings
+  caused the failure.
 - **Cost preflight** — before each fresh provider call (cache hits are
   skipped) the CLI computes the estimated cost from the prompt token
   count + the provider's per-model pricing. If the estimate exceeds the

@@ -166,7 +166,10 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 			if entry.Result.Format != cache.FormatMarkdownFallback {
 				findings, _ = render.ParseFindings(entry.Result.Content)
 			}
-			return renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta)
+			if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
+				return err
+			}
+			return applyFailOn(cmd, app, findings)
 		}
 	}
 
@@ -241,7 +244,10 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 			},
 		})
 	}
-	return renderResult(cmd, content, outputLoaded.Content, findings, meta)
+	if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
+		return err
+	}
+	return applyFailOn(cmd, app, findings)
 }
 
 // tryStructuredReview runs Review and, on parse failure, retries once.

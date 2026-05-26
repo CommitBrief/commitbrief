@@ -567,6 +567,81 @@ func TestCostPreflightNoCostCheckFlagSkips(t *testing.T) {
 
 // ---------- end cost preflight ----------
 
+// ---------- --fail-on (11.5.7) ----------
+
+func TestFailOnFiresWhenMockSeverityMatches(t *testing.T) {
+	// Default mock returns a single finding at the "info" severity.
+	// --fail-on=info should therefore exit non-zero with a clear
+	// CI-actionable message.
+	e := newCLIEnv(t)
+	err := e.run("--staged", "--no-cache", "--fail-on=info")
+	if err == nil {
+		t.Fatalf("--fail-on=info with an info finding should error; got nil\nstdout:\n%s", e.out.String())
+	}
+	if !strings.Contains(err.Error(), "info") {
+		t.Errorf("error should reference the threshold 'info'; got %q", err.Error())
+	}
+}
+
+func TestFailOnSilentWhenMockSeverityBelowThreshold(t *testing.T) {
+	// Mock returns an "info" finding; --fail-on=critical requires
+	// critical severity → no error.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--fail-on=critical"); err != nil {
+		t.Fatalf("--fail-on=critical should pass with only info findings; got %v\nstdout:\n%s", err, e.out.String())
+	}
+}
+
+func TestFailOnAnyFiresOnSingleFinding(t *testing.T) {
+	// --fail-on=any treats any review finding as a fail signal —
+	// mirrors the strictest CI gate where the team doesn't want any
+	// flagged code through.
+	e := newCLIEnv(t)
+	err := e.run("--staged", "--no-cache", "--fail-on=any")
+	if err == nil {
+		t.Fatalf("--fail-on=any with one finding should error; got nil\nstdout:\n%s", e.out.String())
+	}
+	if !strings.Contains(err.Error(), "any") {
+		t.Errorf("error should mention 'any' (the threshold label); got %q", err.Error())
+	}
+}
+
+func TestFailOnNoneFlagPassesThrough(t *testing.T) {
+	// Explicit --fail-on=none should be indistinguishable from the
+	// unset case — useful when a workflow templating tool always
+	// passes the flag and 'none' is its "off" sentinel.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--fail-on=none"); err != nil {
+		t.Fatalf("--fail-on=none should never error; got %v", err)
+	}
+}
+
+func TestFailOnInvalidValueErrors(t *testing.T) {
+	// Typos in CI configs are easy; reject loudly.
+	e := newCLIEnv(t)
+	err := e.run("--staged", "--no-cache", "--fail-on=blocker")
+	if err == nil {
+		t.Fatal("expected error for invalid --fail-on value; got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid --fail-on") {
+		t.Errorf("error should reference --fail-on; got %q", err.Error())
+	}
+}
+
+func TestFailOnRendersBeforeExiting(t *testing.T) {
+	// Even when --fail-on triggers, the rendered review must still
+	// appear on stdout so the human/CI consumer can see WHICH
+	// findings caused the failure. This guards against a regression
+	// where applyFailOn runs *before* renderResult.
+	e := newCLIEnv(t)
+	_ = e.run("--staged", "--no-cache", "--fail-on=info") // expected to error
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("rendered review (mock title) missing from stdout; got:\n%s", e.out.String())
+	}
+}
+
+// ---------- end --fail-on ----------
+
 // ---------- dry-run ----------
 
 func TestDryRunStaged(t *testing.T) {
