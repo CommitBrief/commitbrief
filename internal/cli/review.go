@@ -127,13 +127,17 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 			// what would have been spent — surfaced as "Saved" by the
 			// verbose footer (see render/verbose.go).
 			meta := render.Meta{
-				Provider:  prov.Name(),
-				Model:     model,
-				Lang:      app.Lang.Code,
-				Cached:    true,
-				Timestamp: entry.CreatedAt,
-				Usage:     usage,
-				Cost:      prov.Pricing(model).Cost(usage),
+				Provider:     prov.Name(),
+				Model:        model,
+				Lang:         app.Lang.Code,
+				Cached:       true,
+				Timestamp:    entry.CreatedAt,
+				Usage:        usage,
+				Cost:         prov.Pricing(model).Cost(usage),
+				Files:        parsed.FileCount(),
+				LinesAdded:   parsed.AddedLines(),
+				LinesRemoved: parsed.DeletedLines(),
+				RulesLoaded:  loaded.Source != rules.SourceDefault,
 			}
 			return renderResult(cmd, entry.Result.Content, meta)
 		}
@@ -152,13 +156,17 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	latency := time.Since(start)
 
 	meta := render.Meta{
-		Provider:  prov.Name(),
-		Model:     resp.Model,
-		Lang:      app.Lang.Code,
-		Usage:     resp.Usage,
-		Cost:      prov.Pricing(resp.Model).Cost(resp.Usage),
-		Latency:   latency,
-		Timestamp: time.Now().UTC(),
+		Provider:     prov.Name(),
+		Model:        resp.Model,
+		Lang:         app.Lang.Code,
+		Usage:        resp.Usage,
+		Cost:         prov.Pricing(resp.Model).Cost(resp.Usage),
+		Latency:      latency,
+		Timestamp:    time.Now().UTC(),
+		Files:        parsed.FileCount(),
+		LinesAdded:   parsed.AddedLines(),
+		LinesRemoved: parsed.DeletedLines(),
+		RulesLoaded:  loaded.Source != rules.SourceDefault,
 	}
 
 	if !global.noCache && cacheStore != nil {
@@ -251,7 +259,11 @@ func renderResult(cmd *cobra.Command, content string, meta render.Meta) error {
 		return render.Markdown(w, payload)
 	}
 	if ui.ColorEnabled(w, ui.ParseColorMode(global.color)) {
-		return render.Terminal(w, payload)
+		// Cards is the default rich TTY layout: glamour-rendered body
+		// framed by a styled header, status line, and footer (Phase 11
+		// Stage A). Terminal (glamour-only, no frame) stays exported for
+		// callers that want a thinner render but is no longer the default.
+		return render.Cards(w, payload)
 	}
 	return render.Markdown(w, payload)
 }

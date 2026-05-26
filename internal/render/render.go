@@ -42,4 +42,12 @@ type Meta struct {
 	Latency   time.Duration
 	Cached    bool
 	Timestamp time.Time
+	// Stats describing what went into this review. Used by the Cards
+	// renderer for its pre-body status line; zero values cause the line
+	// to be omitted. Markdown / JSON / verbose-footer renderers ignore
+	// these fields, so adding more here is backwards-compatible.
+	Files        int  // post-filter file count
+	LinesAdded   int  // total `+` lines in the reviewed diff
+	LinesRemoved int  // total `-` lines in the reviewed diff
+	RulesLoaded  bool // a non-default COMMITBRIEF.md was loaded
 }

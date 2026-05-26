@@ -55,6 +55,7 @@ archives:
       - LICENSE
       - README.md
       - CHANGELOG.md
+      - man/*.1
 
 checksum:
   name_template: 'checksums.txt'
@@ -89,6 +90,7 @@ brews:
     skip_upload: auto
     install: |
       bin.install "commitbrief"
+      man1.install Dir["man/*.1"]
     test: |
       system "#{bin}/commitbrief", "--help"
 

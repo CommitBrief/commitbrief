@@ -292,6 +292,118 @@ func TestVerboseFooterOmitsEmptyFields(t *testing.T) {
 	}
 }
 
+func TestCardsHeader(t *testing.T) {
+	var w bytes.Buffer
+	if err := Cards(&w, samplePayload()); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	for _, want := range []string{"commitbrief", "provider:", "anthropic/claude-opus-4-7", "cache:"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("header missing %q; got:\n%s", want, plain)
+		}
+	}
+}
+
+func TestCardsStatusLineSurfacesCounts(t *testing.T) {
+	p := samplePayload()
+	p.Meta.Files = 3
+	p.Meta.LinesAdded = 42
+	p.Meta.LinesRemoved = 7
+	p.Meta.RulesLoaded = true
+
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	for _, want := range []string{"3 files", "42 added", "7 removed", "COMMITBRIEF.md loaded"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("status line missing %q; got:\n%s", want, plain)
+		}
+	}
+}
+
+func TestCardsStatusLineOmittedWhenNoStats(t *testing.T) {
+	// samplePayload() has zeroed stats by default, so the status line
+	// should not appear. (Footer still does.)
+	var w bytes.Buffer
+	if err := Cards(&w, samplePayload()); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	if strings.Contains(plain, "analyzing") {
+		t.Errorf("status line should be omitted when stats are zero; got:\n%s", plain)
+	}
+}
+
+func TestCardsFooterCachedSwitch(t *testing.T) {
+	// Uncached: footer shows Cost. Cached: footer shows Saved.
+	cases := []struct {
+		name    string
+		cached  bool
+		want    string
+		notWant string
+	}{
+		{"uncached", false, "Cost:", "Saved:"},
+		{"cached", true, "Saved:", "Cost:"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := samplePayload()
+			p.Meta.Cached = c.cached
+			var w bytes.Buffer
+			if err := Cards(&w, p); err != nil {
+				t.Fatal(err)
+			}
+			plain := stripANSI(w.String())
+			if !strings.Contains(plain, c.want) {
+				t.Errorf("expected %q; got:\n%s", c.want, plain)
+			}
+			if strings.Contains(plain, c.notWant) {
+				t.Errorf("should not contain %q; got:\n%s", c.notWant, plain)
+			}
+		})
+	}
+}
+
+func TestCardsRendersBodyContent(t *testing.T) {
+	// The glamour-rendered markdown body must still appear between the
+	// header/status and footer.
+	var w bytes.Buffer
+	if err := Cards(&w, samplePayload()); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	for _, want := range []string{"Review", "Looks good"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("body missing %q; got:\n%s", want, plain)
+		}
+	}
+}
+
+// stripANSI removes ANSI escape sequences so assertions work regardless of
+// whether lipgloss enabled color for the test writer (a *bytes.Buffer is
+// not a TTY; lipgloss usually downgrades, but we don't want to depend on
+// that exact behavior for our text-content assertions).
+func stripANSI(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
+			// Skip until the terminator (letter in @-~).
+			for i += 2; i < len(s); i++ {
+				c := s[i]
+				if c >= '@' && c <= '~' {
+					break
+				}
+			}
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
 func TestFormatDurationBuckets(t *testing.T) {
 	cases := map[time.Duration]string{
 		3200 * time.Millisecond: "3.20s",

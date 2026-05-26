@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 
 	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/version"
@@ -23,6 +24,7 @@ type globalFlags struct {
 	provider string
 	model    string
 	color    string
+	genMan   string // hidden: --gen-man <dir> writes man pages and exits
 }
 
 var global globalFlags
@@ -34,6 +36,22 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version.Info(),
+		// PersistentPreRunE fires before every command's RunE. We use it as
+		// the gen-man interception point so `commitbrief --gen-man <dir>` (or
+		// even attached to a subcommand) short-circuits to man-page emission
+		// instead of running a review. os.Exit(0) is the deliberate end-state.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if global.genMan == "" {
+				return nil
+			}
+			header := &doc.GenManHeader{Title: "COMMITBRIEF", Section: "1"}
+			if err := doc.GenManTree(cmd.Root(), header, global.genMan); err != nil {
+				return fmt.Errorf("gen-man: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "wrote man pages to %s\n", global.genMan)
+			os.Exit(0)
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runReview(cmd, reviewScope)
 		},
@@ -51,6 +69,10 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
+
+	// Hidden: drives scripts/manpage.sh; not part of the user-visible surface.
+	flags.StringVar(&global.genMan, "gen-man", "", "generate man pages into <dir> and exit (hidden)")
+	_ = cmd.PersistentFlags().MarkHidden("gen-man")
 
 	// Review-scope flags live on root so `commitbrief --staged` works without
 	// a subcommand. They are re-bound on `dry-run` (see newDryRunCmd) since
