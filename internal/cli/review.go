@@ -174,7 +174,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	if format == cache.FormatJSON {
 		findings, _ = render.ParseFindings(content)
 	} else {
-		fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
 	}
 
 	respModel := model

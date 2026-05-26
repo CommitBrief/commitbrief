@@ -98,7 +98,7 @@ func TestCardsOrdersBySeverity(t *testing.T) {
 	if iCrit < 0 || iMed < 0 || iInfo < 0 {
 		t.Fatalf("missing one of CRITICAL/MEDIUM/INFO in:\n%s", plain)
 	}
-	if !(iCrit < iMed && iMed < iInfo) {
+	if iCrit >= iMed || iMed >= iInfo {
 		t.Errorf("severity order wrong: CRITICAL@%d MEDIUM@%d INFO@%d", iCrit, iMed, iInfo)
 	}
 }

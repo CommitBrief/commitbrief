@@ -97,7 +97,7 @@ func extractStructured(msg *sdk.Message) (string, bool) {
 		}
 		// Re-encode to compact form so the cache key (a SHA over content)
 		// is stable regardless of whitespace the SDK happens to emit.
-		var raw json.RawMessage = block.Input
+		raw := block.Input
 		out, err := json.Marshal(map[string]json.RawMessage{"findings": rawFindings(raw)})
 		if err != nil {
 			return "", false

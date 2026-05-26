@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-26
+
 ### ⚠️ Breaking — OUTPUT.md semantics (ADR-0014)
 - **`COMMITBRIEF.md` users are unaffected.** Project review rules remain
   the user-editable system prompt; no shape change there.
