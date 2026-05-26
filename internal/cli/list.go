@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
 	"github.com/CommitBrief/commitbrief/internal/render"
@@ -92,11 +90,12 @@ func newListCmd() *cobra.Command {
 		Short: "Print the command reference",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			w := cmd.OutOrStdout()
 			payload := render.Payload{Content: commandReference}
-			if global.markdown || global.json || !ui.ColorEnabled(os.Stdout, ui.ParseColorMode(global.color)) {
-				return render.Markdown(os.Stdout, payload)
+			if global.markdown || global.json || !ui.ColorEnabled(w, ui.ParseColorMode(global.color)) {
+				return render.Markdown(w, payload)
 			}
-			return render.Terminal(os.Stdout, payload)
+			return render.Terminal(w, payload)
 		},
 	}
 }

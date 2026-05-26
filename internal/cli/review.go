@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -45,7 +44,8 @@ func bindScopeFlags(cmd *cobra.Command) {
 	f.StringVarP(&reviewScope.branch, "branch", "b", "", "review current branch vs target ref")
 }
 
-func runReview(ctx context.Context, scope reviewScopeFlags) error {
+func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
+	ctx := cmd.Context()
 	app, err := resolveContext(true)
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func runReview(ctx context.Context, scope reviewScopeFlags) error {
 				Usage:     usage,
 				Cost:      prov.Pricing(model).Cost(usage),
 			}
-			return renderResult(entry.Result.Content, meta)
+			return renderResult(cmd, entry.Result.Content, meta)
 		}
 	}
 
@@ -175,7 +175,7 @@ func runReview(ctx context.Context, scope reviewScopeFlags) error {
 			},
 		})
 	}
-	return renderResult(resp.Content, meta)
+	return renderResult(cmd, resp.Content, meta)
 }
 
 func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags) (git.Diff, error) {
@@ -226,14 +226,14 @@ func openCache(repoRoot string) (*cache.Cache, error) {
 	})
 }
 
-func renderResult(content string, meta render.Meta) error {
+func renderResult(cmd *cobra.Command, content string, meta render.Meta) error {
 	payload := render.Payload{
 		Content: content,
 		Meta:    meta,
 		Verbose: global.verbose,
 	}
 
-	w, closer, err := openOutput()
+	w, closer, err := openOutput(cmd)
 	if err != nil {
 		return err
 	}
@@ -251,9 +251,9 @@ func renderResult(content string, meta render.Meta) error {
 	return render.Markdown(w, payload)
 }
 
-func openOutput() (io.Writer, func(), error) {
+func openOutput(cmd *cobra.Command) (io.Writer, func(), error) {
 	if global.output == "" {
-		return os.Stdout, func() {}, nil
+		return cmd.OutOrStdout(), func() {}, nil
 	}
 	f, err := os.Create(global.output)
 	if err != nil {

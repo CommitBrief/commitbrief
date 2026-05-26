@@ -34,7 +34,7 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		Version:       version.Info(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReview(cmd.Context(), reviewScope)
+			return runReview(cmd, reviewScope)
 		},
 	}
 
