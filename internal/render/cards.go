@@ -58,9 +58,19 @@ func cardsBody(p Payload) (string, error) {
 		return strings.TrimRight(body, "\n"), nil
 	}
 
-	// Clean review with no findings — single short success panel.
+	// Clean review with no findings — single short success panel in the
+	// normal layout, or a one-liner in compact mode.
 	if len(p.Findings) == 0 {
+		if p.Compact {
+			return styleOK.Render("✓ ") + styleMuted.Render("No findings. Looks good."), nil
+		}
 		return cardsEmptyPanel(), nil
+	}
+
+	// Compact mode: one line per finding, severity-ordered. No panel
+	// borders — density is the whole point.
+	if p.Compact {
+		return cardsCompactBody(p.Findings), nil
 	}
 
 	// Per-finding panels, ordered critical → info.
@@ -76,6 +86,48 @@ func cardsBody(p Payload) (string, error) {
 		}
 	}
 	return sb.String(), nil
+}
+
+// cardsCompactBody renders findings as severity-grouped one-liners.
+// Critical → info ordering matches the panel layout so a user toggling
+// `--compact` doesn't see findings re-shuffle.
+func cardsCompactBody(findings []Finding) string {
+	var sb strings.Builder
+	first := true
+	for _, group := range GroupBySeverity(findings) {
+		for _, f := range group.Items {
+			if !first {
+				sb.WriteString("\n")
+			}
+			sb.WriteString(cardsCompactLine(f))
+			first = false
+		}
+	}
+	return sb.String()
+}
+
+// cardsCompactLine formats one finding as a single line:
+//
+//	‼ CRITICAL • internal/auth/session.go:142 — SQL fragment built from request input
+//
+// Icon + badge share the severity color; the rest stays muted so the
+// severity remains the eye's anchor. Description and snippet are
+// intentionally omitted — that's the trade for the density.
+func cardsCompactLine(f Finding) string {
+	color, ok := severityColors[f.Severity]
+	if !ok {
+		color = severityColors[SeverityInfo]
+	}
+	icon := severityIcon[f.Severity]
+	if icon == "" {
+		icon = severityIcon[SeverityInfo]
+	}
+	badge := lipgloss.NewStyle().Foreground(color).Bold(true).Render(icon + " " + strings.ToUpper(string(f.Severity)))
+	sep := styleMuted.Render(" • ")
+	location := styleMuted.Render(fmt.Sprintf("%s:%d", f.File, f.Line))
+	dash := styleMuted.Render(" — ")
+	title := f.Title
+	return badge + sep + location + dash + title
 }
 
 var (

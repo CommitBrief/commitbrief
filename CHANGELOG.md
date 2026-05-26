@@ -34,6 +34,14 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
     eye-grouping of "where + how severe".
 
 ### Added
+- **`--compact` flag** for one-line-per-finding rendering — useful when a
+  review surfaces many findings and per-finding panels would dominate
+  the terminal. Format per line: `[icon] SEVERITY • file:line — title`.
+  Header/status/footer stay; description and snippet are omitted (the
+  cost of density). Severity ordering (critical → info) matches the
+  full panel layout so toggling the flag never re-shuffles findings.
+  Empty case renders as a single `✓ No findings. Looks good.` line
+  instead of the bordered success panel.
 - **`commitbrief providers` subcommand** for multi-provider workflows
   without hand-editing YAML.
   - `providers list` — show every configured + registered provider, mark

@@ -309,6 +309,7 @@ func renderResult(cmd *cobra.Command, content, outputTemplate string, findings [
 		OutputTemplate: outputTemplate,
 		Meta:           meta,
 		Verbose:        global.verbose,
+		Compact:        global.compact,
 	}
 
 	w, closer, err := openOutput(cmd)

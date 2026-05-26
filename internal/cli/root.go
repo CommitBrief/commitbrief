@@ -20,6 +20,7 @@ type globalFlags struct {
 	yes      bool
 	verbose  bool
 	quiet    bool
+	compact  bool
 	lang     string
 	provider string
 	model    string
@@ -70,6 +71,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVarP(&global.yes, "yes", "y", false, "auto-confirm prompts (pre-send guard, init overwrite)")
 	flags.BoolVarP(&global.verbose, "verbose", "v", false, "show token/cost/latency footer")
 	flags.BoolVarP(&global.quiet, "quiet", "q", false, "suppress info messages on stderr")
+	flags.BoolVar(&global.compact, "compact", false, "one-line per finding (dense review output)")
 	flags.StringVar(&global.lang, "lang", "", "override output language (e.g. tr, en)")
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")

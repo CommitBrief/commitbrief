@@ -44,6 +44,13 @@ type Payload struct {
 	// unchanged (also the path used during degrade).
 	OutputTemplate string
 
+	// Compact requests one-line-per-finding rendering in the Cards layout,
+	// useful when a review surfaces many findings and per-finding panels
+	// would dominate the terminal. Header/status/footer stay; the body
+	// becomes a severity-ordered list of "[icon] SEVERITY • file:line —
+	// title" lines. Other renderers (Markdown/JSON) ignore this field.
+	Compact bool
+
 	Meta    Meta
 	Verbose bool
 }

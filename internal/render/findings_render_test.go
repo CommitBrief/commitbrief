@@ -277,6 +277,117 @@ func TestCardsSnippetIntegratedWithPanel(t *testing.T) {
 	}
 }
 
+// ---------- Compact mode (11.5.2) ----------
+
+func TestCardsCompactSingleLinePerFinding(t *testing.T) {
+	// In compact mode the body is N lines for N findings — no panel
+	// borders, no blank padding between entries.
+	p := samplePayload()
+	p.Findings = sampleFindings() // 3 findings: critical, high, info
+	p.Compact = true
+
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+
+	// No rounded panel corners should appear when compact is on — the
+	// whole point is density.
+	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
+		if strings.Contains(plain, corner) {
+			t.Errorf("compact mode should not emit panel corner %q; got:\n%s", corner, plain)
+		}
+	}
+
+	// Each finding's title appears exactly once and on its own line.
+	for _, title := range []string{
+		"SQL fragment built from request input",
+		"NOT NULL column added without default",
+		"Unused import",
+	} {
+		if !strings.Contains(plain, title) {
+			t.Errorf("compact body missing title %q\n%s", title, plain)
+		}
+	}
+}
+
+func TestCardsCompactPreservesIconAndBullet(t *testing.T) {
+	// Compact mode keeps the visual anchors from the full layout: severity
+	// icon + bullet separator between badge and location.
+	p := samplePayload()
+	p.Findings = []Finding{{
+		Severity: SeverityCritical, File: "internal/auth/session.go", Line: 142,
+		Title: "SQL fragment built from request input", Description: "d",
+	}}
+	p.Compact = true
+
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+
+	want := "‼ CRITICAL • internal/auth/session.go:142 — SQL fragment built from request input"
+	if !strings.Contains(plain, want) {
+		t.Errorf("compact line layout mismatch:\nwant substring: %q\ngot:\n%s", want, plain)
+	}
+}
+
+func TestCardsCompactSeverityOrderingRespected(t *testing.T) {
+	// Findings are emitted in critical→high→medium→low→info order even
+	// when the input slice is shuffled — toggling --compact must not
+	// re-shuffle findings relative to the panel layout.
+	p := samplePayload()
+	p.Findings = []Finding{
+		{Severity: SeverityInfo, File: "z.go", Line: 1, Title: "info-item", Description: "d"},
+		{Severity: SeverityCritical, File: "a.go", Line: 1, Title: "crit-item", Description: "d"},
+		{Severity: SeverityMedium, File: "m.go", Line: 1, Title: "med-item", Description: "d"},
+	}
+	p.Compact = true
+
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+
+	iCrit := strings.Index(plain, "crit-item")
+	iMed := strings.Index(plain, "med-item")
+	iInfo := strings.Index(plain, "info-item")
+	if iCrit < 0 || iMed < 0 || iInfo < 0 {
+		t.Fatalf("compact body missing one of the titles:\n%s", plain)
+	}
+	if iCrit >= iMed || iMed >= iInfo {
+		t.Errorf("severity order wrong in compact mode: crit@%d med@%d info@%d", iCrit, iMed, iInfo)
+	}
+}
+
+func TestCardsCompactEmptyFindings(t *testing.T) {
+	// Empty case is one short line (not the bordered success panel) so the
+	// "compact" promise holds even with zero findings.
+	p := samplePayload()
+	p.Findings = []Finding{}
+	p.Compact = true
+
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+
+	if !strings.Contains(plain, "No findings. Looks good.") {
+		t.Errorf("compact empty-case missing canonical text; got:\n%s", plain)
+	}
+	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
+		if strings.Contains(plain, corner) {
+			t.Errorf("compact empty-case must not draw a panel; got corner %q\n%s", corner, plain)
+		}
+	}
+}
+
+// ---------- end Compact mode ----------
+
 func TestCardsEmptyFindings(t *testing.T) {
 	p := samplePayload()
 	p.Findings = []Finding{} // non-nil empty: a clean review
