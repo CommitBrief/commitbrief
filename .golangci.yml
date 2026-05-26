@@ -4,7 +4,13 @@
 
 run:
   timeout: 5m
-  go: "1.25"
+  # Pinned to 1.24 because CI's golangci-lint v1.64.8 is built with go1.24 and
+  # refuses targets newer than its own runtime. We use no 1.25-specific
+  # language features (the go.mod bump was driven by go-git's transitive deps,
+  # not by us), so linting under 1.24 rules is faithful. Migrate to
+  # golangci-lint v2 — and bump this back to 1.25 — once we adopt the v2
+  # config schema (linters/formatters split).
+  go: "1.24"
 
 linters:
   disable-all: true
