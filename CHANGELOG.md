@@ -47,15 +47,60 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   only write to the source repo.
 
 ### Tests
+
+Cumulative project test coverage raised from **64.7% → 77.8%** ahead of
+the v0.4.0 cut. ~36 new tests landed across two focused passes; total
+test count is now ~340.
+
 - `scripts/smoke-test.sh` now exercises `.commitbriefignore` end-to-end:
   it stages a `go.sum`, confirms the built-in layer filters it, then adds
   `!go.sum` to `.commitbriefignore` and confirms the negative pattern
   reverts the built-in exclusion.
-- 15 new compress tests (level parsing, embedded prompts non-empty,
+- 15 new **compress** tests (level parsing, embedded prompts non-empty,
   happy-path with fake provider, abort-when-larger, prompt-injection
   guard wrap, system-prompt selection, post-processing of preamble +
   code-fence wrappers, backup + atomic apply round-trip).
-- 4 new render tests covering the verbose-footer cache-savings label.
+- 4 new **render** tests covering the verbose-footer cache-savings label
+  (`Cost:` → `Saved:` switch on local cache hits).
+- **21 new CLI integration tests** (`internal/cli` 14.7% → **64.3%**).
+  Per-test isolated sandbox (`t.TempDir()` for HOME + repo, `t.Setenv`
+  for `HOME`/`LANG`/`NO_COLOR`, mock provider registered once via
+  `sync.Once`, package-level flag state reset, `git init -b main` +
+  staged change), and cobra commands invoked via `SetArgs/SetOut/SetErr`.
+  Covers: `init` writes both files / refuses overwrite / `--yes`
+  override; `list` renders with Filtering section; `dry-run` full output
+  + default scope; review happy path with mock provider; cache miss
+  writes entry; cache hit on 2nd run shows `local cache hit`;
+  `--no-cache` bypass; `--json` schema validates; `--markdown` no-ANSI;
+  `--output <file>` redirects without polluting stdout; unknown
+  provider returns wrapped `ErrUnknownProvider`; default-rules notice
+  appears in dry-run; `--unstaged` scope; compress refuses without
+  rules; unknown compress level rejected; `.commitbriefignore`
+  exclusion + negative pattern revert; review outside git repo errors.
+- **6 new provider streaming tests** — Anthropic SSE
+  (`message_start` → `content_block_delta` ×3 → `message_delta` →
+  `message_stop`), OpenAI ChatCompletion chunks (delta sequence +
+  separate usage chunk via `include_usage`), Gemini
+  `:streamGenerateContent` (cumulative `usageMetadata` per chunk).
+  Each provider gets a happy-path delta-assembly test plus a
+  cached-tokens-reported test. Anthropic 49.6% → **81.2%**, OpenAI
+  52.0% → **79.0%**, Gemini 53.6% → **79.5%**.
+- **10 new git tests** — every dispatcher CLI-fallback path
+  (`UnstagedDiff`, `FileDiff` → CLI), every go-git happy path through
+  the dispatcher (`CommitDiff`, `RangeDiff`, `BranchDiff`), every
+  remaining `CLIRepo` direct method, plus argument validation for the
+  empty-string cases. `internal/git` 61.1% → **73.7%**.
+
+#### Refactor for testability
+
+- `internal/cli/list.go` and `internal/cli/review.go` (`renderResult`,
+  `openOutput`) switched from hardcoded `os.Stdout` to
+  `cmd.OutOrStdout()`. `runReview`'s signature now takes
+  `*cobra.Command` (instead of `context.Context`) so the writer is
+  propagated through the call chain. No behavior change; tests can now
+  capture output via `cmd.SetOut(&buf)`. Same approach applied to
+  `cmd.OutOrStdout()` in `compress` and `dry-run` (already done in
+  earlier phases).
 
 ## [0.2.0] - 2026-05-26
 
