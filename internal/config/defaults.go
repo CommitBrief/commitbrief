@@ -23,5 +23,8 @@ func Default() *Config {
 		Guard: GuardConfig{
 			SecretScan: true,
 		},
+		Cost: CostConfig{
+			WarnThresholdUSD: 0.50,
+		},
 	}
 }

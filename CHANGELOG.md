@@ -11,6 +11,17 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **Cost preflight** — before each fresh provider call (cache hits are
+  skipped) the CLI computes the estimated cost from the prompt token
+  count + the provider's per-model pricing. If the estimate exceeds the
+  configured `cost.warn_threshold_usd` (default `$0.50`), the user is
+  prompted on a TTY or the call aborts non-interactively. `--yes`
+  bypasses with a one-line info notice; new `--no-cost-check` flag
+  disables the preflight per-invocation. Output tokens are estimated
+  conservatively (input/4, floored at 200, capped at 1500) so high-
+  priced output models don't get systematically underestimated. 5 new
+  i18n keys (EN + TR parity). Configurable end-to-end via
+  `commitbrief config set cost.warn_threshold_usd <value>`.
 - **Pre-send secret scanner** — before any LLM call, the diff is scanned
   for credential-shaped patterns and the user is prompted (or, in
   non-TTY contexts, the call aborts with a non-zero exit code). Eight

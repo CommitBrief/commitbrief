@@ -9,6 +9,17 @@ type Config struct {
 	Output    OutputConfig              `yaml:"output"`
 	Cache     CacheConfig               `yaml:"cache"`
 	Guard     GuardConfig               `yaml:"guard"`
+	Cost      CostConfig                `yaml:"cost"`
+}
+
+// CostConfig controls the pre-send cost preflight added in v0.8.0.
+// WarnThresholdUSD is the estimated-cost ceiling above which the CLI
+// will prompt (TTY) or abort (non-TTY) before contacting the provider.
+// Zero or negative disables the check entirely; the default of 0.50 is
+// a "occasional dev review" budget — users running scheduled jobs
+// should bump it via config or pass --no-cost-check per-invocation.
+type CostConfig struct {
+	WarnThresholdUSD float64 `yaml:"warn_threshold_usd"`
 }
 
 // GuardConfig toggles pre-send protections that don't quite fit

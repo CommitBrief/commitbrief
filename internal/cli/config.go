@@ -187,12 +187,34 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return "", fmt.Errorf("config: unknown field %q in cache (allowed: enabled, ttl_days, max_size_mb)", parts[1])
 		}
 
+	case "guard":
+		if len(parts) != 2 {
+			return "", fmt.Errorf("config: %q must be guard.<field>", path)
+		}
+		switch parts[1] {
+		case "secret_scan":
+			return strconv.FormatBool(cfg.Guard.SecretScan), nil
+		default:
+			return "", fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan)", parts[1])
+		}
+
+	case "cost":
+		if len(parts) != 2 {
+			return "", fmt.Errorf("config: %q must be cost.<field>", path)
+		}
+		switch parts[1] {
+		case "warn_threshold_usd":
+			return strconv.FormatFloat(cfg.Cost.WarnThresholdUSD, 'f', -1, 64), nil
+		default:
+			return "", fmt.Errorf("config: unknown field %q in cost (allowed: warn_threshold_usd)", parts[1])
+		}
+
 	case "version":
 		// Read-only via get; explicitly rejected by configFieldSet.
 		return strconv.Itoa(cfg.Version), nil
 
 	default:
-		return "", fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, version)", parts[0])
+		return "", fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, version)", parts[0])
 	}
 }
 
@@ -293,11 +315,46 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 		}
 		return nil
 
+	case "guard":
+		if len(parts) != 2 {
+			return fmt.Errorf("config: %q must be guard.<field>", path)
+		}
+		switch parts[1] {
+		case "secret_scan":
+			b, err := parseConfigBool(value)
+			if err != nil {
+				return fmt.Errorf("config: guard.secret_scan: %w", err)
+			}
+			cfg.Guard.SecretScan = b
+		default:
+			return fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan)", parts[1])
+		}
+		return nil
+
+	case "cost":
+		if len(parts) != 2 {
+			return fmt.Errorf("config: %q must be cost.<field>", path)
+		}
+		switch parts[1] {
+		case "warn_threshold_usd":
+			v, err := strconv.ParseFloat(value, 64)
+			if err != nil {
+				return fmt.Errorf("config: cost.warn_threshold_usd must be a number; got %q", value)
+			}
+			if v < 0 {
+				return errors.New("config: cost.warn_threshold_usd cannot be negative; use 0 to disable")
+			}
+			cfg.Cost.WarnThresholdUSD = v
+		default:
+			return fmt.Errorf("config: unknown field %q in cost (allowed: warn_threshold_usd)", parts[1])
+		}
+		return nil
+
 	case "version":
 		return errors.New("config: version is managed by migrations and cannot be set manually")
 
 	default:
-		return fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*)", parts[0])
+		return fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*)", parts[0])
 	}
 }
 

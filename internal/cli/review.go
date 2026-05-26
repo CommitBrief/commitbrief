@@ -170,6 +170,21 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 		}
 	}
 
+	// Cost preflight (11.5.6): we're past the cache lookup and about to
+	// spend real tokens. If the estimated cost exceeds the configured
+	// threshold, prompt the user (TTY) or abort (non-TTY). --yes and
+	// --no-cost-check both bypass with an info notice.
+	if !global.noCostCheck {
+		estUsage := provider.Usage{
+			InputTokens:  p.EstimatedTokens(),
+			OutputTokens: estimateOutputTokens(p.EstimatedTokens()),
+		}
+		estCost := prov.Pricing(model).Cost(estUsage)
+		if abort := handleCostPreflight(cmd, app, estCost); abort {
+			return errors.New(app.Catalog.T("cost.aborted_user"))
+		}
+	}
+
 	start := time.Now()
 	content, usage, format, err := tryStructuredReview(ctx, prov, provider.Request{
 		Model:        model,
@@ -357,6 +372,63 @@ func openOutput(cmd *cobra.Command) (io.Writer, func(), error) {
 		return nil, nil, fmt.Errorf("open --output: %w", err)
 	}
 	return f, func() { _ = f.Close() }, nil
+}
+
+// handleCostPreflight surfaces the estimated cost when it exceeds the
+// configured threshold and asks the user to confirm. Returns true when
+// the caller should abort the review. Below-threshold and disabled-
+// (threshold <= 0) cases short-circuit silently — preflight should be
+// invisible until it actually has something to say. --yes bypasses
+// the prompt but still emits a one-line "bypassed by --yes" notice so
+// the user knows a charge was about to surface.
+func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64) bool {
+	threshold := app.Config.Cost.WarnThresholdUSD
+	if threshold <= 0 || estCost <= threshold {
+		return false
+	}
+
+	w := cmd.ErrOrStderr()
+	if global.yes {
+		_, _ = fmt.Fprintln(w, app.Catalog.T("cost.bypassed_yes", estCost))
+		return false
+	}
+
+	_, _ = fmt.Fprintln(w, app.Catalog.T("cost.estimate", estCost, threshold))
+	if !ui.IsStdinTTY(os.Stdin) {
+		_, _ = fmt.Fprintln(w, app.Catalog.T("cost.aborted_non_interactive"))
+		return true
+	}
+
+	_, _ = fmt.Fprint(w, app.Catalog.T("cost.confirm_prompt"))
+	reader := bufio.NewScanner(os.Stdin)
+	if !reader.Scan() {
+		return true
+	}
+	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
+	if answer == "y" || answer == "yes" {
+		return false
+	}
+	return true
+}
+
+// estimateOutputTokens is a conservative-on-the-high-side guess for
+// how many output tokens a review request will burn. Underestimating
+// output dramatically undercounts cost (Anthropic Opus outputs 5x the
+// price of inputs); we cap at 1500 (typical structured-finding review
+// is 200-1500 tokens) and floor at 200 so very small diffs still
+// surface their output cost honestly. Tuning this is preferable to
+// adding another config knob — users who care about exactness should
+// lower their threshold rather than reach for the heuristic.
+func estimateOutputTokens(inputTokens int) int {
+	out := inputTokens / 4
+	const minOut, maxOut = 200, 1500
+	if out > maxOut {
+		out = maxOut
+	}
+	if out < minOut {
+		out = minOut
+	}
+	return out
 }
 
 // handleSecretMatches formats the pre-send secret-scan warnings and

@@ -515,6 +515,58 @@ func TestSecretScannerCleanDiffPassesThrough(t *testing.T) {
 
 // ---------- end pre-send secret scanner ----------
 
+// ---------- cost preflight (11.5.6) ----------
+
+func TestCostPreflightSilentOnZeroPricing(t *testing.T) {
+	// Mock provider ships with zero Pricing → estimated cost is $0 →
+	// preflight is a no-op regardless of threshold. This is the most
+	// important wire-up guard: the new check must not perturb the
+	// normal review flow when there's no cost to warn about.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache"); err != nil {
+		t.Fatalf("zero-pricing review should pass preflight silently; got error: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	if strings.Contains(e.errOut.String(), "Estimated cost") {
+		t.Errorf("zero-pricing review must not emit cost-estimate line; got stderr:\n%s", e.errOut.String())
+	}
+	if strings.Contains(e.errOut.String(), "Cost preflight bypassed") {
+		t.Errorf("zero-pricing review must not emit bypass line either; got stderr:\n%s", e.errOut.String())
+	}
+}
+
+func TestCostPreflightSkippedOnCacheHit(t *testing.T) {
+	// First run populates the cache. Second run (without --no-cache)
+	// must NOT trigger preflight even hypothetically — the cache
+	// branch returns before the preflight code is reached. Catches a
+	// regression where the preflight is moved up into the cache hit
+	// branch by mistake.
+	e := newCLIEnv(t)
+	if err := e.run("--staged"); err != nil {
+		t.Fatalf("first review: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	// Reset captured streams for the second invocation.
+	e.out.Reset()
+	e.errOut.Reset()
+
+	if err := e.run("--staged"); err != nil {
+		t.Fatalf("second review (cache hit): %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	if strings.Contains(e.errOut.String(), "Estimated cost") {
+		t.Errorf("cache hit must not run preflight; got stderr:\n%s", e.errOut.String())
+	}
+}
+
+func TestCostPreflightNoCostCheckFlagSkips(t *testing.T) {
+	// --no-cost-check entirely bypasses the preflight. With zero
+	// pricing the flag is a no-op but the wire-up must not crash.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--no-cost-check"); err != nil {
+		t.Fatalf("--no-cost-check should not break the pipeline: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+}
+
+// ---------- end cost preflight ----------
+
 // ---------- dry-run ----------
 
 func TestDryRunStaged(t *testing.T) {

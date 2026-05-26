@@ -22,6 +22,7 @@ type globalFlags struct {
 	quiet        bool
 	compact      bool
 	allowSecrets bool
+	noCostCheck  bool
 	lang         string
 	provider     string
 	model        string
@@ -74,6 +75,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVarP(&global.quiet, "quiet", "q", false, "suppress info messages on stderr")
 	flags.BoolVar(&global.compact, "compact", false, "one-line per finding (dense review output)")
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
+	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
 	flags.StringVar(&global.lang, "lang", "", "override output language (e.g. tr, en)")
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")

@@ -26,6 +26,12 @@ guard.secrets.aborted_user: "iptal edildi: pre-send secret scanner"
 guard.secrets.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --allow-secrets kullanın."
 guard.secrets.bypassed_yes: "ℹ Secret tarayıcı --yes ile atlandı."
 
+cost.estimate: "⚠  Tahmini maliyet: $%.4f (eşik: $%.4f)"
+cost.confirm_prompt: "   Review devam etsin mi? [e/H]: "
+cost.aborted_user: "iptal edildi: cost preflight"
+cost.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --no-cost-check veya cost.warn_threshold_usd değerini yükseltin."
+cost.bypassed_yes: "ℹ Cost preflight --yes ile atlandı (tahmin: $%.4f)."
+
 cache.hit: "(önbellekten)"
 cache.disabled: "(önbellek kapalı)"
 
