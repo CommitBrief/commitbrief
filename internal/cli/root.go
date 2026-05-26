@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/version"
 )
 
@@ -73,7 +74,29 @@ func Execute() {
 
 	root := newRootCmd()
 	if err := root.ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		// Best-effort error-prefix translation. appContext isn't built at
+		// this layer (cobra surfaces errors from RunE before/instead of
+		// resolveContext), so we honor only --lang and LANG env — the
+		// remaining D-21 steps need configs we cannot safely load here.
+		cat := pickErrorCatalog()
+		fmt.Fprintln(os.Stderr, cat.T("common.error_prefix"), err)
 		os.Exit(1)
 	}
+}
+
+// pickErrorCatalog returns the i18n catalog used for the top-level "Error:"
+// prefix when a command fails before appContext is resolved.
+func pickErrorCatalog() *i18n.Catalog {
+	code := global.lang
+	if code == "" {
+		// Read the first two letters of LANG (e.g. "tr_TR.UTF-8" → "tr").
+		if env := os.Getenv("LANG"); len(env) >= 2 {
+			code = env[:2]
+		}
+	}
+	if cat, err := i18n.Load(code); err == nil {
+		return cat
+	}
+	cat, _ := i18n.Load(i18n.DefaultLang)
+	return cat
 }

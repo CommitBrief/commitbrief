@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
@@ -31,10 +32,10 @@ func newInitCmd() *cobra.Command {
 			rulesPath := filepath.Join(ctx.RepoRoot, rules.Filename)
 			outputPath := filepath.Join(ctx.RepoRoot, rules.LocalSubdir, rules.OutputFilename)
 
-			if err := writeIfAbsent(rulesPath, []byte(rules.Default().Content), 0o644); err != nil {
+			if err := writeIfAbsent(ctx.Catalog, rulesPath, []byte(rules.Default().Content), 0o644); err != nil {
 				return err
 			}
-			if err := writeIfAbsent(outputPath, []byte(rules.DefaultOutput().Content), 0o644); err != nil {
+			if err := writeIfAbsent(ctx.Catalog, outputPath, []byte(rules.DefaultOutput().Content), 0o644); err != nil {
 				return err
 			}
 			return nil
@@ -46,11 +47,11 @@ func newInitCmd() *cobra.Command {
 // --yes flag bypasses the "already exists" guard and forces an overwrite.
 // Creates any missing parent directories with 0700 (the .commitbrief/
 // subdirectory must be readable to its owner only, like config.yml).
-func writeIfAbsent(path string, data []byte, mode os.FileMode) error {
+func writeIfAbsent(cat *i18n.Catalog, path string, data []byte, mode os.FileMode) error {
 	switch _, err := os.Stat(path); {
 	case err == nil:
 		if !global.yes {
-			return fmt.Errorf("%s already exists; re-run with --yes to overwrite", path)
+			return errors.New(cat.T("init.exists", path))
 		}
 	case errors.Is(err, fs.ErrNotExist):
 		// fall through to write
@@ -63,6 +64,6 @@ func writeIfAbsent(path string, data []byte, mode os.FileMode) error {
 	if err := os.WriteFile(path, data, mode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
-	infof("Wrote %s", path)
+	infof("%s", cat.T("init.wrote", path))
 	return nil
 }

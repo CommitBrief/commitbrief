@@ -46,8 +46,7 @@ func newCompressCmd() *cobra.Command {
 			data, err := os.ReadFile(rulesPath)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
-					return fmt.Errorf("compress: no %s found at %s; run `commitbrief init` first",
-						rules.Filename, rulesPath)
+					return errors.New(app.Catalog.T("compress.no_rules", rules.Filename, rulesPath))
 				}
 				return fmt.Errorf("compress: read %s: %w", rulesPath, err)
 			}
@@ -61,8 +60,7 @@ func newCompressCmd() *cobra.Command {
 				model = prov.DefaultModel()
 			}
 
-			infof("Compressing %s with provider=%s model=%s level=%s …",
-				rulesPath, prov.Name(), model, level)
+			infof("%s", app.Catalog.T("compress.compressing", rulesPath, prov.Name(), model, level))
 
 			start := time.Now()
 			result, err := compress.Run(cmd.Context(), prov, compress.Request{
@@ -93,7 +91,7 @@ func newCompressCmd() *cobra.Command {
 				pricing.Cost(result.Usage), latency.Round(time.Millisecond))
 
 			if result.Aborted {
-				return fmt.Errorf("compress: aborted: %s (no files changed)", result.AbortReason)
+				return errors.New(app.Catalog.T("compress.aborted_larger", result.AbortReason))
 			}
 
 			// --out bypass: write elsewhere, never touch original.
@@ -101,7 +99,7 @@ func newCompressCmd() *cobra.Command {
 				if err := os.WriteFile(outFlag, []byte(result.CompressedContent), 0o644); err != nil {
 					return fmt.Errorf("compress: write %s: %w", outFlag, err)
 				}
-				infof("Wrote %s (original at %s left untouched)", outFlag, rulesPath)
+				infof("%s", app.Catalog.T("compress.wrote_out", outFlag, rulesPath))
 				return nil
 			}
 
@@ -110,14 +108,14 @@ func newCompressCmd() *cobra.Command {
 				ok, err := ui.AskYesNo(
 					os.Stdin,
 					cmd.OutOrStderr(),
-					"Replace COMMITBRIEF.md with the compressed version? Original will be backed up.",
+					app.Catalog.T("compress.replace_prompt"),
 					ui.AskOptions{NonInteractive: !ui.IsStdinTTY(os.Stdin)},
 				)
 				if err != nil {
 					return err
 				}
 				if !ok {
-					infof("Aborted by user; no files changed.")
+					infof("%s", app.Catalog.T("compress.aborted_user"))
 					return nil
 				}
 			}
@@ -127,8 +125,8 @@ func newCompressCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			infof("Backed up original to %s", backupPath)
-			infof("Wrote compressed %s", writtenPath)
+			infof("%s", app.Catalog.T("compress.backed_up", backupPath))
+			infof("%s", app.Catalog.T("compress.wrote_compressed", writtenPath))
 			return nil
 		},
 	}

@@ -13,10 +13,18 @@ const (
 	SourceEnvLANG
 	SourceGlobalConfig
 	SourceRepoConfig
+	// SourceCLIFlag is the highest-priority step in the D-21 chain: when the
+	// user explicitly passes --lang on the command line, that wins over all
+	// other sources. Resolve() does not return it directly (it has no access
+	// to flags); callers apply the override after Resolve() and stamp this
+	// Source so dry-run and verbose footer attribution stay accurate.
+	SourceCLIFlag
 )
 
 func (s Source) String() string {
 	switch s {
+	case SourceCLIFlag:
+		return "cli flag"
 	case SourceRepoConfig:
 		return "repo config"
 	case SourceGlobalConfig:

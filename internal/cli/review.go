@@ -15,6 +15,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/guard"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/ignore"
 	"github.com/CommitBrief/commitbrief/internal/prompt"
 	"github.com/CommitBrief/commitbrief/internal/provider"
@@ -51,7 +52,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	if err != nil {
 		return err
 	}
-	rawDiff, err := fetchDiff(app.Repo, scope)
+	rawDiff, err := fetchDiff(app.Repo, scope, app.Catalog)
 	if err != nil {
 		return err
 	}
@@ -65,7 +66,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	matcher := buildMatcher(app.RepoRoot)
 	parsed = diff.Filter(parsed, matcher)
 	if parsed.Empty() {
-		infof("No reviewable changes after filtering.")
+		infof("%s", app.Catalog.T("review.no_changes"))
 		return nil
 	}
 
@@ -112,7 +113,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 
 	cacheStore, err := openCache(app.RepoRoot)
 	if err != nil {
-		infof("Cache disabled: %v", err)
+		infof("%s", app.Catalog.T("review.cache_disabled", err))
 	}
 
 	if !global.noCache && cacheStore != nil {
@@ -182,7 +183,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	return renderResult(cmd, resp.Content, meta)
 }
 
-func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags) (git.Diff, error) {
+func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, cat *i18n.Catalog) (git.Diff, error) {
 	switch {
 	case scope.unstaged:
 		return repo.UnstagedDiff()
@@ -193,7 +194,7 @@ func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags) (git.Diff, error)
 	case scope.pr != "":
 		t, f, ok := splitThreeDot(scope.pr)
 		if !ok {
-			return git.Diff{}, fmt.Errorf("--pull-request expects target...feature, got %q", scope.pr)
+			return git.Diff{}, errors.New(cat.T("review.pr_format", scope.pr))
 		}
 		return repo.RangeDiff(t, f)
 	case scope.branch != "":

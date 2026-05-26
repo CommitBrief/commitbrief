@@ -573,6 +573,19 @@ func TestReviewPullRequestScope(t *testing.T) {
 	}
 }
 
+func TestDryRunLangFlagOverride(t *testing.T) {
+	// Config defaults to en (writeUserConfig). --lang tr should win over
+	// config (D-21 chain step 0) and dry-run should attribute it accordingly.
+	e := newCLIEnv(t)
+	if err := e.run("dry-run", "--staged", "--lang", "tr"); err != nil {
+		t.Fatalf("dry-run --lang tr: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Lang:          tr (source: cli flag)") {
+		t.Errorf("expected 'Lang: tr (source: cli flag)' in dry-run output; got:\n%s", out)
+	}
+}
+
 func TestReviewMutuallyExclusiveScopes(t *testing.T) {
 	e := newCLIEnv(t)
 	err := e.run("--staged", "--unstaged")

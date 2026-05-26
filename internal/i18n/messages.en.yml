@@ -27,3 +27,23 @@ rules.using_default: "ℹ Using built-in review rules. Run 'commitbrief init' to
 rules.output.using_default: "ℹ Using built-in output format. Create ~/.commitbrief/OUTPUT.md or <repo>/.commitbrief/OUTPUT.md to customize."
 
 common.cancelled: "Cancelled."
+common.error_prefix: "Error:"
+
+init.exists: "%s already exists; re-run with --yes to overwrite"
+init.wrote: "Wrote %s"
+
+review.no_changes: "No reviewable changes after filtering."
+review.cache_disabled: "Cache disabled: %v"
+review.pr_format: "--pull-request expects target...feature, got %q"
+
+compress.no_rules: "compress: no %s found at %s; run `commitbrief init` first"
+compress.compressing: "Compressing %s with provider=%s model=%s level=%s …"
+compress.aborted_larger: "compress: aborted: %s (no files changed)"
+compress.wrote_out: "Wrote %s (original at %s left untouched)"
+compress.replace_prompt: "Replace COMMITBRIEF.md with the compressed version? Original will be backed up."
+compress.aborted_user: "Aborted by user; no files changed."
+compress.backed_up: "Backed up original to %s"
+compress.wrote_compressed: "Wrote compressed %s"
+
+setup.saved_local: "Configuration saved to ./.commitbrief/config.yml"
+setup.saved_global: "Configuration saved to ~/.commitbrief/config.yml"

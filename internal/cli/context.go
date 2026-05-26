@@ -78,7 +78,7 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 	rawRepo, _ := config.LoadFile(repoPath)
 	langRes := lang.Resolve(rawRepo, rawGlobal, lang.Env{LANG: os.Getenv("LANG")})
 	if global.lang != "" {
-		langRes = lang.Resolution{Code: global.lang, Source: lang.SourceRepoConfig}
+		langRes = lang.Resolution{Code: global.lang, Source: lang.SourceCLIFlag}
 	}
 
 	cat, err := i18n.Load(langRes.Code)

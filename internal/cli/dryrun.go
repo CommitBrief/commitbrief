@@ -23,7 +23,7 @@ func newDryRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rawDiff, err := fetchDiff(app.Repo, reviewScope)
+			rawDiff, err := fetchDiff(app.Repo, reviewScope, app.Catalog)
 			if err != nil {
 				return err
 			}

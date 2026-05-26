@@ -27,3 +27,23 @@ rules.using_default: "ℹ Yerleşik review kuralları kullanılıyor. Özelleşt
 rules.output.using_default: "ℹ Yerleşik çıktı formatı kullanılıyor. Özelleştirmek için ~/.commitbrief/OUTPUT.md veya <repo>/.commitbrief/OUTPUT.md oluşturun."
 
 common.cancelled: "İptal edildi."
+common.error_prefix: "Hata:"
+
+init.exists: "%s zaten mevcut; üzerine yazmak için --yes ile yeniden çalıştırın"
+init.wrote: "%s yazıldı"
+
+review.no_changes: "Filtreleme sonrası review edilecek değişiklik yok."
+review.cache_disabled: "Önbellek kapalı: %v"
+review.pr_format: "--pull-request hedef...özellik bekler, alınan: %q"
+
+compress.no_rules: "compress: %s bulunamadı (%s); önce `commitbrief init` çalıştırın"
+compress.compressing: "%s sıkıştırılıyor (provider=%s model=%s seviye=%s) …"
+compress.aborted_larger: "compress: iptal edildi: %s (hiçbir dosya değişmedi)"
+compress.wrote_out: "%s yazıldı (orijinal %s dokunulmadı)"
+compress.replace_prompt: "COMMITBRIEF.md sıkıştırılmış sürümle değiştirilsin mi? Orijinal yedeklenecek."
+compress.aborted_user: "Kullanıcı tarafından iptal edildi; hiçbir dosya değişmedi."
+compress.backed_up: "Orijinal %s konumuna yedeklendi"
+compress.wrote_compressed: "Sıkıştırılmış %s yazıldı"
+
+setup.saved_local: "Yapılandırma ./.commitbrief/config.yml dosyasına kaydedildi"
+setup.saved_global: "Yapılandırma ~/.commitbrief/config.yml dosyasına kaydedildi"
