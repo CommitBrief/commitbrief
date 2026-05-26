@@ -322,6 +322,92 @@ func TestListShowsCacheStatsWithEntries(t *testing.T) {
 
 // ---------- end list config summary footer ----------
 
+// ---------- commitbrief doctor (11.5.4) ----------
+
+func TestDoctorRunsAllChecksAndExitsZero(t *testing.T) {
+	// newCLIEnv seeds a healthy environment: tmp HOME, mock provider
+	// configured, real git repo. The doctor should sail through with
+	// only the .gitignore warning (the repo skeleton doesn't include
+	// the .commitbrief/ entry yet) and exit 0.
+	e := newCLIEnv(t)
+	if err := e.run("doctor"); err != nil {
+		t.Fatalf("doctor: unexpected error: %v\nstdout:\n%s", err, e.out.String())
+	}
+	out := e.out.String()
+	for _, want := range []string{
+		"Doctor", "git binary on PATH", "config schema valid",
+		"COMMITBRIEF.md source", "OUTPUT.md template valid",
+		"at least one provider configured", "cache directory writable",
+		".commitbrief/ in .gitignore", "mock connection",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor output missing %q; got:\n%s", want, out)
+		}
+	}
+	if !strings.Contains(out, "1 warning") && !strings.Contains(out, "0 warning") {
+		t.Errorf("summary line should mention 'warning'; got:\n%s", out)
+	}
+}
+
+func TestDoctorExitsNonZeroOnFailure(t *testing.T) {
+	// Seed a config with NO API keys at all — provider_configured
+	// check turns Fail, doctor returns a non-nil error → exit 1.
+	e := newCLIEnv(t)
+	// Wipe the mock api_key by writing a fresh config without one.
+	cfgPath := filepath.Join(e.homeDir, ".commitbrief", "config.yml")
+	if err := os.WriteFile(cfgPath, []byte("version: 1\nprovider: mock\nproviders:\n  mock:\n    model: mock-model\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := e.run("doctor")
+	if err == nil {
+		t.Fatal("doctor with no API keys should error (exit 1); got nil")
+	}
+	if !strings.Contains(err.Error(), "failed") {
+		t.Errorf("error message should mention 'failed'; got %q", err.Error())
+	}
+}
+
+func TestDoctorQuietOnlyShowsNonOK(t *testing.T) {
+	// --quiet hides the OK rows but always prints the summary so the
+	// user knows the run actually happened. In the seeded healthy env
+	// the only non-OK row is the .gitignore warning.
+	e := newCLIEnv(t)
+	if err := e.run("doctor", "--quiet"); err != nil {
+		t.Fatalf("doctor --quiet: unexpected error: %v\nstdout:\n%s", err, e.out.String())
+	}
+	out := e.out.String()
+	// .gitignore warning should appear; other check labels should not.
+	if !strings.Contains(out, ".commitbrief/ in .gitignore") {
+		t.Errorf("--quiet should still surface the gitignore warning; got:\n%s", out)
+	}
+	if strings.Contains(out, "git binary on PATH") {
+		t.Errorf("--quiet must suppress OK rows; got 'git binary on PATH' in:\n%s", out)
+	}
+	if !strings.Contains(out, "checks:") {
+		t.Errorf("--quiet must still print the summary line; got:\n%s", out)
+	}
+}
+
+func TestDoctorExitMessageNamesFailureCount(t *testing.T) {
+	// When something does fail, the cobra-surfaced error should be
+	// specific enough that CI logs are actionable.
+	e := newCLIEnv(t)
+	cfgPath := filepath.Join(e.homeDir, ".commitbrief", "config.yml")
+	// Empty providers section → provider_configured Fail.
+	if err := os.WriteFile(cfgPath, []byte("version: 1\nprovider: mock\nproviders:\n  mock:\n    model: mock-model\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := e.run("doctor")
+	if err == nil {
+		t.Fatal("expected error on no-keys config")
+	}
+	if !strings.Contains(err.Error(), "1 check") && !strings.Contains(err.Error(), "1 kontrol") {
+		t.Errorf("error %q should mention how many checks failed", err.Error())
+	}
+}
+
+// ---------- end commitbrief doctor ----------
+
 // ---------- dry-run ----------
 
 func TestDryRunStaged(t *testing.T) {

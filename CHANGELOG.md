@@ -11,6 +11,19 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **`commitbrief doctor` subcommand** — single-command pipeline health
+  check that runs ~7 checks against the resolved environment: git binary
+  on PATH, config schema validity, COMMITBRIEF.md source, OUTPUT.md
+  template validity (via `render.ValidateOutputTemplate`), active
+  provider has credentials, cache directory writability, and the repo
+  `.gitignore` includes `.commitbrief/`. Configured-with-key providers
+  are pinged in parallel (5-second timeout each); ollama is only pinged
+  when it's the active provider so the default `localhost:11434`
+  base_url doesn't trigger a phantom probe. Per-check status uses
+  green ✓ / yellow ⚠ / red ✗ glyphs; the trailing summary line counts
+  OKs/warnings/failures. Exit code is 1 if any check fails (CI-safe).
+  `--quiet` hides OK rows but always prints the summary. 12 new i18n
+  keys (EN + TR parity).
 - **`commitbrief list` config summary footer** — the command reference
   now ends with a `## Current configuration` section showing the active
   provider/model, the source of `COMMITBRIEF.md` and `OUTPUT.md` (path
