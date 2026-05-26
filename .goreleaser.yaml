@@ -1,9 +1,13 @@
 # .goreleaser.yaml — release pipeline for CommitBrief.
 #
 # Design rationale: ADR-0013 §6.
-# Until v0.4.0 the repository is private and the release workflow runs
-# with --skip=publish so nothing ships externally. From v0.4.0 onward
-# Homebrew tap + Scoop bucket receive automated updates.
+# The visibility flip happened at the end of Phase 8 (just before v0.4.0);
+# v0.0–v0.3 tags were cut while private and never published. From v0.4.0
+# onward the release workflow drops `--skip=publish` and goreleaser
+# uploads binaries to GitHub Releases plus formulas to the Homebrew tap
+# and Scoop bucket repos. Cross-repo pushes require HOMEBREW_TAP_GITHUB_TOKEN
+# (a PAT with `repo` scope; the default GITHUB_TOKEN can't write to
+# CommitBrief/homebrew-tap or CommitBrief/scoop-bucket).
 
 version: 2
 
@@ -68,15 +72,17 @@ changelog:
       - 'Merge pull request'
       - 'Merge branch'
 
-# Homebrew tap + Scoop bucket publishing are skipped via --skip=publish
-# in the workflow until the v0.4.0 public release. The config below is
-# wired up so the release workflow only needs to drop the --skip flag.
+# Cross-repo pushes (homebrew-tap, scoop-bucket) need a PAT with `repo`
+# scope; the workflow injects it via HOMEBREW_TAP_GITHUB_TOKEN.
+# `skip_upload: auto` means goreleaser uploads on stable tags but skips
+# on prereleases (e.g. v0.4.0-rc.1) — safe default.
 
 brews:
   - name: commitbrief
     repository:
       owner: CommitBrief
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/CommitBrief/commitbrief
     description: LLM-powered local code review CLI
     license: GPL-3.0-or-later
@@ -90,6 +96,7 @@ scoops:
   - repository:
       owner: CommitBrief
       name: scoop-bucket
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/CommitBrief/commitbrief
     description: LLM-powered local code review CLI
     license: GPL-3.0-or-later

@@ -39,6 +39,12 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 - **`README.md`** rewritten for the public release: Quick Start, install
   matrix (Homebrew/Scoop/`go install`/Releases), provider+pricing table,
   filtering pipeline, build-from-source.
+- **Release pipeline goes live.** `.github/workflows/release.yml` drops
+  `--skip=publish` from goreleaser; `.goreleaser.yaml`'s `brews` and
+  `scoops` blocks reference `HOMEBREW_TAP_GITHUB_TOKEN` (PAT with `repo`
+  scope) so cross-repo pushes to `CommitBrief/homebrew-tap` and
+  `CommitBrief/scoop-bucket` succeed. The default `GITHUB_TOKEN` can
+  only write to the source repo.
 
 ### Tests
 - `scripts/smoke-test.sh` now exercises `.commitbriefignore` end-to-end:

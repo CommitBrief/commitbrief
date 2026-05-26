@@ -6,10 +6,13 @@ on:
       - 'v*'
 
 # Visibility lifecycle (ADR-0013 §3):
-#   - v0.0.x – v0.3.x: private repo; goreleaser runs with --skip=publish
-#     to validate the config without shipping anything externally.
-#   - v0.4.0+: repo is public; drop --skip=publish so the Homebrew tap and
-#     Scoop bucket receive automated updates.
+#   - v0.0.x – v0.3.x: private repo; goreleaser ran with --skip=publish
+#     to validate the config without shipping anything externally. The
+#     visibility flip happened at the end of Phase 8 (just before v0.4.0).
+#   - v0.4.0+: full publish. Binaries land on the GitHub Release page;
+#     formulas/manifests go to CommitBrief/homebrew-tap and
+#     CommitBrief/scoop-bucket via HOMEBREW_TAP_GITHUB_TOKEN (PAT with
+#     repo scope; the default GITHUB_TOKEN cannot write to those repos).
 
 permissions:
   contents: write
@@ -35,6 +38,7 @@ jobs:
         with:
           distribution: goreleaser
           version: latest
-          args: release --clean --skip=publish
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
