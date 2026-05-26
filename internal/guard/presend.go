@@ -57,11 +57,11 @@ func CheckDiffForLocalConfig(d diff.Diff, opts Options) (Result, error) {
 	writeWarning(w, triggers)
 
 	if opts.NonInteractive {
-		fmt.Fprintln(w, "Aborting (non-interactive mode); pass --yes to override.")
+		_, _ = fmt.Fprintln(w, "Aborting (non-interactive mode); pass --yes to override.")
 		return Abort, nil
 	}
 
-	fmt.Fprint(w, "   Continue? [y/N]: ")
+	_, _ = fmt.Fprint(w, "   Continue? [y/N]: ")
 
 	r := opts.Reader
 	if r == nil {
@@ -108,14 +108,14 @@ func isUnderLocalDir(path string) bool {
 }
 
 func writeWarning(w io.Writer, triggers []string) {
-	fmt.Fprintln(w, "⚠  This review includes changes under .commitbrief/:")
+	_, _ = fmt.Fprintln(w, "⚠  This review includes changes under .commitbrief/:")
 	for _, p := range triggers {
-		fmt.Fprintf(w, "   M %s\n", p)
+		_, _ = fmt.Fprintf(w, "   M %s\n", p)
 	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "   These files are usually user-specific. Committing them may break")
-	fmt.Fprintln(w, "   other developers' configurations or leak API keys.")
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "   These files are usually user-specific. Committing them may break")
+	_, _ = fmt.Fprintln(w, "   other developers' configurations or leak API keys.")
+	_, _ = fmt.Fprintln(w)
 }
 
 func readAnswer(r io.Reader) (string, error) {

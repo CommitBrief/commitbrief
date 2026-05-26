@@ -38,7 +38,7 @@ func ParseFile(path string) (*Matcher, error) {
 		}
 		return nil, fmt.Errorf("ignore: open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return Parse(f)
 }
 

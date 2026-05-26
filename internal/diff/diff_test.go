@@ -268,11 +268,11 @@ func TestFilterNilMatcherIsNoOp(t *testing.T) {
 
 func TestEstimateTokens(t *testing.T) {
 	cases := map[string]int{
-		"":    0,
-		"a":   1,
-		"abc": 1,
-		"abcd": 1,
-		"abcde": 2,
+		"":                       0,
+		"a":                      1,
+		"abc":                    1,
+		"abcd":                   1,
+		"abcde":                  2,
 		strings.Repeat("a", 100): 25,
 	}
 	for in, want := range cases {
