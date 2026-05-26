@@ -210,6 +210,118 @@ func TestListRenders(t *testing.T) {
 	}
 }
 
+// ---------- list config summary footer (11.5.3) ----------
+
+func TestListShowsActiveProvider(t *testing.T) {
+	// Seeded config (newCLIEnv → writeUserConfig) sets provider=mock,
+	// model=mock-model. The summary must surface both — that's the "where
+	// do I stand?" answer the footer exists to provide.
+	e := newCLIEnv(t)
+	if err := e.run("list"); err != nil {
+		t.Fatal(err)
+	}
+	out := e.out.String()
+
+	if !strings.Contains(out, "Current configuration") {
+		t.Errorf("list output missing 'Current configuration' section header:\n%s", truncate(out, 500))
+	}
+	if !strings.Contains(out, "Active provider") {
+		t.Errorf("list output missing 'Active provider' line:\n%s", truncate(out, 500))
+	}
+	if !strings.Contains(out, "mock") || !strings.Contains(out, "mock-model") {
+		t.Errorf("list output missing provider/model names:\n%s", truncate(out, 500))
+	}
+}
+
+func TestListShowsRulesSourceDefault(t *testing.T) {
+	// Fresh repo: no COMMITBRIEF.md, no OUTPUT.md → summary should call
+	// out "built-in default" for both rather than printing a phantom path.
+	e := newCLIEnv(t)
+	if err := e.run("list"); err != nil {
+		t.Fatal(err)
+	}
+	out := e.out.String()
+
+	if !strings.Contains(out, "Rules file (COMMITBRIEF.md)") {
+		t.Errorf("list summary missing rules line:\n%s", truncate(out, 500))
+	}
+	if !strings.Contains(out, "built-in default") {
+		t.Errorf("fresh repo should report 'built-in default' for rules; got:\n%s", truncate(out, 500))
+	}
+}
+
+func TestListShowsRulesSourceFromRepoFile(t *testing.T) {
+	// When COMMITBRIEF.md exists in the repo root, the path appears
+	// verbatim — distinguishes "I have a real prompt" from "the embed is
+	// being used".
+	e := newCLIEnv(t)
+	cbPath := filepath.Join(e.repoRoot, "COMMITBRIEF.md")
+	if err := os.WriteFile(cbPath, []byte("# Custom rules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.run("list"); err != nil {
+		t.Fatal(err)
+	}
+	out := e.out.String()
+	if strings.Contains(out, "Rules file (COMMITBRIEF.md): built-in default") {
+		t.Errorf("repo COMMITBRIEF.md present but list still reports default:\n%s", truncate(out, 800))
+	}
+	// Glamour wraps long paths so substring match is the most we can do;
+	// at minimum the filename must show up.
+	if !strings.Contains(out, "COMMITBRIEF.md") {
+		t.Errorf("repo COMMITBRIEF.md path missing from list summary:\n%s", truncate(out, 500))
+	}
+}
+
+func TestListShowsCacheStatsEmpty(t *testing.T) {
+	// No cache directory → 0 entries, 0 B. The lack of data is itself a
+	// useful signal ("nothing cached yet, your next review is uncached").
+	e := newCLIEnv(t)
+	if err := e.run("list"); err != nil {
+		t.Fatal(err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Cache") {
+		t.Errorf("list summary missing 'Cache' line:\n%s", truncate(out, 500))
+	}
+	if !strings.Contains(out, "0 entries") {
+		t.Errorf("empty cache should report '0 entries'; got:\n%s", truncate(out, 500))
+	}
+}
+
+func TestListShowsCacheStatsWithEntries(t *testing.T) {
+	// Seed two cache files and verify the count + size show up. We don't
+	// pin the exact byte count (glamour may insert whitespace) — just
+	// confirm the entry count line is present.
+	e := newCLIEnv(t)
+	cacheDir := filepath.Join(e.repoRoot, ".commitbrief", "cache")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"abc123.json", "def456.json"} {
+		if err := os.WriteFile(filepath.Join(cacheDir, name), []byte(`{"k":"v"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Also drop a non-json file that should NOT be counted (decoy).
+	if err := os.WriteFile(filepath.Join(cacheDir, "decoy.txt"), []byte("ignore"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.run("list"); err != nil {
+		t.Fatal(err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "2 entries") {
+		t.Errorf("seeded 2 json entries; list should report '2 entries'; got:\n%s", truncate(out, 800))
+	}
+	if strings.Contains(out, "3 entries") {
+		t.Errorf("non-json files must not count; got:\n%s", truncate(out, 800))
+	}
+}
+
+// ---------- end list config summary footer ----------
+
 // ---------- dry-run ----------
 
 func TestDryRunStaged(t *testing.T) {

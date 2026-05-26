@@ -34,6 +34,12 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
     eye-grouping of "where + how severe".
 
 ### Added
+- **`commitbrief list` config summary footer** — the command reference
+  now ends with a `## Current configuration` section showing the active
+  provider/model, the source of `COMMITBRIEF.md` and `OUTPUT.md` (path
+  or "built-in default"), and the local cache footprint (entry count +
+  total size). API keys are never printed here — `commitbrief providers
+  list` is the path for that.
 - **`--compact` flag** for one-line-per-finding rendering — useful when a
   review surfaces many findings and per-finding panels would dominate
   the terminal. Format per line: `[icon] SEVERITY • file:line — title`.
