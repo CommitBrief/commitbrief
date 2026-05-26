@@ -17,6 +17,10 @@ permissions:
 jobs:
   analyze:
     name: Analyze
+    # Code scanning uploads require GitHub Advanced Security on private repos.
+    # This repo is private through v0.3.x and flips public at v0.4.0; the guard
+    # auto-disables itself once visibility changes.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
