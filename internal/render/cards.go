@@ -162,12 +162,33 @@ var severityBG = map[Severity]lipgloss.AdaptiveColor{
 }
 
 // cardText is the high-contrast foreground used for panel body text
-// (title, description, default context). Pure white on dark terminals,
-// near-black on light terminals — both directions sit on top of the
-// severityBG tints with enough contrast to stay readable. The severity
-// badge keeps its own color (red/orange/yellow/blue/grey) so the
-// finding's urgency is still the eye's anchor.
+// (title, description, file:line, default context, snippet "context"
+// rows that lack a diff prefix). Pure white on dark terminals, near-
+// black on light. The severity badge keeps its own color so urgency
+// is still the eye's anchor.
 var cardText = lipgloss.AdaptiveColor{Dark: "255", Light: "232"}
+
+// snippetAddedBG / snippetRemovedBG are the full-width strip colors
+// used behind diff lines. Pairs with cardText foreground (white-ish on
+// dark, near-black on light) for high contrast on both themes. Picked
+// to be darker / less saturated than the severity-tinted panel bg so
+// the strips read as "different from the surrounding panel" rather
+// than "almost the same color as the panel".
+var (
+	snippetAddedBG   = lipgloss.AdaptiveColor{Dark: "22", Light: "151"} // green
+	snippetRemovedBG = lipgloss.AdaptiveColor{Dark: "52", Light: "217"} // red
+)
+
+// panelHorizPadding and panelVertPadding control the breathing room
+// between the rounded border and the panel contents. The inner content
+// width — used to size full-width snippet strips so their backgrounds
+// extend edge-to-edge of the content area — derives from these plus
+// terminalWordWrap (the outer panel width including borders).
+const (
+	panelHorizPadding = 2
+	panelVertPadding  = 1
+	panelInnerWidth   = terminalWordWrap - 2 - panelHorizPadding*2 // -2 borders, -2*padding
+)
 
 // severityIcon prefixes the badge with a glyph that visually anchors
 // the severity. Glyphs are text-variant Unicode (no emoji VS-16
@@ -280,56 +301,69 @@ func cardsFindingPanel(f Finding) string {
 	panel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(color).
+		BorderBackground(bg). // border characters' bg matches the panel so the rounded corners blend into the card instead of sitting on a terminal-default dark gap
 		Background(bg).
-		Padding(0, 1).
+		Padding(panelVertPadding, panelHorizPadding).
 		Width(terminalWordWrap)
 
 	// All inline segments share the panel's tinted background so the
 	// card reads as a single block; lipgloss otherwise leaks the default
 	// terminal background between pre-rendered runs.
 	onBg := lipgloss.NewStyle().Background(bg)
+	textOnBg := onBg.Foreground(cardText)
 
 	badge := onBg.Foreground(color).Bold(true).Render(icon + " " + strings.ToUpper(string(f.Severity)))
-	sep := onBg.Foreground(lipgloss.Color("244")).Render(" • ")
-	location := onBg.Foreground(lipgloss.Color("244")).Render(fmt.Sprintf("%s:%d", f.File, f.Line))
-	// Title + description ride the severity-tinted bg, so we force a
-	// high-contrast adaptive foreground (white-ish on dark terminals,
-	// near-black on light) instead of trusting the terminal's default —
-	// which is "black" on light themes and made dark-tinted backgrounds
-	// hard to read.
-	title := onBg.Foreground(cardText).Bold(true).Render(f.Title)
+	sep := textOnBg.Render(" • ")
+	location := textOnBg.Render(fmt.Sprintf("%s:%d", f.File, f.Line))
+	title := textOnBg.Bold(true).Render(f.Title)
 
 	header := badge + sep + location + "\n" + title
 
-	body := onBg.Foreground(cardText).Render(f.Description)
+	body := textOnBg.Render(f.Description)
 	if f.Snippet != "" {
 		fence := "```"
-		body += "\n\n" + onBg.Render(fence+f.Language) + "\n" + colorizeSnippet(f.Snippet, onBg) + "\n" + onBg.Render(fence)
+		body += "\n\n" + textOnBg.Render(fence+f.Language) + "\n" + colorizeSnippet(f.Snippet, onBg) + "\n" + textOnBg.Render(fence)
 	}
 
 	return panel.Render(header + "\n\n" + body)
 }
 
 // colorizeSnippet walks each line of the snippet and applies diff
-// semantics: leading "+" → green, leading "-" → red, anything else stays
-// muted. Composes onto the panel's tinted background so the card stays
-// visually unified. ADR-0014 §1 lists `snippet` as optional, so input may
-// be empty; in that case the caller handles fence emission and we never
-// land here.
+// semantics:
+//   - "+" lines  → full-width green strip (whole row painted green,
+//     cardText foreground) so removals stand out edge-to-edge of the
+//     content area, GitHub-style;
+//   - "-" lines  → full-width red strip;
+//   - other lines → cardText on the panel's tinted bg (panel-flush
+//     "context" rows).
+//
+// The Width(panelInnerWidth) on the +/- styles is what makes the
+// background extend past the actual text — without it the bg only
+// covers the line's characters and the strip "ends" mid-row. The
+// outer panel pads its content with panelHorizPadding spaces on each
+// side, so the strips visually align with the content area's edges.
 func colorizeSnippet(snippet string, onBg lipgloss.Style) string {
+	addedStyle := lipgloss.NewStyle().
+		Background(snippetAddedBG).
+		Foreground(cardText).
+		Width(panelInnerWidth)
+	removedStyle := lipgloss.NewStyle().
+		Background(snippetRemovedBG).
+		Foreground(cardText).
+		Width(panelInnerWidth)
+	contextStyle := onBg.Foreground(cardText)
+
 	lines := strings.Split(snippet, "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		var style lipgloss.Style
 		switch {
 		case strings.HasPrefix(line, "+"):
-			style = onBg.Foreground(lipgloss.Color("42")) // green (matches styleOK)
+			out = append(out, addedStyle.Render(line))
 		case strings.HasPrefix(line, "-"):
-			style = onBg.Foreground(lipgloss.Color("203")) // soft red — distinct from severity 196
+			out = append(out, removedStyle.Render(line))
 		default:
-			style = onBg.Foreground(lipgloss.Color("244")) // muted grey (context line)
+			out = append(out, contextStyle.Render(line))
 		}
-		out = append(out, style.Render(line))
 	}
 	return strings.Join(out, "\n")
 }
@@ -337,15 +371,17 @@ func colorizeSnippet(snippet string, onBg lipgloss.Style) string {
 // cardsEmptyPanel is the success view for a review that produced zero
 // findings. Per ADR-0014 §3 it is a single short panel with a green
 // checkmark and the canonical message kept in sync with the default
-// OUTPUT.md template. Uses the same rounded look as finding panels.
+// OUTPUT.md template. Uses the same rounded look + border-bg blend +
+// breathing-room padding as finding panels for visual consistency.
 func cardsEmptyPanel() string {
 	color := severityColors[SeverityInfo]
 	bg := severityBG[SeverityInfo]
 	panel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(color).
+		BorderBackground(bg).
 		Background(bg).
-		Padding(0, 1)
+		Padding(panelVertPadding, panelHorizPadding)
 	onBg := lipgloss.NewStyle().Background(bg)
 	check := onBg.Foreground(lipgloss.Color("42")).Bold(true).Render("✓ ")
 	msg := onBg.Foreground(cardText).Render("No findings. Looks good.")

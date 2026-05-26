@@ -10,6 +10,32 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **Finding card visual polish (round 2).** Five fixes to the panel
+  layout that landed in v0.6.0 (Cards Stage B) + v0.7.0 (icons / bg
+  tints):
+  - **Border now blends with the panel background** via
+    `BorderBackground(bg)`. The rounded corners (`╭ ╮ ╰ ╯`) previously
+    sat on the terminal-default colour, which read as a dark gap
+    between the border and the content area; now they share the
+    severity-tinted bg and the card looks like one continuous block.
+  - **More breathing room** — internal padding bumped from `(0, 1)`
+    to `(1, 2)`. Title/description no longer crowd the border.
+  - **File path and line number text now use the high-contrast
+    `cardText` foreground** (white-ish on dark terminals, near-black
+    on light) instead of the muted grey that was hard to read on the
+    severity-tinted background.
+  - **Diff lines in snippets are now full-width colored strips**, not
+    just colored text. `-` lines paint a red background (ANSI 52 dark
+    / 217 light) edge-to-edge of the content area; `+` lines paint
+    green (22 / 151). White text on the strips matches the rest of
+    the panel body and reads cleanly on both dark and light terminals.
+  - **Rounded corners now pop visually** — same `RoundedBorder()` as
+    before, but with the border-bg fix above the curves are no longer
+    swallowed by surrounding terminal black.
+
+## [0.8.0] - 2026-05-26
+
 ### Added
 - **`commitbrief install-hook` subcommand** — one-command scaffold for
   a git hook that runs `commitbrief --staged --fail-on=critical

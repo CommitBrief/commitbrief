@@ -185,59 +185,80 @@ func TestCardsPanelUsesRoundedBorder(t *testing.T) {
 	}
 }
 
-// ansiContainsLineWithColor returns true if the rendered output has any
-// line that contains both the given foreground color code AND the given
-// content substring. Matches "38;5;<code>" anywhere inside an ANSI CSI
-// sequence — covers both the lone "\x1b[38;5;255m" form and the merged
-// "\x1b[1;38;5;255;48;5;52m" form lipgloss emits when multiple style
-// attributes (bold + fg + bg) collapse into one escape. Lets color
-// assertions isolate a single region (a snippet line, a title) from
-// incidental color use elsewhere in the panel.
+// ansiContainsLineWithColor checks for a foreground color code on a
+// line that also contains the given content substring. Returns true
+// for any ANSI CSI form: standalone "\x1b[38;5;255m" as well as merged
+// "\x1b[1;38;5;255;48;5;52m" that lipgloss emits when several attrs
+// (bold + fg + bg) collapse into one escape.
 func ansiContainsLineWithColor(rendered, fgCode, contentSubstring string) bool {
-	colorMatch := "38;5;" + fgCode
+	return ansiLineHasCode(rendered, "38;5;"+fgCode, contentSubstring)
+}
+
+// ansiContainsLineWithBg is the background-color counterpart. Used for
+// the v0.8.0+ snippet rendering, where added / removed lines carry a
+// full-row colored strip (48;5;<bg>) instead of just a colored
+// foreground.
+func ansiContainsLineWithBg(rendered, bgCode, contentSubstring string) bool {
+	return ansiLineHasCode(rendered, "48;5;"+bgCode, contentSubstring)
+}
+
+// ansiLineHasCode scans each output line for an ANSI CSI sub-sequence
+// (e.g. "38;5;255" or "48;5;22") that terminates on `;` or `m`, AND
+// the supplied content substring. The terminator guard prevents
+// "38;5;25" from accidentally matching a request for "38;5;2".
+func ansiLineHasCode(rendered, ansiCode, contentSubstring string) bool {
 	for _, line := range strings.Split(rendered, "\n") {
 		if !strings.Contains(line, "\x1b[") {
 			continue
 		}
-		if !strings.Contains(line, colorMatch) {
+		if !strings.Contains(line, contentSubstring) {
 			continue
 		}
-		// Ensure the digit run terminates on a semicolon or 'm' — guards
-		// against "38;5;25" falsely matching a request for "38;5;2".
-		idx := strings.Index(line, colorMatch)
-		end := idx + len(colorMatch)
-		if end < len(line) && line[end] != ';' && line[end] != 'm' {
-			continue
-		}
-		if strings.Contains(line, contentSubstring) {
-			return true
+		start := 0
+		for {
+			i := strings.Index(line[start:], ansiCode)
+			if i < 0 {
+				break
+			}
+			end := start + i + len(ansiCode)
+			if end < len(line) && (line[end] == ';' || line[end] == 'm') {
+				return true
+			}
+			start = end
+			if start >= len(line) {
+				break
+			}
 		}
 	}
 	return false
 }
 
 func TestColorizeSnippetGreenForAddedLines(t *testing.T) {
-	// Direct unit test: feed three lines, check the rendered string carries
-	// color 42 (green) on the '+' line and color 203 (red) on the '-' line.
-	// Using an unstyled base so we don't have to subtract the panel bg.
+	// Diff lines render as full-width colored strips: '+' lines get
+	// background 22 (green), '-' lines background 52 (red). Foreground
+	// is cardText (255 on dark) on both so the row reads as bright
+	// text on a colored bar. Context lines keep cardText on the
+	// transparent / panel bg.
 	onBg := lipgloss.NewStyle()
 	got := colorizeSnippet("- old line\n+ new line\n  context line", onBg)
 
-	if !ansiContainsLineWithColor(got, "42", "+ new line") {
-		t.Errorf("'+' line should carry green ANSI (color 42); got:\n%q", got)
+	if !ansiContainsLineWithBg(got, "22", "+ new line") {
+		t.Errorf("'+' line should carry green bg (ANSI 22); got:\n%q", got)
 	}
-	if !ansiContainsLineWithColor(got, "203", "- old line") {
-		t.Errorf("'-' line should carry red ANSI (color 203); got:\n%q", got)
+	if !ansiContainsLineWithBg(got, "52", "- old line") {
+		t.Errorf("'-' line should carry red bg (ANSI 52); got:\n%q", got)
 	}
-	if !ansiContainsLineWithColor(got, "244", "context line") {
-		t.Errorf("context line should carry muted ANSI (color 244); got:\n%q", got)
+	// Context line uses cardText foreground (255 on dark) — same
+	// color the title/description use elsewhere in the panel.
+	if !ansiContainsLineWithColor(got, "255", "context line") {
+		t.Errorf("context line should carry cardText (ANSI 255); got:\n%q", got)
 	}
 }
 
 func TestColorizeSnippetPassthroughForContextLines(t *testing.T) {
-	// No '+' or '-' anywhere → no green or red ANSI escapes in the result.
-	// Catches a regression where the colorizer falsely matches space-padded
-	// prefixes or strips characters.
+	// No '+' or '-' anywhere → no red/green bg strips. Catches a
+	// regression where the colorizer falsely matches space-padded
+	// prefixes or extends bg coloring into context rows.
 	onBg := lipgloss.NewStyle()
 	got := colorizeSnippet("  context one\n  context two", onBg)
 
@@ -247,11 +268,11 @@ func TestColorizeSnippetPassthroughForContextLines(t *testing.T) {
 			t.Errorf("plain content missing %q; got:\n%s", want, plain)
 		}
 	}
-	if strings.Contains(got, "\x1b[38;5;42m") || strings.Contains(got, "\x1b[38;5;42;") {
-		t.Errorf("context-only snippet must not emit green ANSI; got:\n%q", got)
+	if ansiContainsLineWithBg(got, "22", "context one") {
+		t.Errorf("context-only snippet must not paint green bg; got:\n%q", got)
 	}
-	if strings.Contains(got, "\x1b[38;5;203m") || strings.Contains(got, "\x1b[38;5;203;") {
-		t.Errorf("context-only snippet must not emit red ANSI; got:\n%q", got)
+	if ansiContainsLineWithBg(got, "52", "context two") {
+		t.Errorf("context-only snippet must not paint red bg; got:\n%q", got)
 	}
 }
 
@@ -269,9 +290,9 @@ func TestColorizeSnippetPreservesLineCount(t *testing.T) {
 
 func TestCardsSnippetIntegratedWithPanel(t *testing.T) {
 	// End-to-end sanity: render a full Cards panel with a snippet and
-	// confirm the line containing "+ new" carries green (color 42) — the
-	// integration the unit tests above can't catch (style composition with
-	// onBg/panel.Background).
+	// confirm each diff line lands on its own colored strip with
+	// cardText foreground. Catches composition regressions between
+	// the colorizer and the surrounding panel background.
 	p := Payload{
 		Findings: []Finding{{
 			Severity: SeverityCritical, File: "a.go", Line: 1,
@@ -285,11 +306,11 @@ func TestCardsSnippetIntegratedWithPanel(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := w.String()
-	if !ansiContainsLineWithColor(raw, "42", "+ new") {
-		t.Errorf("integrated panel: '+' line should carry green ANSI; got:\n%q", raw)
+	if !ansiContainsLineWithBg(raw, "22", "+ new") {
+		t.Errorf("integrated panel: '+' line should carry green bg (22); got:\n%q", raw)
 	}
-	if !ansiContainsLineWithColor(raw, "203", "- old") {
-		t.Errorf("integrated panel: '-' line should carry red ANSI; got:\n%q", raw)
+	if !ansiContainsLineWithBg(raw, "52", "- old") {
+		t.Errorf("integrated panel: '-' line should carry red bg (52); got:\n%q", raw)
 	}
 }
 
