@@ -10,8 +10,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- Go module `go` directive raised from `1.23` to `1.25` to track the
+  modern Go toolchain expected by upstream dependencies (`go-git/v5`,
+  `golang.org/x/net`). Supersedes ADR-0013 §2's original Go 1.23 target.
+
 ### Added
-- Go module `github.com/CommitBrief/commitbrief` targeting `go 1.23`.
+- Go module `github.com/CommitBrief/commitbrief` targeting `go 1.25`.
 - Directory skeleton: `cmd/commitbrief/`, `internal/{cli,config,rules,...}`,
   `testdata/`, `scripts/`.
 - Standard project files: `LICENSE` (GPL-3.0-or-later), `.gitignore`,

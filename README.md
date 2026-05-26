@@ -45,7 +45,7 @@ make test
 make lint
 ```
 
-Requires **Go 1.23+**. After v0.4.0, installation will also be available via
+Requires **Go 1.25+**. After v0.4.0, installation will also be available via
 `go install`, Homebrew, Scoop, and GitHub Releases.
 
 ## License

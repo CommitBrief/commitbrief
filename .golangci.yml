@@ -4,7 +4,7 @@
 
 run:
   timeout: 5m
-  go: "1.23"
+  go: "1.25"
 
 linters:
   disable-all: true
