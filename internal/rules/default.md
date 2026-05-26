@@ -45,25 +45,6 @@ them to fit your project's priorities.
 - Dead code, unused variables, unreachable branches.
 - Magic numbers and unexplained constants.
 
-## Output Format
-
-Group findings under the five perspective headings above. For each finding:
-
-- **Severity:** `high` | `medium` | `low`
-- **File:Line:** location, taken verbatim from the diff
-- **Issue:** one-sentence summary of what is wrong
-- **Suggestion:** one to three sentences with a concrete fix or direction
-
-Severity definitions:
-- `high` — must fix before merge: bug, security issue, data loss risk, or
-  significant correctness or security regression.
-- `medium` — should consider: code smell, fragility, non-obvious risk, or
-  notable structural problem.
-- `low` — optional polish: minor refactor, naming nit, style observation.
-
-End every review with a one-paragraph **Verdict** section: overall safety
-to ship, what should be addressed before commit, and what is optional polish.
-
 ## What Not to Flag
 
 - Files excluded by `.commitbriefignore` and built-in defaults are already

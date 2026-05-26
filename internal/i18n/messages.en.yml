@@ -23,5 +23,6 @@ cache.hit: "(cached)"
 cache.disabled: "(cache disabled)"
 
 rules.using_default: "ℹ Using built-in review rules. Run 'commitbrief init' to customize."
+rules.output.using_default: "ℹ Using built-in output format. Create ~/.commitbrief/OUTPUT.md or <repo>/.commitbrief/OUTPUT.md to customize."
 
 common.cancelled: "Cancelled."

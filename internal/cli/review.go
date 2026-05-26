@@ -72,6 +72,13 @@ func runReview(ctx context.Context, scope reviewScopeFlags) error {
 	if loaded.Source == rules.SourceDefault {
 		infof("%s", app.Catalog.T("rules.using_default"))
 	}
+	outputLoaded, err := rules.LoadOutput(app.RepoRoot, userHome())
+	if err != nil {
+		return err
+	}
+	if outputLoaded.Source == rules.SourceDefault {
+		infof("%s", app.Catalog.T("rules.output.using_default"))
+	}
 
 	if res, _ := guard.CheckDiffForLocalConfig(parsed, guard.Options{
 		AssumeYes:      global.yes,
@@ -80,7 +87,7 @@ func runReview(ctx context.Context, scope reviewScopeFlags) error {
 		return errors.New("aborted by pre-send guard")
 	}
 
-	p := prompt.Build(loaded, app.Lang, parsed.String())
+	p := prompt.Build(loaded, outputLoaded, app.Lang, parsed.String())
 
 	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
 	if err != nil {

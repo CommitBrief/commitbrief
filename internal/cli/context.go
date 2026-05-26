@@ -103,3 +103,14 @@ func infof(format string, args ...any) {
 	}
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }
+
+// userHome returns the current user's home dir or "" if it cannot be
+// resolved. Used by callers that want to honor ~/.commitbrief/... layers
+// without erroring when the lookup fails (e.g. detached environments).
+func userHome() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
+}

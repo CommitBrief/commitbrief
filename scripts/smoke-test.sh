@@ -71,11 +71,13 @@ EOF
 )
 ok "throwaway repo + staged change ready"
 
-# 4. init — writes COMMITBRIEF.md from the embedded default
+# 4. init — writes COMMITBRIEF.md (team-shared) and .commitbrief/OUTPUT.md
+#    (per-user, gitignored) from embedded defaults.
 step "commitbrief init"
 (cd "$TMPDIR" && "$OLDPWD/$BIN" init -y >/dev/null)
 [ -s "$TMPDIR/COMMITBRIEF.md" ] || fail "init did not write COMMITBRIEF.md"
-ok "init wrote COMMITBRIEF.md ($(wc -c <"$TMPDIR/COMMITBRIEF.md") bytes)"
+[ -s "$TMPDIR/.commitbrief/OUTPUT.md" ] || fail "init did not write .commitbrief/OUTPUT.md"
+ok "init wrote COMMITBRIEF.md ($(wc -c <"$TMPDIR/COMMITBRIEF.md") bytes) + .commitbrief/OUTPUT.md ($(wc -c <"$TMPDIR/.commitbrief/OUTPUT.md") bytes)"
 
 # 5. dry-run — full pipeline without provider call
 step "commitbrief dry-run --staged"

@@ -15,10 +15,12 @@ type Prompt struct {
 	User   string
 }
 
-// Build assembles the system prompt (rules + lang directive + prompt-injection
-// guard) and the user prompt (diff fenced block) into a single value.
-func Build(loaded rules.Loaded, langRes lang.Resolution, diffText string) Prompt {
-	system, userTpl := rules.Build(loaded, langRes)
+// Build assembles the system prompt (rules + output format + lang directive
+// + prompt-injection guard) and the user prompt (diff fenced block) into a
+// single value. Pass rules.DefaultOutput() if the caller has not resolved a
+// per-user OUTPUT.md override.
+func Build(rulesLoaded, outputLoaded rules.Loaded, langRes lang.Resolution, diffText string) Prompt {
+	system, userTpl := rules.Build(rulesLoaded, outputLoaded, langRes)
 	return Prompt{
 		System: system,
 		User:   fmt.Sprintf(userTpl, diffText),

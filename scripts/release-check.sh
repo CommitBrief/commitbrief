@@ -13,17 +13,19 @@ warn() { printf '\033[33mwarn\033[0m: %s\n' "$1" >&2; }
 err()  { printf '\033[31mfail\033[0m: %s\n' "$1" >&2; fail=1; }
 ok()   { printf '\033[32mok\033[0m:   %s\n' "$1"; }
 
-# 1. internal/rules/default.md must contain the real default system prompt,
-#    not the "<!-- TBD: -->" placeholder shipped while the file is unset.
-if [ -f internal/rules/default.md ]; then
-  if grep -q '<!-- TBD:' internal/rules/default.md; then
-    err "internal/rules/default.md still contains a '<!-- TBD:' placeholder"
+# 1. Embedded prompt files (default.md, output.md) must contain real content
+#    rather than the "<!-- TBD: -->" placeholder used while files are unset.
+for f in internal/rules/default.md internal/rules/output.md; do
+  if [ -f "$f" ]; then
+    if grep -q '<!-- TBD:' "$f"; then
+      err "$f still contains a '<!-- TBD:' placeholder"
+    else
+      ok "$f has no TBD placeholder"
+    fi
   else
-    ok "internal/rules/default.md has no TBD placeholder"
+    err "$f is missing (release-blocker)"
   fi
-else
-  err "internal/rules/default.md is missing (release-blocker)"
-fi
+done
 
 # 2. CHANGELOG.md should have at least one released version header by the
 #    time we tag a non-zero version. During development [Unreleased] alone

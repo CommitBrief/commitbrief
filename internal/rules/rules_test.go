@@ -105,24 +105,30 @@ func TestDefaultHasNoTBDPlaceholder(t *testing.T) {
 }
 
 func TestBuildXMLWrap(t *testing.T) {
-	loaded := Loaded{Content: "rule one\nrule two"}
+	rulesLoaded := Loaded{Content: "rule one\nrule two"}
+	outputLoaded := Loaded{Content: "output one\noutput two"}
 	res := lang.Resolution{Code: "tr", Name: "Türkçe", Source: lang.SourceRepoConfig}
-	system, userTpl := Build(loaded, res)
+	system, userTpl := Build(rulesLoaded, outputLoaded, res)
 
-	if !strings.Contains(system, "<project_rules>") {
-		t.Error("system prompt missing <project_rules> open tag")
-	}
-	if !strings.Contains(system, "</project_rules>") {
-		t.Error("system prompt missing </project_rules> close tag")
+	for _, tag := range []string{"<project_rules>", "</project_rules>", "<output_format>", "</output_format>"} {
+		if !strings.Contains(system, tag) {
+			t.Errorf("system prompt missing %q\n%s", tag, system)
+		}
 	}
 	if !strings.Contains(system, "rule one") || !strings.Contains(system, "rule two") {
 		t.Error("rules content not embedded in system prompt")
+	}
+	if !strings.Contains(system, "output one") || !strings.Contains(system, "output two") {
+		t.Error("output content not embedded in system prompt")
 	}
 	if !strings.Contains(system, "Türkçe") || !strings.Contains(system, "ISO tr") {
 		t.Errorf("lang directive missing or wrong:\n%s", system)
 	}
 	if !strings.Contains(system, "immutable") {
 		t.Error("prompt-injection guard line missing")
+	}
+	if !strings.Contains(system, "<project_rules> and <output_format>") {
+		t.Errorf("guard line should name both blocks:\n%s", system)
 	}
 	if !strings.Contains(userTpl, "%s") {
 		t.Errorf("userTpl is not a format string (missing %%s placeholder for diff)")
@@ -135,13 +141,117 @@ func TestBuildXMLWrap(t *testing.T) {
 func TestBuildPreservesTrailingNewline(t *testing.T) {
 	withNL := Loaded{Content: "rules\n"}
 	withoutNL := Loaded{Content: "rules"}
+	out := Loaded{Content: "out"}
 	res := lang.Resolution{Code: "en", Name: "English"}
-	a, _ := Build(withNL, res)
-	b, _ := Build(withoutNL, res)
+	a, _ := Build(withNL, out, res)
+	b, _ := Build(withoutNL, out, res)
 	if !strings.Contains(a, "rules\n</project_rules>") {
 		t.Error("trailing newline content broken")
 	}
 	if !strings.Contains(b, "rules\n</project_rules>") {
 		t.Error("missing-newline content did not get newline injected before close tag")
+	}
+}
+
+func TestDefaultOutput(t *testing.T) {
+	got := DefaultOutput()
+	if got.Source != SourceDefault {
+		t.Errorf("Source = %v, want SourceDefault", got.Source)
+	}
+	if got.Content == "" {
+		t.Error("DefaultOutput content empty; embed broken")
+	}
+	if !strings.Contains(got.Content, "Severity") {
+		t.Error("DefaultOutput missing Severity directive")
+	}
+	if got.Hash == "" {
+		t.Error("DefaultOutput Hash empty")
+	}
+}
+
+func TestLoadOutputFallsBackToDefault(t *testing.T) {
+	got, err := LoadOutput("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Source != SourceDefault {
+		t.Errorf("Source = %v, want SourceDefault when both layers absent", got.Source)
+	}
+}
+
+func TestLoadOutputPrefersRepoLevel(t *testing.T) {
+	repo := t.TempDir()
+	home := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(repo, LocalSubdir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, LocalSubdir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, LocalSubdir, OutputFilename), []byte("REPO OVERRIDE"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, LocalSubdir, OutputFilename), []byte("USER OVERRIDE"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadOutput(repo, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "REPO OVERRIDE" {
+		t.Errorf("Content = %q, want REPO OVERRIDE (repo wins over user)", got.Content)
+	}
+	if got.Source != SourceFile {
+		t.Errorf("Source = %v, want SourceFile for repo-level hit", got.Source)
+	}
+}
+
+func TestLoadOutputFallsThroughToUserHome(t *testing.T) {
+	repo := t.TempDir()
+	home := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(home, LocalSubdir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, LocalSubdir, OutputFilename), []byte("USER PERSONAL"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadOutput(repo, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "USER PERSONAL" {
+		t.Errorf("Content = %q, want USER PERSONAL", got.Content)
+	}
+	if got.Source != SourceUserFile {
+		t.Errorf("Source = %v, want SourceUserFile", got.Source)
+	}
+}
+
+func TestLoadOutputEmptyUserHomeSkipsLayer(t *testing.T) {
+	got, err := LoadOutput(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Source != SourceDefault {
+		t.Errorf("Source = %v, want SourceDefault when both repo and user-home absent", got.Source)
+	}
+}
+
+func TestLoadOutputUnreadableErrors(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, LocalSubdir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(repo, LocalSubdir, OutputFilename)
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Skip("could not create directory in place of file:", err)
+	}
+	_, err := LoadOutput(repo, "")
+	if err == nil {
+		t.Error("expected error when OUTPUT.md is a directory, got nil")
 	}
 }

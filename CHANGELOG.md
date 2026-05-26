@@ -20,7 +20,10 @@ Anthropic provider.
 ### Added
 
 #### Commands
-- `commitbrief init` — write the embedded default rules to `./COMMITBRIEF.md`.
+- `commitbrief init` — write the team-shared `COMMITBRIEF.md` (repo root)
+  *and* the per-user `.commitbrief/OUTPUT.md` template (gitignored). Both
+  fall back to embedded defaults at runtime; running `init` is only
+  necessary when you want to customize the prompt.
 - `commitbrief setup [--local]` — interactive provider + API key wizard
   (`huh` form). `--local` saves under `./.commitbrief/config.yml` and
   auto-adds `.commitbrief/` to `.gitignore`.
@@ -61,8 +64,14 @@ Anthropic provider.
 - **`internal/lang`** — D-21 fallback chain (repo config → global config →
   `LANG` env → English).
 - **`internal/rules`** — `Load(repoRoot)` returns the on-disk
-  `COMMITBRIEF.md` or the binary-embedded default; `Build` wraps content
-  in `<project_rules>` with a prompt-injection guard.
+  `COMMITBRIEF.md` or the binary-embedded default. `LoadOutput(repoRoot,
+  userHome)` resolves the output-format template through a three-tier
+  fallback (repo `.commitbrief/OUTPUT.md` → `~/.commitbrief/OUTPUT.md` →
+  embedded `output.md`); output format is a per-user preference (ADR-0004
+  Update 2026-05-26), separated from the team-shared review content.
+  `Build` wraps both layers in distinct XML blocks
+  (`<project_rules>`, `<output_format>`) with a prompt-injection guard
+  naming both.
 - **`internal/i18n`** — English and Turkish CLI catalogs; `MustHave`
   helper enforces key parity.
 - **`internal/render`** — three output formats (`glamour` terminal,

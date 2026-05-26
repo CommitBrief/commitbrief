@@ -36,7 +36,11 @@ func newDryRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			p := prompt.Build(loaded, app.Lang, parsed.String())
+			outputLoaded, err := rules.LoadOutput(app.RepoRoot, userHome())
+			if err != nil {
+				return err
+			}
+			p := prompt.Build(loaded, outputLoaded, app.Lang, parsed.String())
 
 			cacheKey := cache.Compute(cache.ComputeArgs{
 				Diff:         parsed.String(),
@@ -61,8 +65,13 @@ func newDryRunCmd() *cobra.Command {
 			if loaded.Path != "" {
 				rulesLine += fmt.Sprintf(" (%s)", loaded.Path)
 			}
+			outputLine := fmt.Sprintf("Output source: %s", outputLoaded.Source)
+			if outputLoaded.Path != "" {
+				outputLine += fmt.Sprintf(" (%s)", outputLoaded.Path)
+			}
 			lines = append(lines,
 				rulesLine,
+				outputLine,
 				fmt.Sprintf("Est. tokens:   %d", p.EstimatedTokens()),
 				fmt.Sprintf("Cache key:     %s", cacheKey),
 			)

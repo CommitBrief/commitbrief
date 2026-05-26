@@ -23,5 +23,6 @@ cache.hit: "(önbellekten)"
 cache.disabled: "(önbellek kapalı)"
 
 rules.using_default: "ℹ Yerleşik review kuralları kullanılıyor. Özelleştirmek için 'commitbrief init' çalıştırın."
+rules.output.using_default: "ℹ Yerleşik çıktı formatı kullanılıyor. Özelleştirmek için ~/.commitbrief/OUTPUT.md veya <repo>/.commitbrief/OUTPUT.md oluşturun."
 
 common.cancelled: "İptal edildi."
