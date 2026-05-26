@@ -195,6 +195,12 @@ func TestJSONv1Golden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read golden: %v (run with -update to create)", err)
 	}
+	// Normalize CRLF → LF before comparison: git on Windows may have
+	// rewritten the .golden file with CRLF line endings depending on
+	// core.autocrlf. .gitattributes pins these files to LF for new
+	// checkouts; this strip keeps the test green on any existing
+	// CRLF-checked-out copy too.
+	want = bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))
 	if !bytes.Equal(got, want) {
 		t.Errorf("JSON output differs from %s.\nIf intentional, re-run with -update and review the diff carefully — any non-additive change requires bumping SchemaVersion.\n\nGot:\n%s\n\nWant:\n%s", goldenPath, got, want)
 	}

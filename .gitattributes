@@ -1,0 +1,20 @@
+# Default: let git auto-detect text vs binary, but always normalize text
+# files to LF in the working tree. Without this, `core.autocrlf=true` on
+# Windows checkouts rewrites LF → CRLF and breaks byte-exact tests
+# (notably golden files under internal/**/testdata/).
+* text=auto eol=lf
+
+# Belt-and-suspenders for the byte-exact fixtures: even if a future
+# `* text=auto` flip-flops, these stay LF.
+*.golden text eol=lf
+
+# Generated/embedded markdown is also LF.
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Go sources — LF, always.
+*.go text eol=lf
+
+# Shell scripts must stay LF or they fail to exec on Linux/macOS.
+*.sh text eol=lf
