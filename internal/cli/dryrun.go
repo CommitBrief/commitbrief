@@ -12,7 +12,7 @@ import (
 )
 
 func newDryRunCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "dry-run",
 		Short: "Build prompt and report what would be sent; no API call",
 		Args:  cobra.NoArgs,
@@ -74,4 +74,6 @@ func newDryRunCmd() *cobra.Command {
 			return nil
 		},
 	}
+	bindScopeFlags(cmd)
+	return cmd
 }

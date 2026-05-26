@@ -10,22 +10,94 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
-### Changed
-- Go module `go` directive raised from `1.23` to `1.25` to track the
-  modern Go toolchain expected by upstream dependencies (`go-git/v5`,
-  `golang.org/x/net`). Supersedes ADR-0013 §2's original Go 1.23 target.
+## [0.1.0] - 2026-05-26
+
+First tagged build. **Private repository**; no public artifacts. The
+release exists to lock in the walking-skeleton contract: `commitbrief
+setup` → `commitbrief --staged` produces a real LLM review with the
+Anthropic provider.
 
 ### Added
-- Go module `github.com/CommitBrief/commitbrief` targeting `go 1.25`.
-- Directory skeleton: `cmd/commitbrief/`, `internal/{cli,config,rules,...}`,
-  `testdata/`, `scripts/`.
-- Standard project files: `LICENSE` (GPL-3.0-or-later), `.gitignore`,
-  `.editorconfig`, `README.md`, `Makefile`, `.golangci.yml`, `.goreleaser.yaml`.
-- Repo-level `CONTRIBUTING.md` linking to the org-wide contribution guide.
-- GitHub Actions workflows: `ci.yml` (build + test + lint matrix on
-  ubuntu/macos/windows), `release.yml` (goreleaser, `--skip=publish` until
-  v0.4.0), `codeql.yml`.
-- Helper scripts: `scripts/release-check.sh`, `scripts/license-check.sh`,
-  `scripts/manpage.sh`.
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/commits/main
+#### Commands
+- `commitbrief init` — write the embedded default rules to `./COMMITBRIEF.md`.
+- `commitbrief setup [--local]` — interactive provider + API key wizard
+  (`huh` form). `--local` saves under `./.commitbrief/config.yml` and
+  auto-adds `.commitbrief/` to `.gitignore`.
+- `commitbrief --staged` / `-s` (default with no subcommand), `--unstaged` / `-u`,
+  `--file` / `-f <path>`, `--commit` / `-c <hash>`,
+  `--pull-request <a>...<b>`, `--branch` / `-b <target>` — review flows.
+- `commitbrief dry-run` — walk the full pipeline (diff fetch + filter + rules +
+  prompt + cache-key compute) without an API call.
+- `commitbrief list` — markdown command reference (rendered via `glamour`
+  when stdout is a TTY).
+- `commitbrief compress` — stub; full implementation in v0.3.0.
+
+#### Core modules
+- **`internal/git`** — hybrid `go-git` + `git` CLI access (ADR-0002).
+  Commit-based operations go through `go-git`; working-tree operations
+  fall back to the CLI.
+- **`internal/diff`** — unified-diff parser, file/hunk/line-kind model,
+  chars/4 token estimator, round-trip `String()` formatter.
+- **`internal/ignore`** — three-layer matcher (built-in defaults +
+  `.commitbriefignore` + future LLM-side filter). Last-wins semantics via
+  `go-git`'s gitignore pattern engine; negative patterns can revert
+  built-in exclusions.
+- **`internal/guard`** — pre-send guard (ADR-0007) that prompts before
+  shipping a diff containing `.commitbrief/*` files.
+- **`internal/provider`** — `Provider` interface + factory registry
+  (ADR-0001); `internal/provider/{anthropic,mock}` implementations
+  registered via `init()`.
+- **`internal/provider/anthropic`** — official `anthropic-sdk-go`
+  integration covering Opus 4.7, Sonnet 4.6, Haiku 4.5; ephemeral prompt
+  caching enabled with a 5-minute TTL; per-model context-window and
+  pricing tables.
+- **`internal/cache`** — local response cache at `./.commitbrief/cache/`
+  (ADR-0008). SHA-256 key combining diff, system prompt, provider, model,
+  language, and schema version; atomic temp+rename writes; corrupt-entry
+  auto-delete; 7-day default TTL.
+- **`internal/config`** — two-tier YAML config with field-level merge
+  (ADR-0005); ENV-variable overrides for API keys and provider/model.
+- **`internal/lang`** — D-21 fallback chain (repo config → global config →
+  `LANG` env → English).
+- **`internal/rules`** — `Load(repoRoot)` returns the on-disk
+  `COMMITBRIEF.md` or the binary-embedded default; `Build` wraps content
+  in `<project_rules>` with a prompt-injection guard.
+- **`internal/i18n`** — English and Turkish CLI catalogs; `MustHave`
+  helper enforces key parity.
+- **`internal/render`** — three output formats (`glamour` terminal,
+  plain markdown, JSON schema v1 — `findings` empty until v0.5.0).
+- **`internal/setup`** — wizard primitives (provider specs, Apply,
+  TestConnection via registry, Ollama `/api/tags` discovery, local +
+  global config writers with `0600` perms).
+- **`internal/ui`** — TTY-aware color/spinner/prompt; Windows ANSI VT
+  mode handling under a `//go:build windows` tag.
+- **`internal/version`** — ldflags injection point (`Version`, `Commit`,
+  `Date`); honored by `make build` and CI release pipeline.
+
+#### Infrastructure
+- Go module targeting **Go 1.25** (supersedes ADR-0013 §2's original
+  1.23 target; bump driven by upstream `go-git` and `golang.org/x/net`).
+- CI matrix on Ubuntu, macOS, Windows; `golangci-lint v2` lint job;
+  CodeQL job guarded for private-repo visibility.
+- Helper scripts: `release-check.sh` (default-prompt TBD guard + i18n
+  parity), `license-check.sh` (GPL-3.0 compatibility audit),
+  `manpage.sh` (cobra → man), `smoke-test.sh` (pipeline + cache-key
+  invalidation; runs without an API key).
+- `Makefile` targets: `build`, `test`, `test-live`, `lint`, `fmt`,
+  `tidy`, `clean`, `release-check`, `license-check`, `manpage`, `smoke`.
+
+### Known limitations
+- Only the **Anthropic** provider is implemented; OpenAI, Gemini, and
+  Ollama land in v0.2.0.
+- `commitbrief compress` is a stub; full implementation in v0.3.0.
+- Reviews are returned **non-streaming**; provider streaming arrives in
+  v0.4.0 alongside the `--verbose` footer's cache-saved-cost display.
+- Repository is private through v0.3.x; `go install`,
+  `brew install commitbrief`, and `scoop install commitbrief` are not
+  yet usable. First public release is v0.4.0.
+- Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
+  is handled by the CLI fallback (ADR-0002 mitigation).
+
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/CommitBrief/commitbrief/releases/tag/v0.1.0

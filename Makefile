@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: help build test test-live lint fmt tidy clean release-check license-check manpage
+.PHONY: help build test test-live lint fmt tidy clean release-check license-check manpage smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,3 +53,6 @@ license-check: ## Audit dependency licenses for GPL-3.0 compatibility
 
 manpage: ## Regenerate man/commitbrief.1
 	bash scripts/manpage.sh
+
+smoke: ## Build + walk the pipeline end-to-end without an API call
+	bash scripts/smoke-test.sh

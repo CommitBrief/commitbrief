@@ -51,15 +51,10 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.model, "model", "", "override configured model")
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
 
-	// review-scope flags live on root so `commitbrief --staged` works without
-	// a subcommand name.
-	rflags := cmd.Flags()
-	rflags.BoolVarP(&reviewScope.staged, "staged", "s", false, "review staged changes (default)")
-	rflags.BoolVarP(&reviewScope.unstaged, "unstaged", "u", false, "review unstaged changes")
-	rflags.StringVarP(&reviewScope.file, "file", "f", "", "review changes in a single file")
-	rflags.StringVarP(&reviewScope.commit, "commit", "c", "", "review changes in a commit hash")
-	rflags.StringVar(&reviewScope.pr, "pull-request", "", "review a PR-style diff target...feature")
-	rflags.StringVarP(&reviewScope.branch, "branch", "b", "", "review current branch vs target ref")
+	// Review-scope flags live on root so `commitbrief --staged` works without
+	// a subcommand. They are re-bound on `dry-run` (see newDryRunCmd) since
+	// it walks the same pipeline.
+	bindScopeFlags(cmd)
 
 	cmd.AddCommand(
 		newInitCmd(),

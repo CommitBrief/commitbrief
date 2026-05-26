@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/CommitBrief/commitbrief/internal/cache"
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/git"
@@ -32,6 +34,16 @@ type reviewScopeFlags struct {
 }
 
 var reviewScope reviewScopeFlags
+
+func bindScopeFlags(cmd *cobra.Command) {
+	f := cmd.Flags()
+	f.BoolVarP(&reviewScope.staged, "staged", "s", false, "review staged changes (default)")
+	f.BoolVarP(&reviewScope.unstaged, "unstaged", "u", false, "review unstaged changes")
+	f.StringVarP(&reviewScope.file, "file", "f", "", "review changes in a single file")
+	f.StringVarP(&reviewScope.commit, "commit", "c", "", "review changes in a commit hash")
+	f.StringVar(&reviewScope.pr, "pull-request", "", "review a PR-style diff target...feature")
+	f.StringVarP(&reviewScope.branch, "branch", "b", "", "review current branch vs target ref")
+}
 
 func runReview(ctx context.Context, scope reviewScopeFlags) error {
 	app, err := resolveContext(true)
