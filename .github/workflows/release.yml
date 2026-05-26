@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*'
+  # workflow_dispatch lets us re-run a release manually against an
+  # existing tag (e.g. after a transient failure, or when a tag was
+  # re-pushed at the same SHA and GitHub deduped the push event).
+  # Trigger: `gh workflow run release.yml --ref v0.4.0`
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.4.0). Used for logs only; the actual ref is determined by --ref at dispatch time.'
+        required: false
+        default: ''
 
 # Visibility lifecycle (ADR-0013 §3):
 #   - v0.0.x – v0.3.x: private repo; goreleaser ran with --skip=publish
