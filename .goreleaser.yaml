@@ -1,0 +1,100 @@
+# .goreleaser.yaml — release pipeline for CommitBrief.
+#
+# Design rationale: ADR-0013 §6.
+# Until v0.4.0 the repository is private and the release workflow runs
+# with --skip=publish so nothing ships externally. From v0.4.0 onward
+# Homebrew tap + Scoop bucket receive automated updates.
+
+version: 2
+
+project_name: commitbrief
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: commitbrief
+    main: ./cmd/commitbrief
+    binary: commitbrief
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/CommitBrief/commitbrief/internal/version.Version={{.Version}}
+      - -X github.com/CommitBrief/commitbrief/internal/version.Commit={{.Commit}}
+      - -X github.com/CommitBrief/commitbrief/internal/version.Date={{.Date}}
+
+archives:
+  - id: commitbrief
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'Merge pull request'
+      - 'Merge branch'
+
+# Homebrew tap + Scoop bucket publishing are skipped via --skip=publish
+# in the workflow until the v0.4.0 public release. The config below is
+# wired up so the release workflow only needs to drop the --skip flag.
+
+brews:
+  - name: commitbrief
+    repository:
+      owner: CommitBrief
+      name: homebrew-tap
+    homepage: https://github.com/CommitBrief/commitbrief
+    description: LLM-powered local code review CLI
+    license: GPL-3.0-or-later
+    skip_upload: auto
+    install: |
+      bin.install "commitbrief"
+    test: |
+      system "#{bin}/commitbrief", "--help"
+
+scoops:
+  - repository:
+      owner: CommitBrief
+      name: scoop-bucket
+    homepage: https://github.com/CommitBrief/commitbrief
+    description: LLM-powered local code review CLI
+    license: GPL-3.0-or-later
+    skip_upload: auto
+
+release:
+  draft: false
+  prerelease: auto

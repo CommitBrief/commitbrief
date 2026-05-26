@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Visibility lifecycle (ADR-0013 §3):
+#   - v0.0.x – v0.3.x: private repo; goreleaser runs with --skip=publish
+#     to validate the config without shipping anything externally.
+#   - v0.4.0+: repo is public; drop --skip=publish so the Homebrew tap and
+#     Scoop bucket receive automated updates.
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Pre-release safety checks
+        run: bash scripts/release-check.sh
+
+      - name: License audit
+        run: bash scripts/license-check.sh
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --skip=publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
