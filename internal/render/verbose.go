@@ -25,14 +25,20 @@ func VerboseFooter(m Meta) string {
 	}
 	tokens := fmt.Sprintf("in=%d, out=%d", m.Usage.InputTokens, m.Usage.OutputTokens)
 	if m.Usage.CachedInputTokens > 0 {
-		tokens += fmt.Sprintf(" (cached: %d)", m.Usage.CachedInputTokens)
+		tokens += fmt.Sprintf(" (provider cached: %d)", m.Usage.CachedInputTokens)
 	}
 	if m.Cached {
-		tokens += " (cached)"
+		tokens += " (local cache hit)"
 	}
 	fmt.Fprintf(&sb, "Tokens:    %s\n", tokens)
 	if m.Cost > 0 {
-		fmt.Fprintf(&sb, "Cost:      $%.4f\n", m.Cost)
+		label := "Cost"
+		// Local cache hit means no provider call happened; the cost figure
+		// represents what was *saved* by reusing the cached response.
+		if m.Cached {
+			label = "Saved"
+		}
+		fmt.Fprintf(&sb, "%-10s $%.4f\n", label+":", m.Cost)
 	}
 	if m.Latency > 0 {
 		fmt.Fprintf(&sb, "Latency:   %s\n", formatDuration(m.Latency))

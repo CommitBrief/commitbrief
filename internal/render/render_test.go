@@ -180,7 +180,7 @@ func TestVerboseFooterContent(t *testing.T) {
 	for _, want := range []string{
 		"Provider:  anthropic",
 		"Model:     claude-opus-4-7",
-		"in=4231, out=1503 (cached: 800)",
+		"in=4231, out=1503 (provider cached: 800)",
 		"Cost:      $0.0632",
 		"Latency:   3.20s",
 	} {
@@ -194,8 +194,37 @@ func TestVerboseFooterCachedMarker(t *testing.T) {
 	m := samplePayload().Meta
 	m.Cached = true
 	out := VerboseFooter(m)
-	if !strings.Contains(out, "(cached)") {
-		t.Errorf("cached footer missing (cached) marker; got:\n%s", out)
+	if !strings.Contains(out, "(local cache hit)") {
+		t.Errorf("cached footer missing (local cache hit) marker; got:\n%s", out)
+	}
+}
+
+func TestVerboseFooterCachedShowsSavedNotCost(t *testing.T) {
+	m := samplePayload().Meta
+	m.Cached = true
+	// Cost is set to what would have been spent — Saved is the right label
+	// on a local cache hit (no provider call happened).
+	out := VerboseFooter(m)
+	if !strings.Contains(out, "Saved:") {
+		t.Errorf("cached footer should label cost field as 'Saved'; got:\n%s", out)
+	}
+	if strings.Contains(out, "Cost:") {
+		t.Errorf("cached footer should NOT show 'Cost:' label (use 'Saved:'); got:\n%s", out)
+	}
+	if !strings.Contains(out, "$0.0632") {
+		t.Errorf("Saved amount missing; got:\n%s", out)
+	}
+}
+
+func TestVerboseFooterUncachedShowsCostNotSaved(t *testing.T) {
+	m := samplePayload().Meta
+	m.Cached = false
+	out := VerboseFooter(m)
+	if !strings.Contains(out, "Cost:") {
+		t.Errorf("uncached footer should show 'Cost:'; got:\n%s", out)
+	}
+	if strings.Contains(out, "Saved:") {
+		t.Errorf("uncached footer should NOT show 'Saved:'; got:\n%s", out)
 	}
 }
 

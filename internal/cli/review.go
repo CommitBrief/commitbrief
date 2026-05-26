@@ -113,17 +113,22 @@ func runReview(ctx context.Context, scope reviewScopeFlags) error {
 
 	if !global.noCache && cacheStore != nil {
 		if entry, hit := cacheStore.Get(cacheKey); hit {
+			usage := provider.Usage{
+				InputTokens:       entry.Result.Tokens.Input,
+				OutputTokens:      entry.Result.Tokens.Output,
+				CachedInputTokens: entry.Result.Tokens.Cached,
+			}
+			// On a cache hit no provider call is made; the cost figure is
+			// what would have been spent — surfaced as "Saved" by the
+			// verbose footer (see render/verbose.go).
 			meta := render.Meta{
 				Provider:  prov.Name(),
 				Model:     model,
 				Lang:      app.Lang.Code,
 				Cached:    true,
 				Timestamp: entry.CreatedAt,
-				Usage: provider.Usage{
-					InputTokens:       entry.Result.Tokens.Input,
-					OutputTokens:      entry.Result.Tokens.Output,
-					CachedInputTokens: entry.Result.Tokens.Cached,
-				},
+				Usage:     usage,
+				Cost:      prov.Pricing(model).Cost(usage),
 			}
 			return renderResult(entry.Result.Content, meta)
 		}
