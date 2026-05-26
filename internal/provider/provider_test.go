@@ -13,12 +13,12 @@ type stubProvider struct {
 	name string
 }
 
-func (s *stubProvider) Name() string                                  { return s.name }
-func (s *stubProvider) DefaultModel() string                          { return "stub-model" }
-func (s *stubProvider) ContextWindow(string) int                      { return 1024 }
-func (s *stubProvider) EstimateTokens(string) int                     { return 0 }
-func (s *stubProvider) Pricing(string) Pricing                        { return Pricing{} }
-func (s *stubProvider) TestConnection(context.Context) error          { return nil }
+func (s *stubProvider) Name() string                         { return s.name }
+func (s *stubProvider) DefaultModel() string                 { return "stub-model" }
+func (s *stubProvider) ContextWindow(string) int             { return 1024 }
+func (s *stubProvider) EstimateTokens(string) int            { return 0 }
+func (s *stubProvider) Pricing(string) Pricing               { return Pricing{} }
+func (s *stubProvider) TestConnection(context.Context) error { return nil }
 func (s *stubProvider) Review(context.Context, Request) (Response, error) {
 	return Response{}, nil
 }

@@ -13,7 +13,7 @@ func adaptStream(ctx context.Context, stream *ssestream.Stream[sdk.MessageStream
 	out := make(chan provider.Event, 16)
 	go func() {
 		defer close(out)
-		defer stream.Close()
+		defer func() { _ = stream.Close() }()
 
 		var (
 			input        int64

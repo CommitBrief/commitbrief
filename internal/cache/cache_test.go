@@ -36,8 +36,10 @@ func sampleEntry() Entry {
 
 func TestComputeDeterministic(t *testing.T) {
 	args := ComputeArgs{Diff: "d", SystemPrompt: "s", Provider: "p", Model: "m", Lang: "en"}
-	if Compute(args) != Compute(args) {
-		t.Error("Compute should be deterministic for identical args")
+	a := Compute(args)
+	b := Compute(args)
+	if a != b {
+		t.Errorf("Compute should be deterministic; got %q vs %q", a, b)
 	}
 }
 
