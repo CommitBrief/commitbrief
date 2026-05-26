@@ -78,46 +78,52 @@ dry-run --staged` walks the pipeline without spending tokens.
 
 ## What you get
 
-Default TTY output is a framed card: a header, a status line, the review
-body grouped under the five default perspectives (Correctness, Security,
-Maintainability, Performance, Code Quality), and a one-line summary
-footer. Each finding emits Severity / File:Line / Issue / Suggestion on
-their own labelled lines:
+Default TTY output is a framed view: a header, a status line, **one
+bordered panel per finding** (colored by severity), and a one-line
+summary footer. Findings are ordered `critical → info`.
 
 ```text
-commitbrief v0.5.0 · provider: anthropic/claude-sonnet-4-6 · cache: miss
+commitbrief v0.6.0 · provider: anthropic/claude-sonnet-4-6 · cache: miss
 analyzing 3 files · 42 added · 11 removed · COMMITBRIEF.md loaded
 
-  ## Security
+┌─ CRITICAL ─ internal/auth/session.go:142 ──────────────────────────────────┐
+│ SQL fragment built from request input                                       │
+│                                                                             │
+│ String concatenation feeds db.Query() directly, bypassing the prepared      │
+│ statement path used elsewhere in this package.                              │
+│                                                                             │
+│   - q := "SELECT * FROM sessions WHERE token = '" + tok + "'"               │
+│   + q := "SELECT * FROM sessions WHERE token = $1"                          │
+│     rows, err := db.Query(ctx, q, tok)                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-    **Severity:** high
-    **File:Line:** internal/auth/session.go:142
-    **Issue:** Session tokens are compared with == instead of hmac.Equal,
-    leaving a timing-attack surface on the login path.
-    **Suggestion:** Use subtle.ConstantTimeCompare or hmac.Equal on the
-    raw byte slices; reject mismatches with the same error path as
-    "unknown user" to avoid leaking which side failed.
+┌─ HIGH ─ internal/db/migrate.go:73 ─────────────────────────────────────────┐
+│ NOT NULL column added without a default                                     │
+│                                                                             │
+│ The new column has no DEFAULT, so the migration will fail on any table     │
+│ that already has rows. Either backfill in a prior migration or add a       │
+│ DEFAULT before the constraint.                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-  ## Correctness
+┌─ LOW ─ internal/api/handler.go:201 ────────────────────────────────────────┐
+│ Wrapped error duplicated in message                                         │
+│                                                                             │
+│ The format string already contains "%w"; the prefix repeats the wrapped    │
+│ error verbatim, producing "auth failed: auth failed: …" in logs.           │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-    **Severity:** high
-    **File:Line:** internal/db/migrate.go:73
-    **Issue:** The new NOT NULL column has no default, so the migration
-    will fail on any table that already has rows.
-    **Suggestion:** Either add a DEFAULT or backfill in a prior migration
-    before adding the constraint.
-
-  ## Verdict
-    One blocker (timing-safe token compare) and one migration risk. Hold
-    merge until both are addressed; nothing else is shipping-critical.
-
-✓ Done in 4.2s · 8421 tokens · Cost: $0.0319
+✓ Done in 4.2s · 3 findings · 8421 tokens · Cost: $0.0319
 ```
 
+Five severity levels — `critical`, `high`, `medium`, `low`, `info` —
+colored red/orange/yellow/blue/grey. `info` items are always shown;
+suppress them with a user-side OUTPUT.md template (see Configuration).
+
 Re-run the same command on the same diff and the footer switches to
-`Saved: $0.0319` — the second call is a local cache hit, no provider
-round-trip. Add `--json` for a machine-readable schema, or `--markdown`
-for plain text suitable for `>> review.md`.
+`Saved: $0.0319` — a local cache hit, no provider round-trip.
+`--json` emits the raw findings (documented schema), `--markdown` runs
+your OUTPUT.md template against the findings and writes plain text
+suitable for `>> review.md`.
 
 ## Command surface
 
@@ -188,9 +194,14 @@ cache:
 Review content lives in two files:
 
 - **`COMMITBRIEF.md`** at the repo root — team-shared review rules,
-  perspectives, project context. Committed to git.
+  perspectives, project context. Sent to the LLM as the system prompt.
+  Committed to git.
 - **`.commitbrief/OUTPUT.md`** (or `~/.commitbrief/OUTPUT.md`) —
-  per-user output format (severity scale, finding structure). Gitignored.
+  per-user **Go `text/template`** applied locally to the findings for
+  `--markdown` and `--output <file>.md`. Never sent to the LLM. The
+  template has access to `.Findings` (typed `[]Finding{Severity, File,
+  Line, Title, Description, Language, Snippet}`) plus helpers like
+  `groupBySeverity`, `upper`, `countFiles`. Gitignored.
 
 `commitbrief init` writes both templates from the embedded defaults.
 
@@ -262,7 +273,7 @@ review. Default TTL is 7 days; configurable via `cache.ttl_days`.
 
 **Can I run it in CI?**
 Not yet, by design. CommitBrief targets the developer's terminal, not
-pipelines. CI integration (`--fail-on=blocker`, severity exit codes,
+pipelines. CI integration (`--fail-on=<severity>`, severity exit codes,
 GitHub Action wrapper) is on the v1.x roadmap.
 
 **Why GPL-3.0?**
