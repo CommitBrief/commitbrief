@@ -35,7 +35,11 @@ func newRootCmd() *cobra.Command {
 		Short:         "Local LLM-powered code review of git diffs",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Version:       version.Info(),
+		// version.Info() already starts with "commitbrief X.Y.Z (commit …,
+		// built …)" — cobra's default template prefixes "{cmd.Use} version "
+		// which would print "commitbrief version commitbrief 0.7.0 …".
+		// Override with a bare template so --version is just the Info() string.
+		Version: version.Info(),
 		// PersistentPreRunE fires before every command's RunE. We use it as
 		// the gen-man interception point so `commitbrief --gen-man <dir>` (or
 		// even attached to a subcommand) short-circuits to man-page emission
@@ -56,6 +60,7 @@ func newRootCmd() *cobra.Command {
 			return runReview(cmd, reviewScope)
 		},
 	}
+	cmd.SetVersionTemplate("{{.Version}}\n")
 
 	flags := cmd.PersistentFlags()
 	flags.BoolVar(&global.json, "json", false, "emit machine-readable JSON output")
