@@ -15,6 +15,12 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   introduced in v0.6.0:
   - **Rounded borders** (`╭ ╮ ╰ ╯`) replace the previous square corners
     for a softer, more card-like silhouette.
+  - **Diff-colored snippets** — when a finding includes a code excerpt
+    with `-` / `+` prefixed lines, the renderer now colors removals red
+    (256-color 203, distinct from the critical-severity 196) and
+    additions green (42). Context lines stay muted (244). Composes
+    cleanly with the panel's severity-tinted background so the card
+    still reads as one block.
   - **Severity-tinted backgrounds** via `lipgloss.AdaptiveColor`: each
     panel gets a subtle background shade matching its border (darker on
     dark terminals, paler on light terminals) so the card reads as one

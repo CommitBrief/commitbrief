@@ -239,10 +239,34 @@ func cardsFindingPanel(f Finding) string {
 	body := onBg.Render(f.Description)
 	if f.Snippet != "" {
 		fence := "```"
-		body += "\n\n" + onBg.Render(fence+f.Language+"\n"+f.Snippet+"\n"+fence)
+		body += "\n\n" + onBg.Render(fence+f.Language) + "\n" + colorizeSnippet(f.Snippet, onBg) + "\n" + onBg.Render(fence)
 	}
 
 	return panel.Render(header + "\n\n" + body)
+}
+
+// colorizeSnippet walks each line of the snippet and applies diff
+// semantics: leading "+" → green, leading "-" → red, anything else stays
+// muted. Composes onto the panel's tinted background so the card stays
+// visually unified. ADR-0014 §1 lists `snippet` as optional, so input may
+// be empty; in that case the caller handles fence emission and we never
+// land here.
+func colorizeSnippet(snippet string, onBg lipgloss.Style) string {
+	lines := strings.Split(snippet, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		var style lipgloss.Style
+		switch {
+		case strings.HasPrefix(line, "+"):
+			style = onBg.Foreground(lipgloss.Color("42")) // green (matches styleOK)
+		case strings.HasPrefix(line, "-"):
+			style = onBg.Foreground(lipgloss.Color("203")) // soft red — distinct from severity 196
+		default:
+			style = onBg.Foreground(lipgloss.Color("244")) // muted grey (context line)
+		}
+		out = append(out, style.Render(line))
+	}
+	return strings.Join(out, "\n")
 }
 
 // cardsEmptyPanel is the success view for a review that produced zero

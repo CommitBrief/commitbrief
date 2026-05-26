@@ -3,11 +3,25 @@ package render
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/CommitBrief/commitbrief/internal/rules"
 )
+
+// TestMain forces a 256-color profile for the entire render package's
+// test run. Without it, lipgloss detects bytes.Buffer as non-TTY and
+// strips ANSI escapes, making it impossible to assert that snippet diff
+// lines actually carry their severity colors. Existing tests use
+// stripANSI so they are unaffected by the forced profile.
+func TestMain(m *testing.M) {
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	os.Exit(m.Run())
+}
 
 func sampleFindings() []Finding {
 	return []Finding{
@@ -168,6 +182,98 @@ func TestCardsPanelUsesRoundedBorder(t *testing.T) {
 		if strings.Contains(plain, sharp) {
 			t.Errorf("sharp-border corner %q should not appear in rounded layout; got:\n%s", sharp, plain)
 		}
+	}
+}
+
+// ansiContainsLineWithColor returns true if the rendered output has any
+// line that contains both the given color code AND the given content
+// substring. Lets snippet-color assertions isolate the snippet region
+// from incidental color use elsewhere in the panel (footer's green
+// checkmark, severity badge, muted location, etc.).
+func ansiContainsLineWithColor(rendered, fgCode, contentSubstring string) bool {
+	colorOpen := "\x1b[38;5;" + fgCode
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.Contains(line, colorOpen) && strings.Contains(line, contentSubstring) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestColorizeSnippetGreenForAddedLines(t *testing.T) {
+	// Direct unit test: feed three lines, check the rendered string carries
+	// color 42 (green) on the '+' line and color 203 (red) on the '-' line.
+	// Using an unstyled base so we don't have to subtract the panel bg.
+	onBg := lipgloss.NewStyle()
+	got := colorizeSnippet("- old line\n+ new line\n  context line", onBg)
+
+	if !ansiContainsLineWithColor(got, "42", "+ new line") {
+		t.Errorf("'+' line should carry green ANSI (color 42); got:\n%q", got)
+	}
+	if !ansiContainsLineWithColor(got, "203", "- old line") {
+		t.Errorf("'-' line should carry red ANSI (color 203); got:\n%q", got)
+	}
+	if !ansiContainsLineWithColor(got, "244", "context line") {
+		t.Errorf("context line should carry muted ANSI (color 244); got:\n%q", got)
+	}
+}
+
+func TestColorizeSnippetPassthroughForContextLines(t *testing.T) {
+	// No '+' or '-' anywhere → no green or red ANSI escapes in the result.
+	// Catches a regression where the colorizer falsely matches space-padded
+	// prefixes or strips characters.
+	onBg := lipgloss.NewStyle()
+	got := colorizeSnippet("  context one\n  context two", onBg)
+
+	plain := stripANSI(got)
+	for _, want := range []string{"context one", "context two"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("plain content missing %q; got:\n%s", want, plain)
+		}
+	}
+	if strings.Contains(got, "\x1b[38;5;42m") || strings.Contains(got, "\x1b[38;5;42;") {
+		t.Errorf("context-only snippet must not emit green ANSI; got:\n%q", got)
+	}
+	if strings.Contains(got, "\x1b[38;5;203m") || strings.Contains(got, "\x1b[38;5;203;") {
+		t.Errorf("context-only snippet must not emit red ANSI; got:\n%q", got)
+	}
+}
+
+func TestColorizeSnippetPreservesLineCount(t *testing.T) {
+	// Diff colorization must not drop or merge lines — the renderer relies
+	// on the output having the same line count as the input so the panel
+	// height stays predictable.
+	onBg := lipgloss.NewStyle()
+	in := "- a\n+ b\n  c\n+ d"
+	got := colorizeSnippet(in, onBg)
+	if want, have := strings.Count(in, "\n"), strings.Count(stripANSI(got), "\n"); want != have {
+		t.Errorf("line count drift: in=%d, out=%d\n%q", want, have, got)
+	}
+}
+
+func TestCardsSnippetIntegratedWithPanel(t *testing.T) {
+	// End-to-end sanity: render a full Cards panel with a snippet and
+	// confirm the line containing "+ new" carries green (color 42) — the
+	// integration the unit tests above can't catch (style composition with
+	// onBg/panel.Background).
+	p := Payload{
+		Findings: []Finding{{
+			Severity: SeverityCritical, File: "a.go", Line: 1,
+			Title: "t", Description: "d", Language: "go",
+			Snippet: "- old\n+ new",
+		}},
+		Meta: samplePayload().Meta,
+	}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	raw := w.String()
+	if !ansiContainsLineWithColor(raw, "42", "+ new") {
+		t.Errorf("integrated panel: '+' line should carry green ANSI; got:\n%q", raw)
+	}
+	if !ansiContainsLineWithColor(raw, "203", "- old") {
+		t.Errorf("integrated panel: '-' line should carry red ANSI; got:\n%q", raw)
 	}
 }
 
