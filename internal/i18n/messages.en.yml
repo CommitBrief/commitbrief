@@ -22,4 +22,6 @@ guard.non_interactive: "Aborted (non-interactive mode); pass --yes to override."
 cache.hit: "(cached)"
 cache.disabled: "(cache disabled)"
 
+rules.using_default: "ℹ Using built-in review rules. Run 'commitbrief init' to customize."
+
 common.cancelled: "Cancelled."

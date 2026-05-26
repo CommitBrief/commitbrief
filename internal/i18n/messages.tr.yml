@@ -22,4 +22,6 @@ guard.non_interactive: "İptal edildi (etkileşimsiz mod); zorlamak için --yes 
 cache.hit: "(önbellekten)"
 cache.disabled: "(önbellek kapalı)"
 
+rules.using_default: "ℹ Yerleşik review kuralları kullanılıyor. Özelleştirmek için 'commitbrief init' çalıştırın."
+
 common.cancelled: "İptal edildi."
