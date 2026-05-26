@@ -10,6 +10,69 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### ⚠️ Breaking — OUTPUT.md semantics (ADR-0014)
+- **`COMMITBRIEF.md` users are unaffected.** Project review rules remain
+  the user-editable system prompt; no shape change there.
+- **`OUTPUT.md` is now a Go `text/template` consumed locally**, not a
+  format instruction embedded in the LLM prompt. The model produces
+  structured findings JSON (`{ "findings": [...] }`) under a fixed
+  schema; the renderer applies your OUTPUT.md to those findings for
+  `--markdown` and `--output <file>.md`. Pre-0.6.0 OUTPUT.md files
+  written as natural-language formatting instructions are invalid
+  templates and will fail the pre-send validation guard.
+- **Migration**: run `commitbrief init --yes` to overwrite your
+  OUTPUT.md with the new embedded default, or rewrite it in
+  `text/template` syntax. Available data: `.Findings` (typed
+  `[]Finding{Severity, File, Line, Title, Description, Language,
+  Snippet}`). Available helpers: `upper`, `lower`, `groupBySeverity`,
+  `countFiles`. See `internal/rules/output.md` for the embedded
+  default and `docs/json-schema.md` for the findings shape.
+- **Severity vocabulary expanded to five levels** (was three):
+  `critical`, `high`, `medium`, `low`, `info`. The renderer's `--json`
+  output, the Cards layout's per-finding borders, and any `--fail-on`
+  CI integration (v1.x roadmap) all consume this enum.
+- **Old local cache entries are automatically invalidated** because the
+  system prompt changed (cache key includes the system prompt SHA per
+  ADR-0008). No migration code needed.
+
+### Added
+- **Structured findings JSON contract** between the LLM and the
+  renderer. Every provider (Anthropic, OpenAI, Gemini, Ollama, mock)
+  uses its native structured-output mechanism to enforce the schema:
+  Anthropic via `tools` + `tool_choice`, OpenAI via
+  `response_format: json_schema` (strict), Gemini via
+  `ResponseMIMEType: application/json` + `ResponseSchema`, Ollama via
+  `format: "json"`. See ADR-0014 §4.
+- **Retry-once + graceful degrade** at the CLI layer. If the LLM emits
+  unparseable output, the request is replayed once; if the retry also
+  fails, the renderer degrades to a plain-text view with a stderr
+  warning. Cache entries record the fallback mode (`format:
+  "markdown-fallback"`) so replays stay silent.
+- **Per-finding Cards layout** (Stage B of Phase 11). Each finding is
+  rendered as a lipgloss-bordered panel coloured by severity
+  (red/orange/yellow/blue/grey for critical/high/medium/low/info).
+  Empty case shows a single green-checkmark "No findings. Looks good."
+  panel. Footer summarises finding count + tokens + cost.
+- **`render.ValidateOutputTemplate`** pre-send guard. User-supplied
+  OUTPUT.md templates are parsed and executed against both an
+  empty-findings and a two-element sample case before any provider
+  call. A malformed template fails with a clear i18n'd error pointing
+  at the file and suggesting `commitbrief init --yes` to reset.
+- **i18n keys** `output.template.invalid` and `review.degraded`
+  (EN+TR parity verified).
+- **release-check.sh** now validates the embedded `internal/rules/output.md`
+  template via the Go test suite before any release is cut.
+
+### Changed
+- `internal/render/json.go` populates `findings[]` from the parsed
+  response. The `content` field is empty on the happy path and
+  reserved for graceful-degrade output; slated for removal in v2.
+- `internal/render/cards.go` body is replaced with per-finding panels;
+  header/status/footer are unchanged from Stage A.
+- `internal/render/markdown.go` runs OUTPUT.md as a `text/template`
+  with helper functions; falls through to raw `Content` on graceful
+  degrade or when no template is configured.
+
 ## [0.5.0] - 2026-05-26
 
 Scope expansion. Every review scope advertised in `commitbrief list` now

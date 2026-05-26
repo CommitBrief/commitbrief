@@ -35,6 +35,9 @@ init.wrote: "Wrote %s"
 review.no_changes: "No reviewable changes after filtering."
 review.cache_disabled: "Cache disabled: %v"
 review.pr_format: "--pull-request expects target...feature, got %q"
+review.degraded: "warning: LLM produced malformed JSON; falling back to plain-text view."
+
+output.template.invalid: "OUTPUT.md template is invalid at %s:\n  %s\n\nThe pipeline did not contact the provider. Fix the template, or run\n'commitbrief init --yes' to overwrite it with the default."
 
 compress.no_rules: "compress: no %s found at %s; run `commitbrief init` first"
 compress.compressing: "Compressing %s with provider=%s model=%s level=%s …"

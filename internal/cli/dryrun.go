@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/ignore"
 	"github.com/CommitBrief/commitbrief/internal/prompt"
+	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
@@ -49,6 +51,13 @@ func newDryRunCmd() *cobra.Command {
 			outputLoaded, err := rules.LoadOutput(app.RepoRoot, userHome())
 			if err != nil {
 				return err
+			}
+			if outputLoaded.Source != rules.SourceDefault {
+				// Pre-send template guard mirrors the runReview path so
+				// dry-run fails fast on the same condition (ADR-0014 §5).
+				if vErr := render.ValidateOutputTemplate(outputLoaded.Content); vErr != nil {
+					return errors.New(app.Catalog.T("output.template.invalid", outputLoaded.Path, vErr.Error()))
+				}
 			}
 			p := prompt.Build(loaded, app.Lang, parsed.String())
 

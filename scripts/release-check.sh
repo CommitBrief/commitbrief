@@ -27,6 +27,18 @@ for f in internal/rules/default.md internal/rules/output.md; do
   fi
 done
 
+# 1b. The embedded OUTPUT.md must pass render.ValidateOutputTemplate (parse +
+#     empty-execute + sample-execute). Runtime pre-send validation in CLI
+#     skips the default for performance — this guard ensures that skip is
+#     safe at release time. ADR-0014 §5.
+if command -v go >/dev/null 2>&1 && [ -f internal/rules/output.md ]; then
+  if go test -count=1 -run '^TestEmbeddedDefaultOutputValidates$' ./internal/render/ >/dev/null 2>&1; then
+    ok "internal/rules/output.md parses + executes against empty and sample findings"
+  else
+    err "internal/rules/output.md fails ValidateOutputTemplate; run: go test -run TestEmbeddedDefaultOutputValidates ./internal/render/ -v"
+  fi
+fi
+
 # 2. CHANGELOG.md should have at least one released version header by the
 #    time we tag a non-zero version. During development [Unreleased] alone
 #    is acceptable; warn rather than fail.

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
 func sampleFindings() []Finding {
@@ -319,6 +321,22 @@ func TestJSONDegradeContentPopulated(t *testing.T) {
 	}
 	if len(findings) != 0 {
 		t.Errorf("findings should be empty on degrade; got %d", len(findings))
+	}
+}
+
+// TestEmbeddedDefaultOutputValidates is the drift guard for
+// internal/rules/output.md. If the embedded default template stops parsing
+// or stops executing against either the empty or sample-findings case,
+// this trips before release-check.sh ever runs. Pre-send validation in
+// runReview/dryrun skips the default for performance — this test ensures
+// that skip is safe.
+func TestEmbeddedDefaultOutputValidates(t *testing.T) {
+	tpl := rules.DefaultOutput().Content
+	if tpl == "" {
+		t.Fatal("rules.DefaultOutput().Content is empty; embed broken")
+	}
+	if err := ValidateOutputTemplate(tpl); err != nil {
+		t.Fatalf("embedded default OUTPUT.md fails ValidateOutputTemplate: %v", err)
 	}
 }
 

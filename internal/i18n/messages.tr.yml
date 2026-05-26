@@ -35,6 +35,9 @@ init.wrote: "%s yazıldı"
 review.no_changes: "Filtreleme sonrası review edilecek değişiklik yok."
 review.cache_disabled: "Önbellek kapalı: %v"
 review.pr_format: "--pull-request hedef...özellik bekler, alınan: %q"
+review.degraded: "uyarı: LLM bozuk JSON üretti; düz metin görünümüne geçildi."
+
+output.template.invalid: "OUTPUT.md template geçersiz (%s):\n  %s\n\nSağlayıcıya istek gönderilmedi. Template'i düzeltin veya\n'commitbrief init --yes' komutuyla varsayılana sıfırlayın."
 
 compress.no_rules: "compress: %s bulunamadı (%s); önce `commitbrief init` çalıştırın"
 compress.compressing: "%s sıkıştırılıyor (provider=%s model=%s seviye=%s) …"

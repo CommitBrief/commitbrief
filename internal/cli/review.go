@@ -84,6 +84,11 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	}
 	if outputLoaded.Source == rules.SourceDefault {
 		infof("%s", app.Catalog.T("rules.output.using_default"))
+	} else if err := render.ValidateOutputTemplate(outputLoaded.Content); err != nil {
+		// Pre-send guard (ADR-0014 §5): bail out before any provider call so
+		// a malformed user template doesn't burn tokens. The embedded
+		// default is presumed-valid via release-check.sh and skipped here.
+		return errors.New(app.Catalog.T("output.template.invalid", outputLoaded.Path, err.Error()))
 	}
 
 	if res, _ := guard.CheckDiffForLocalConfig(parsed, guard.Options{
@@ -169,7 +174,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	if format == cache.FormatJSON {
 		findings, _ = render.ParseFindings(content)
 	} else {
-		fmt.Fprintln(cmd.ErrOrStderr(), "warning: LLM produced malformed JSON; falling back to plain-text view.")
+		fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
 	}
 
 	respModel := model
