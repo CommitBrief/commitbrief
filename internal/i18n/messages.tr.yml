@@ -1,0 +1,25 @@
+setup.welcome: "CommitBrief kurulumuna hoş geldiniz."
+setup.provider.prompt: "Hangi sağlayıcıyı yapılandırmak istersiniz?"
+setup.provider.help: "API anahtarınız olan LLM sağlayıcısını seçin."
+setup.api_key.prompt: "API anahtarınızı girin:"
+setup.api_key.empty: "API anahtarı boş olamaz."
+setup.model.prompt: "Bir model seçin:"
+setup.test.success: "Bağlantı testi başarılı."
+setup.test.failed: "Bağlantı testi başarısız: %s"
+setup.scope.global: "Kullanıcı yapılandırmasına kaydediliyor (~/.commitbrief/config.yml)."
+setup.scope.local: "Depoya kaydediliyor (.commitbrief/config.yml); .gitignore dosyasına eklendi."
+
+cli.error.no_repo: "Bir git deposunun içinde değilsiniz."
+cli.error.no_provider: "Sağlayıcı yapılandırılmamış. Önce 'commitbrief setup' çalıştırın."
+cli.error.no_api_key: "%q sağlayıcısı için API anahtarı ayarlanmamış."
+cli.error.unknown_provider: "Bilinmeyen sağlayıcı: %s"
+cli.error.unsupported_lang: "Desteklenmeyen dil: %s"
+
+guard.prompt: ".commitbrief/ altında değişiklik var. Devam edilsin mi? [e/H]"
+guard.aborted: "Kullanıcı tarafından iptal edildi."
+guard.non_interactive: "İptal edildi (etkileşimsiz mod); zorlamak için --yes kullanın."
+
+cache.hit: "(önbellekten)"
+cache.disabled: "(önbellek kapalı)"
+
+common.cancelled: "İptal edildi."

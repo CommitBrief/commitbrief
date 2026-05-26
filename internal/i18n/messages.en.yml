@@ -1,0 +1,25 @@
+setup.welcome: "Welcome to CommitBrief setup."
+setup.provider.prompt: "Which provider would you like to configure?"
+setup.provider.help: "Pick the LLM provider you have an API key for."
+setup.api_key.prompt: "Enter your API key:"
+setup.api_key.empty: "API key cannot be empty."
+setup.model.prompt: "Pick a model:"
+setup.test.success: "Connection test successful."
+setup.test.failed: "Connection test failed: %s"
+setup.scope.global: "Saving to user config (~/.commitbrief/config.yml)."
+setup.scope.local: "Saving to repository (.commitbrief/config.yml); added to .gitignore."
+
+cli.error.no_repo: "Not inside a git repository."
+cli.error.no_provider: "No provider configured. Run 'commitbrief setup' first."
+cli.error.no_api_key: "API key for provider %q is not set."
+cli.error.unknown_provider: "Unknown provider: %s"
+cli.error.unsupported_lang: "Unsupported language: %s"
+
+guard.prompt: "Diff includes changes under .commitbrief/. Continue? [y/N]"
+guard.aborted: "Aborted by user."
+guard.non_interactive: "Aborted (non-interactive mode); pass --yes to override."
+
+cache.hit: "(cached)"
+cache.disabled: "(cache disabled)"
+
+common.cancelled: "Cancelled."
