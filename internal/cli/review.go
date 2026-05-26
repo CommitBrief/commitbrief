@@ -92,7 +92,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 		return errors.New("aborted by pre-send guard")
 	}
 
-	p := prompt.Build(loaded, outputLoaded, app.Lang, parsed.String())
+	p := prompt.Build(loaded, app.Lang, parsed.String())
 
 	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
 	if err != nil {

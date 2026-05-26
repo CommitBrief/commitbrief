@@ -15,12 +15,13 @@ type Prompt struct {
 	User   string
 }
 
-// Build assembles the system prompt (rules + output format + lang directive
-// + prompt-injection guard) and the user prompt (diff fenced block) into a
-// single value. Pass rules.DefaultOutput() if the caller has not resolved a
-// per-user OUTPUT.md override.
-func Build(rulesLoaded, outputLoaded rules.Loaded, langRes lang.Resolution, diffText string) Prompt {
-	system, userTpl := rules.Build(rulesLoaded, outputLoaded, langRes)
+// Build assembles the system prompt (project rules + severity rubric + JSON
+// response contract + lang directive + prompt-injection guard) and the user
+// prompt (diff fenced block). OUTPUT.md is no longer part of prompt
+// construction — under ADR-0014 it is a client-side renderer template
+// consumed only by the local Go runtime.
+func Build(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText string) Prompt {
+	system, userTpl := rules.Build(rulesLoaded, langRes)
 	return Prompt{
 		System: system,
 		User:   fmt.Sprintf(userTpl, diffText),

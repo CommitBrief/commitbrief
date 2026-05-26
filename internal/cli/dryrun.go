@@ -50,7 +50,7 @@ func newDryRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			p := prompt.Build(loaded, outputLoaded, app.Lang, parsed.String())
+			p := prompt.Build(loaded, app.Lang, parsed.String())
 
 			cacheKey := cache.Compute(cache.ComputeArgs{
 				Diff:         parsed.String(),

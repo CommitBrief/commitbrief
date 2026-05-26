@@ -106,11 +106,15 @@ func TestDefaultHasNoTBDPlaceholder(t *testing.T) {
 
 func TestBuildXMLWrap(t *testing.T) {
 	rulesLoaded := Loaded{Content: "rule one\nrule two"}
-	outputLoaded := Loaded{Content: "output one\noutput two"}
 	res := lang.Resolution{Code: "tr", Name: "Türkçe", Source: lang.SourceRepoConfig}
-	system, userTpl := Build(rulesLoaded, outputLoaded, res)
+	system, userTpl := Build(rulesLoaded, res)
 
-	for _, tag := range []string{"<project_rules>", "</project_rules>", "<output_format>", "</output_format>"} {
+	wantTags := []string{
+		"<project_rules>", "</project_rules>",
+		"<severity_rubric>", "</severity_rubric>",
+		"<response_format>", "</response_format>",
+	}
+	for _, tag := range wantTags {
 		if !strings.Contains(system, tag) {
 			t.Errorf("system prompt missing %q\n%s", tag, system)
 		}
@@ -118,17 +122,22 @@ func TestBuildXMLWrap(t *testing.T) {
 	if !strings.Contains(system, "rule one") || !strings.Contains(system, "rule two") {
 		t.Error("rules content not embedded in system prompt")
 	}
-	if !strings.Contains(system, "output one") || !strings.Contains(system, "output two") {
-		t.Error("output content not embedded in system prompt")
+	if strings.Contains(system, "<output_format>") {
+		t.Errorf("system prompt should not include <output_format> after ADR-0014:\n%s", system)
+	}
+	for _, sev := range []string{"critical", "high", "medium", "low", "info"} {
+		if !strings.Contains(system, sev) {
+			t.Errorf("severity rubric missing level %q\n%s", sev, system)
+		}
+	}
+	if !strings.Contains(system, `"findings"`) {
+		t.Errorf("response_format missing JSON schema sentinel:\n%s", system)
 	}
 	if !strings.Contains(system, "Türkçe") || !strings.Contains(system, "ISO tr") {
 		t.Errorf("lang directive missing or wrong:\n%s", system)
 	}
 	if !strings.Contains(system, "immutable") {
 		t.Error("prompt-injection guard line missing")
-	}
-	if !strings.Contains(system, "<project_rules> and <output_format>") {
-		t.Errorf("guard line should name both blocks:\n%s", system)
 	}
 	if !strings.Contains(userTpl, "%s") {
 		t.Errorf("userTpl is not a format string (missing %%s placeholder for diff)")
@@ -141,10 +150,9 @@ func TestBuildXMLWrap(t *testing.T) {
 func TestBuildPreservesTrailingNewline(t *testing.T) {
 	withNL := Loaded{Content: "rules\n"}
 	withoutNL := Loaded{Content: "rules"}
-	out := Loaded{Content: "out"}
 	res := lang.Resolution{Code: "en", Name: "English"}
-	a, _ := Build(withNL, out, res)
-	b, _ := Build(withoutNL, out, res)
+	a, _ := Build(withNL, res)
+	b, _ := Build(withoutNL, res)
 	if !strings.Contains(a, "rules\n</project_rules>") {
 		t.Error("trailing newline content broken")
 	}
@@ -153,7 +161,7 @@ func TestBuildPreservesTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestDefaultOutput(t *testing.T) {
+func TestDefaultOutputIsTemplate(t *testing.T) {
 	got := DefaultOutput()
 	if got.Source != SourceDefault {
 		t.Errorf("Source = %v, want SourceDefault", got.Source)
@@ -161,8 +169,10 @@ func TestDefaultOutput(t *testing.T) {
 	if got.Content == "" {
 		t.Error("DefaultOutput content empty; embed broken")
 	}
-	if !strings.Contains(got.Content, "Severity") {
-		t.Error("DefaultOutput missing Severity directive")
+	for _, marker := range []string{".Findings", "groupBySeverity", "{{"} {
+		if !strings.Contains(got.Content, marker) {
+			t.Errorf("DefaultOutput missing template marker %q — output.md may not be a Go text/template", marker)
+		}
 	}
 	if got.Hash == "" {
 		t.Error("DefaultOutput Hash empty")
