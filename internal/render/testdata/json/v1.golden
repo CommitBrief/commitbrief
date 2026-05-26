@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "content": "# Review\n\nLooks good.\n",
+  "findings": [],
+  "summary": {},
+  "meta": {
+    "provider": "anthropic",
+    "model": "claude-opus-4-7",
+    "lang": "en",
+    "usage": {
+      "input_tokens": 4231,
+      "output_tokens": 1503,
+      "cached_input_tokens": 800
+    },
+    "cost_usd": 0.0632,
+    "latency_ms": 3200,
+    "cached": false,
+    "timestamp": "2026-05-26T12:00:00Z"
+  }
+}

@@ -3,12 +3,20 @@ package render
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/provider"
 )
+
+// updateGolden re-writes testdata golden files instead of asserting against
+// them. Run with `go test ./internal/render -update` after an intentional
+// schema change.
+var updateGolden = flag.Bool("update", false, "regenerate golden test files")
 
 func samplePayload() Payload {
 	return Payload{
@@ -156,6 +164,39 @@ func TestJSONLatencyMillis(t *testing.T) {
 	meta := doc["meta"].(map[string]any)
 	if meta["latency_ms"] != float64(3200) {
 		t.Errorf("latency_ms = %v, want 3200", meta["latency_ms"])
+	}
+}
+
+// TestJSONv1Golden is the drift guard for the v1 JSON schema. Any change to
+// JSON output bytes (field rename, type change, ordering, formatting) trips
+// this test. If the change is intentional and v1-compatible (additive only —
+// see docs/json-schema.md), bump nothing but re-run with -update. If the
+// change is breaking, bump SchemaVersion to 2 and document in the policy.
+func TestJSONv1Golden(t *testing.T) {
+	var w bytes.Buffer
+	if err := JSON(&w, samplePayload()); err != nil {
+		t.Fatal(err)
+	}
+	got := w.Bytes()
+
+	goldenPath := filepath.Join("testdata", "json", "v1.golden")
+	if *updateGolden {
+		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(goldenPath, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("updated %s", goldenPath)
+		return
+	}
+
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden: %v (run with -update to create)", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("JSON output differs from %s.\nIf intentional, re-run with -update and review the diff carefully — any non-additive change requires bumping SchemaVersion.\n\nGot:\n%s\n\nWant:\n%s", goldenPath, got, want)
 	}
 }
 

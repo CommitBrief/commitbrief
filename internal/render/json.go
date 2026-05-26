@@ -7,11 +7,20 @@ import (
 	"time"
 )
 
-// SchemaVersion is the integer used in the "schema" field of every JSON
-// document we emit. Bumping this is a breaking change for consumers and
-// requires a CHANGELOG entry. The structure is intentionally minimal in
-// v1: Phase 10 (v0.5.0) stabilizes the `findings` array shape; until
-// then Findings is always empty and Content holds the raw markdown.
+// SchemaVersion is the integer in the "schema" field of every JSON document
+// we emit. Consumers should refuse to parse if SchemaVersion is higher than
+// what they expect.
+//
+// Versioning policy (see docs/json-schema.md):
+//   - v1 (current): top-level shape locked at {schema, content, findings,
+//     summary, meta}. `findings` and `summary` are reserved arrays/objects;
+//     v1 always emits them empty, and v1.x consumers MUST tolerate non-empty
+//     additions of well-known shapes within them.
+//   - Additive changes (new optional fields in `meta`, new keys in
+//     `summary`, new elements in `findings`) are NOT a version bump.
+//     Consumers MUST ignore unknown fields.
+//   - Renaming, removing, or changing the type of any documented field IS
+//     a breaking change and requires bumping SchemaVersion to 2.
 const SchemaVersion = 1
 
 type jsonDocument struct {
