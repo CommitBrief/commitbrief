@@ -50,3 +50,15 @@ compress.wrote_compressed: "Sıkıştırılmış %s yazıldı"
 
 setup.saved_local: "Yapılandırma ./.commitbrief/config.yml dosyasına kaydedildi"
 setup.saved_global: "Yapılandırma ~/.commitbrief/config.yml dosyasına kaydedildi"
+
+providers.list.heading: "Yapılandırılmış sağlayıcılar (aktif '*' ile işaretli):"
+providers.list.footer: "Değiştirmek için 'commitbrief providers use <ad>'; yeni anahtar için 'commitbrief setup'."
+providers.key.not_set: "(ayarlanmadı)"
+providers.use.success: "Aktif sağlayıcı %q olarak ayarlandı (%s dosyasına yazıldı)"
+providers.use.unknown: "bilinmeyen sağlayıcı %q; bilinenler: %v"
+providers.use.no_key_warning: "ℹ %s için API anahtarı yapılandırılmamış; review göndermeden önce 'commitbrief setup' çalıştırın."
+providers.test.success: "%s: ok (%s)"
+providers.test.failed: "%s testi başarısız: %s"
+providers.test.unknown: "bilinmeyen sağlayıcı %q; bilinenler: %v"
+
+config.set.success: "%s ayarlandı (%s dosyasına yazıldı)"

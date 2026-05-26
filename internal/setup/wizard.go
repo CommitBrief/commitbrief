@@ -76,10 +76,20 @@ type RunOptions struct {
 	Specs []ProviderSpec
 }
 
-// Apply produces a Config from collected choices. Defaults from
-// config.Default fill in everything not covered by the wizard.
-func Apply(choices Choices) *config.Config {
-	cfg := config.Default()
+// Apply produces a Config from collected choices, layered on top of the
+// supplied base. Pass nil to start from config.Default (first-time setup).
+//
+// Critical: when base is the result of loading an existing config file,
+// API keys and models for *other* providers are preserved intact — only
+// the chosen provider's fields are touched. This is what makes
+// `commitbrief setup` non-destructive across multiple providers.
+func Apply(base *config.Config, choices Choices) *config.Config {
+	var cfg *config.Config
+	if base != nil {
+		cfg = base
+	} else {
+		cfg = config.Default()
+	}
 	if choices.Provider != "" {
 		cfg.Provider = choices.Provider
 	}
@@ -108,11 +118,29 @@ func Apply(choices Choices) *config.Config {
 // Run drives the interactive wizard via huh. The terminal must support a
 // TTY; callers should branch on non-TTY environments before invoking.
 // Returns the final config (already persisted to disk per opts).
+//
+// Run is non-destructive across providers: it loads the existing config
+// file at the target path (global or repo, per opts.Local) before the
+// wizard runs, then layers the user's choices on top. API keys for
+// providers the user did *not* pick this round are preserved intact.
 func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	specs := opts.Specs
 	if specs == nil {
 		specs = DefaultSpecs
 	}
+
+	// Resolve the target write path up front so we can load any existing
+	// config at that path before the wizard prompts. First-time runs see
+	// a nil base and fall through to config.Default in Apply.
+	targetPath, err := targetConfigPath(opts)
+	if err != nil {
+		return nil, err
+	}
+	base, err := config.LoadFile(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("setup: read existing config %s: %w", targetPath, err)
+	}
+
 	var choices Choices
 	if err := selectProvider(ctx, specs, &choices); err != nil {
 		return nil, err
@@ -137,7 +165,7 @@ func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 		return nil, err
 	}
 
-	cfg := Apply(choices)
+	cfg := Apply(base, choices)
 	pc := cfg.Providers[choices.Provider]
 	if err := TestConnection(ctx, choices.Provider, pc); err != nil {
 		return cfg, fmt.Errorf("setup: connection test failed: %w", err)
@@ -148,19 +176,27 @@ func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 			return cfg, err
 		}
 	} else {
-		path := opts.GlobalPath
-		if path == "" {
-			p, err := GlobalConfigPath()
-			if err != nil {
-				return cfg, err
-			}
-			path = p
-		}
-		if err := WriteConfig(path, cfg); err != nil {
+		if err := WriteConfig(targetPath, cfg); err != nil {
 			return cfg, err
 		}
 	}
 	return cfg, nil
+}
+
+// targetConfigPath resolves where Run will write — repo-local or
+// user-level — based on opts.Local. Extracted so the existing-config
+// load and the final write hit the same path.
+func targetConfigPath(opts RunOptions) (string, error) {
+	if opts.Local {
+		if opts.RepoRoot == "" {
+			return "", fmt.Errorf("setup: --local requires a repo root")
+		}
+		return RepoConfigPath(opts.RepoRoot), nil
+	}
+	if opts.GlobalPath != "" {
+		return opts.GlobalPath, nil
+	}
+	return GlobalConfigPath()
 }
 
 func selectProvider(ctx context.Context, specs []ProviderSpec, choices *Choices) error {

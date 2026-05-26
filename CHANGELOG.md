@@ -10,6 +10,41 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`commitbrief providers` subcommand** for multi-provider workflows
+  without hand-editing YAML.
+  - `providers list` — show every configured + registered provider, mark
+    the active one, display the model and a masked API-key fingerprint
+    (or the base URL for Ollama). Unknown / unconfigured providers stay
+    listed so users can see what's available to set up.
+  - `providers use <name>` — flip the active default provider. Touches
+    only `provider:` in the config file; every API key, model, and base
+    URL is preserved across the switch. `--local` writes to the repo
+    config instead of the user-level one.
+  - `providers test <name>` — call `TestConnection` against the named
+    provider and report success + latency.
+- **`commitbrief config` subcommand** for one-line edits and inspection.
+  - `config show` — dump the merged config as YAML with API keys masked.
+  - `config get <key>` — read a single field by dotted path (e.g.
+    `providers.anthropic.model`, `cache.ttl_days`, `output.lang`).
+  - `config set <key> <value>` — write a single field with type
+    coercion and validation. Booleans accept `true/false/yes/no/1/0/on/off`
+    (case-insensitive); integers are bounds-checked (no negatives for
+    cache settings); `output.color` is enum-validated against
+    `auto/always/never`; `provider` is validated against the registered
+    factory list. `version` is rejected (managed by migrations).
+- **i18n keys** for the new surface: `providers.list.*`,
+  `providers.key.not_set`, `providers.use.*`, `providers.test.*`,
+  `config.set.success` (EN+TR parity verified).
+
+### Fixed
+- **`commitbrief setup` no longer wipes previously-configured API keys.**
+  Running setup a second time to add another provider (Anthropic → then
+  OpenAI, say) used to overwrite the entire config file from defaults,
+  silently destroying the first key. The wizard now loads the existing
+  config at the target path (`--local` honoured) and layers the new
+  provider's fields on top, leaving every other provider intact.
+
 ## [0.6.0] - 2026-05-26
 
 ### ⚠️ Breaking — OUTPUT.md semantics (ADR-0014)

@@ -50,3 +50,15 @@ compress.wrote_compressed: "Wrote compressed %s"
 
 setup.saved_local: "Configuration saved to ./.commitbrief/config.yml"
 setup.saved_global: "Configuration saved to ~/.commitbrief/config.yml"
+
+providers.list.heading: "Configured providers (active marked with '*'):"
+providers.list.footer: "Switch with 'commitbrief providers use <name>'; add a new key with 'commitbrief setup'."
+providers.key.not_set: "(not set)"
+providers.use.success: "Active provider set to %q (written to %s)"
+providers.use.unknown: "unknown provider %q; known: %v"
+providers.use.no_key_warning: "ℹ %s has no API key configured; run 'commitbrief setup' before sending a review."
+providers.test.success: "%s: ok (%s)"
+providers.test.failed: "%s test failed: %s"
+providers.test.unknown: "unknown provider %q; known: %v"
+
+config.set.success: "Set %s (written to %s)"

@@ -31,7 +31,7 @@ func TestSplitThreeDot(t *testing.T) {
 
 func TestRootCommandHasSubcommands(t *testing.T) {
 	root := newRootCmd()
-	want := []string{"compress", "dry-run", "init", "list", "setup"}
+	want := []string{"compress", "config", "dry-run", "init", "list", "providers", "setup"}
 	got := []string{}
 	for _, c := range root.Commands() {
 		// cobra adds `help` and `completion` automatically; filter to ours.

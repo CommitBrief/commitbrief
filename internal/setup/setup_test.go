@@ -32,7 +32,7 @@ func ensureMockRegistered(t *testing.T) {
 }
 
 func TestApplyMergesIntoDefaults(t *testing.T) {
-	cfg := Apply(Choices{
+	cfg := Apply(nil, Choices{
 		Provider: "anthropic",
 		APIKey:   "sk-test",
 		Model:    "claude-opus-4-7",
@@ -58,7 +58,7 @@ func TestApplyMergesIntoDefaults(t *testing.T) {
 }
 
 func TestApplyOllama(t *testing.T) {
-	cfg := Apply(Choices{
+	cfg := Apply(nil, Choices{
 		Provider: "ollama",
 		BaseURL:  "http://gpu.lan:11434",
 		Model:    "qwen2.5-coder:14b",
@@ -72,6 +72,61 @@ func TestApplyOllama(t *testing.T) {
 	}
 	if got.APIKey != "" {
 		t.Errorf("Ollama should not have API key, got %q", got.APIKey)
+	}
+}
+
+// TestApplyPreservesExistingKeys is the regression guard for the v0.6 bug
+// that wiped already-configured API keys whenever `commitbrief setup` was
+// re-run for a different provider. Loading the existing config and
+// passing it as base must keep other providers' fields intact.
+func TestApplyPreservesExistingKeys(t *testing.T) {
+	base := config.Default()
+	base.Providers["anthropic"] = config.ProviderConfig{
+		APIKey:  "sk-ant-existing",
+		Model:   "claude-opus-4-7",
+		BaseURL: "https://api.anthropic.com",
+	}
+	base.Providers["gemini"] = config.ProviderConfig{
+		APIKey: "AIza-existing",
+		Model:  "gemini-2.5-pro",
+	}
+	base.Provider = "anthropic"
+
+	cfg := Apply(base, Choices{
+		Provider: "openai",
+		APIKey:   "sk-openai-new",
+		Model:    "gpt-4o",
+	})
+
+	// New provider written through.
+	if got := cfg.Providers["openai"].APIKey; got != "sk-openai-new" {
+		t.Errorf("openai APIKey = %q, want sk-openai-new", got)
+	}
+	if cfg.Provider != "openai" {
+		t.Errorf("Active provider should follow the latest setup; got %q", cfg.Provider)
+	}
+
+	// Pre-existing providers must survive intact — the whole point of the fix.
+	if got := cfg.Providers["anthropic"].APIKey; got != "sk-ant-existing" {
+		t.Errorf("anthropic APIKey wiped (regression): got %q", got)
+	}
+	if got := cfg.Providers["anthropic"].Model; got != "claude-opus-4-7" {
+		t.Errorf("anthropic Model lost: got %q", got)
+	}
+	if got := cfg.Providers["gemini"].APIKey; got != "AIza-existing" {
+		t.Errorf("gemini APIKey wiped (regression): got %q", got)
+	}
+}
+
+func TestApplyFirstRunStartsFromDefault(t *testing.T) {
+	// Passing nil base mimics first-time setup: result must be a clean
+	// Default config with the choices layered on, no leftover state.
+	cfg := Apply(nil, Choices{Provider: "openai", APIKey: "sk-x", Model: "gpt-4o"})
+	if len(cfg.Providers) < 4 {
+		t.Errorf("first-run config should include all known providers from Default; got %d", len(cfg.Providers))
+	}
+	if cfg.Providers["anthropic"].APIKey != "" {
+		t.Error("first-run shouldn't ship an anthropic key out of nowhere")
 	}
 }
 
