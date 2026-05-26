@@ -44,6 +44,24 @@ func Load(globalPath, repoPath string) (*Config, error) {
 	return out, nil
 }
 
+func LoadFile(path string) (*Config, error) {
+	if path == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("config: read %s: %w", path, err)
+	}
+	var c Config
+	if err := yaml.Unmarshal(data, &c); err != nil {
+		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+	}
+	return &c, nil
+}
+
 func readLayer(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

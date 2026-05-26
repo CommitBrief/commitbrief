@@ -224,6 +224,42 @@ providers:
 	}
 }
 
+func TestLoadFileMissingReturnsNil(t *testing.T) {
+	c, err := LoadFile("/does/not/exist.yml")
+	if err != nil {
+		t.Fatalf("LoadFile missing: %v", err)
+	}
+	if c != nil {
+		t.Errorf("LoadFile missing should return nil, got %+v", c)
+	}
+}
+
+func TestLoadFileEmptyPathReturnsNil(t *testing.T) {
+	c, err := LoadFile("")
+	if err != nil || c != nil {
+		t.Errorf("LoadFile(\"\") = (%+v, %v), want (nil, nil)", c, err)
+	}
+}
+
+func TestLoadFileRawNoDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "partial.yml")
+	writeFile(t, path, `
+output:
+  lang: tr
+`)
+	c, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Output.Lang != "tr" {
+		t.Errorf("Lang = %q, want tr", c.Output.Lang)
+	}
+	if c.Provider != "" {
+		t.Errorf("Provider = %q, want empty (no defaults applied in LoadFile)", c.Provider)
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
