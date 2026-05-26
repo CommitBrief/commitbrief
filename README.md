@@ -33,8 +33,6 @@ read on your diff before another human (or your future self) sees it.
 
 ## Install
 
-> v0.4.0 is the first public release. Earlier tags were private.
-
 ### Homebrew (macOS / Linux)
 
 ```sh
@@ -78,6 +76,49 @@ commitbrief --staged
 `commitbrief list` prints the full command reference; `commitbrief
 dry-run --staged` walks the pipeline without spending tokens.
 
+## What you get
+
+Default TTY output is a framed card: a header, a status line, the review
+body grouped under the five default perspectives (Correctness, Security,
+Maintainability, Performance, Code Quality), and a one-line summary
+footer. Each finding emits Severity / File:Line / Issue / Suggestion on
+their own labelled lines:
+
+```text
+commitbrief v0.5.0 · provider: anthropic/claude-sonnet-4-6 · cache: miss
+analyzing 3 files · 42 added · 11 removed · COMMITBRIEF.md loaded
+
+  ## Security
+
+    **Severity:** high
+    **File:Line:** internal/auth/session.go:142
+    **Issue:** Session tokens are compared with == instead of hmac.Equal,
+    leaving a timing-attack surface on the login path.
+    **Suggestion:** Use subtle.ConstantTimeCompare or hmac.Equal on the
+    raw byte slices; reject mismatches with the same error path as
+    "unknown user" to avoid leaking which side failed.
+
+  ## Correctness
+
+    **Severity:** high
+    **File:Line:** internal/db/migrate.go:73
+    **Issue:** The new NOT NULL column has no default, so the migration
+    will fail on any table that already has rows.
+    **Suggestion:** Either add a DEFAULT or backfill in a prior migration
+    before adding the constraint.
+
+  ## Verdict
+    One blocker (timing-safe token compare) and one migration risk. Hold
+    merge until both are addressed; nothing else is shipping-critical.
+
+✓ Done in 4.2s · 8421 tokens · Cost: $0.0319
+```
+
+Re-run the same command on the same diff and the footer switches to
+`Saved: $0.0319` — the second call is a local cache hit, no provider
+round-trip. Add `--json` for a machine-readable schema, or `--markdown`
+for plain text suitable for `>> review.md`.
+
 ## Command surface
 
 ```sh
@@ -116,11 +157,33 @@ Two-tier YAML config with field-level merge:
 
 - **User:** `~/.commitbrief/config.yml` — defaults that apply everywhere
 - **Repo:** `./.commitbrief/config.yml` — overrides for this repo
-  (gitignored)
+  (gitignored by default; run `commitbrief setup --local` to write it)
 
 Plus environment variables for credentials (`ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `GEMINI_API_KEY`, etc.) and CLI flags for one-off
-overrides (`--provider gemini --model gemini-2.5-flash`).
+`OPENAI_API_KEY`, `GEMINI_API_KEY`) and CLI flags for one-off overrides
+(`--provider gemini --model gemini-2.5-flash`).
+
+```yaml
+# ~/.commitbrief/config.yml
+version: 1
+provider: anthropic                # default provider
+providers:
+  anthropic:
+    model: claude-opus-4-7
+  openai:
+    model: gpt-4o
+  ollama:
+    model: qwen2.5-coder:14b
+    base_url: http://localhost:11434
+output:
+  lang: en                         # CLI strings + review language
+  stream: true
+  color: auto                      # auto | always | never
+cache:
+  enabled: true
+  ttl_days: 7
+  max_size_mb: 100
+```
 
 Review content lives in two files:
 
@@ -152,14 +215,61 @@ Requires **Go 1.25+**.
 ```sh
 git clone https://github.com/CommitBrief/commitbrief
 cd commitbrief
-make build      # → ./commitbrief
-make test
-make lint
-make smoke      # end-to-end pipeline check; no API key needed
+make build         # → ./commitbrief (ldflags inject version/commit/date)
+make test          # unit + integration tests (live providers skipped)
+make lint          # golangci-lint v2
+make smoke         # end-to-end pipeline check; no API key needed
+make bench         # diff pipeline + cache hit benchmarks
+make manpage       # regenerate man/*.1 from cobra
+make test-live     # provider tests against real APIs (keys required)
+make license-check # GPL-3.0 compatibility audit
 ```
 
-`make test-live` runs provider tests against real APIs (requires keys;
-skipped in CI by default).
+`make help` lists everything.
+
+## FAQ
+
+**Does CommitBrief replace human review?**
+No. It's a first pass — a fast sanity check before a teammate (or your
+future self) looks. The default rules deliberately target low-risk,
+high-signal stuff: obvious bugs, missing nil checks, accidental
+secrets. Treat output as a checklist to skim, not a verdict.
+
+**Where does my code go?**
+Diffs leave your machine only when sent to the provider you picked.
+Anthropic, OpenAI, and Gemini get the diff + your `COMMITBRIEF.md` over
+HTTPS to their official endpoints. Ollama is local-only; nothing leaves
+the host. Review output is rendered locally and cached under
+`./.commitbrief/cache/` — never uploaded.
+
+**Will it break my workflow if the LLM provider is down?**
+The CLI fails loudly and exits non-zero. There's no degraded mode that
+silently skips review. Use `commitbrief dry-run` to test the pipeline
+end-to-end without an API call.
+
+**How do I exclude generated code or vendored files?**
+Built-in defaults already skip `vendor/**`, `node_modules/**`, lock
+files, binaries, and most generated artifacts. Drop a
+`.commitbriefignore` at the repo root for project-specific rules
+(gitignore syntax, supports `!negation` to revert a built-in).
+`commitbrief dry-run --staged` reports how many files each layer
+removed.
+
+**When does the cache invalidate?**
+The cache key is a SHA-256 of `diff + system prompt + provider + model
++ lang + schema version`. Change any of those and you get a fresh
+review. Default TTL is 7 days; configurable via `cache.ttl_days`.
+
+**Can I run it in CI?**
+Not yet, by design. CommitBrief targets the developer's terminal, not
+pipelines. CI integration (`--fail-on=blocker`, severity exit codes,
+GitHub Action wrapper) is on the v1.x roadmap.
+
+**Why GPL-3.0?**
+The CLI is end-user software, and copyleft keeps forks and
+redistributions open. New dependencies must stay GPL-compatible
+(MIT/Apache-2.0/BSD/ISC/MPL-2.0/LGPL-3.0+ are fine);
+`make license-check` enforces it.
 
 ## License
 
