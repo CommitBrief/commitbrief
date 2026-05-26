@@ -11,6 +11,19 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **Pre-send secret scanner** — before any LLM call, the diff is scanned
+  for credential-shaped patterns and the user is prompted (or, in
+  non-TTY contexts, the call aborts with a non-zero exit code). Eight
+  patterns ship by default: AWS Access Key, GitHub Token, GitLab Token,
+  OpenAI API Key, Anthropic API Key, JWT, Stripe Live Key, PEM Private
+  Key. Only `+` prefixed (newly added) lines are scanned — context and
+  removed lines never trigger a prompt. The warning surface lists line
+  number + pattern name only; the matched substring is **never** echoed
+  to stderr or any cached payload, so the scanner can't become a
+  secondary leak vector via logs. New `--allow-secrets` flag bypasses
+  with an info notice; `--yes` (the existing global) also bypasses.
+  Disable entirely with `guard.secret_scan: false` in config. 6 new
+  i18n keys (EN + TR parity).
 - **`commitbrief doctor` subcommand** — single-command pipeline health
   check that runs ~7 checks against the resolved environment: git binary
   on PATH, config schema validity, COMMITBRIEF.md source, OUTPUT.md

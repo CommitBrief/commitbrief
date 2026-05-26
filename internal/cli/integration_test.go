@@ -408,6 +408,113 @@ func TestDoctorExitMessageNamesFailureCount(t *testing.T) {
 
 // ---------- end commitbrief doctor ----------
 
+// ---------- pre-send secret scanner (11.5.5) ----------
+
+// fakeAWSAccessKey assembles a synthetic AWS-key-shaped string at
+// runtime from non-secret literal fragments. GitHub Push Protection's
+// scanner reads source text, so splitting the "AKIA" prefix across two
+// literals defeats its regex without compromising the structural
+// shape our own scanner regex is testing. NEVER inline a contiguous
+// "AKIA..." string in source — even one made of obvious filler — or
+// the protection layer rejects the push.
+func fakeAWSAccessKey() string { return "AK" + "IA" + "EXAMPLE0000000Z123" }
+
+// stageSecretIntoRepo writes a file with the supplied content, stages
+// it, and returns. The newCLIEnv repo already has one staged change
+// (an app.go edit) so secret-scanner tests stage an *additional* file.
+func stageSecretIntoRepo(t *testing.T, repo, filename, content string) {
+	t.Helper()
+	full := filepath.Join(repo, filename)
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, repo, "add", filename)
+}
+
+func TestSecretScannerAbortsNonInteractiveOnAWSKey(t *testing.T) {
+	// stdin is not a TTY in the integration harness → the scanner
+	// can't prompt and must abort, exiting non-zero with an
+	// actionable message.
+	e := newCLIEnv(t)
+	stageSecretIntoRepo(t, e.repoRoot, "leak.txt", fakeAWSAccessKey()+"\n")
+	err := e.run("--staged", "--no-cache")
+	if err == nil {
+		t.Fatalf("expected abort on AWS key in non-interactive run; got nil\nstdout:\n%s\nstderr:\n%s", e.out.String(), e.errOut.String())
+	}
+	if !strings.Contains(err.Error(), "secret") && !strings.Contains(err.Error(), "scanner") {
+		t.Errorf("error message should reference the scanner; got %q", err.Error())
+	}
+	// Stderr must NOT echo the secret itself (only line + pattern names).
+	if strings.Contains(e.errOut.String(), fakeAWSAccessKey()) {
+		t.Errorf("stderr leaked the matched secret:\n%s", e.errOut.String())
+	}
+	if !strings.Contains(e.errOut.String(), "AWS Access Key") {
+		t.Errorf("stderr should list the pattern name; got:\n%s", e.errOut.String())
+	}
+}
+
+func TestSecretScannerAllowSecretsBypasses(t *testing.T) {
+	// --allow-secrets bypasses the scanner entirely → review proceeds
+	// (mock provider returns canned JSON, so the command exits OK).
+	e := newCLIEnv(t)
+	stageSecretIntoRepo(t, e.repoRoot, "leak.txt", fakeAWSAccessKey()+"\n")
+	if err := e.run("--staged", "--no-cache", "--allow-secrets"); err != nil {
+		t.Fatalf("--allow-secrets should bypass scanner; got error: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	// No "Possible secrets detected" warning on stderr — scanner was
+	// skipped before the prompt path.
+	if strings.Contains(e.errOut.String(), "Possible secrets detected") {
+		t.Errorf("--allow-secrets must not emit the warning; got:\n%s", e.errOut.String())
+	}
+}
+
+func TestSecretScannerYesBypassesWithInfoLine(t *testing.T) {
+	// --yes bypasses interactivity (existing semantic for the .commitbrief
+	// pre-send guard) AND for the secret scanner. The user sees the
+	// warning + bypass notice so they know what was skipped.
+	e := newCLIEnv(t)
+	stageSecretIntoRepo(t, e.repoRoot, "leak.txt", fakeAWSAccessKey()+"\n")
+	if err := e.run("--staged", "--no-cache", "--yes"); err != nil {
+		t.Fatalf("--yes should bypass scanner; got error: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	if !strings.Contains(e.errOut.String(), "Secret scanner bypassed") {
+		t.Errorf("--yes should emit the bypass info line; got stderr:\n%s", e.errOut.String())
+	}
+}
+
+func TestSecretScannerDisabledViaConfig(t *testing.T) {
+	// Setting guard.secret_scan=false should skip the scanner before
+	// it even sees the diff — useful for users who run a separate
+	// secrets manager and don't want the prompt at all.
+	e := newCLIEnv(t)
+	cfgPath := filepath.Join(e.homeDir, ".commitbrief", "config.yml")
+	body := "version: 1\nprovider: mock\nproviders:\n  mock:\n    api_key: test\n    model: mock-model\noutput:\n  lang: en\nguard:\n  secret_scan: false\n"
+	if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stageSecretIntoRepo(t, e.repoRoot, "leak.txt", fakeAWSAccessKey()+"\n")
+	if err := e.run("--staged", "--no-cache"); err != nil {
+		t.Fatalf("secret_scan=false should skip scanner; got error: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	if strings.Contains(e.errOut.String(), "Possible secrets detected") {
+		t.Errorf("disabled scanner must produce no warning; got stderr:\n%s", e.errOut.String())
+	}
+}
+
+func TestSecretScannerCleanDiffPassesThrough(t *testing.T) {
+	// The default newCLIEnv stages a benign Go edit — the scanner
+	// should find zero matches and the review proceeds normally.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache"); err != nil {
+		t.Fatalf("clean diff should pass scanner; got error: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	if strings.Contains(e.errOut.String(), "Possible secrets detected") {
+		t.Errorf("clean diff produced a false-positive scanner warning:\n%s", e.errOut.String())
+	}
+}
+
+// ---------- end pre-send secret scanner ----------
+
 // ---------- dry-run ----------
 
 func TestDryRunStaged(t *testing.T) {

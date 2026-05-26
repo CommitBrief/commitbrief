@@ -13,19 +13,20 @@ import (
 )
 
 type globalFlags struct {
-	json     bool
-	markdown bool
-	output   string
-	noCache  bool
-	yes      bool
-	verbose  bool
-	quiet    bool
-	compact  bool
-	lang     string
-	provider string
-	model    string
-	color    string
-	genMan   string // hidden: --gen-man <dir> writes man pages and exits
+	json         bool
+	markdown     bool
+	output       string
+	noCache      bool
+	yes          bool
+	verbose      bool
+	quiet        bool
+	compact      bool
+	allowSecrets bool
+	lang         string
+	provider     string
+	model        string
+	color        string
+	genMan       string // hidden: --gen-man <dir> writes man pages and exits
 }
 
 var global globalFlags
@@ -72,6 +73,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVarP(&global.verbose, "verbose", "v", false, "show token/cost/latency footer")
 	flags.BoolVarP(&global.quiet, "quiet", "q", false, "suppress info messages on stderr")
 	flags.BoolVar(&global.compact, "compact", false, "one-line per finding (dense review output)")
+	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
 	flags.StringVar(&global.lang, "lang", "", "override output language (e.g. tr, en)")
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")

@@ -20,5 +20,8 @@ func Default() *Config {
 			TTLDays:   7,
 			MaxSizeMB: 100,
 		},
+		Guard: GuardConfig{
+			SecretScan: true,
+		},
 	}
 }

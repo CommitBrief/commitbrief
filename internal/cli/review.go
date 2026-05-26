@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -96,6 +97,19 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 		NonInteractive: !ui.IsStdinTTY(os.Stdin),
 	}); res == guard.Abort {
 		return errors.New("aborted by pre-send guard")
+	}
+
+	// Pre-send secret scan (ADR-0007 follow-up, v0.8.0). Looks for
+	// credential-shaped patterns in the *added* diff lines before any
+	// LLM call. Off by setting guard.secret_scan=false in config; user-
+	// bypassable per-invocation via --allow-secrets or --yes.
+	if app.Config.Guard.SecretScan && !global.allowSecrets {
+		matches := guard.ScanForSecrets(parsed.String())
+		if len(matches) > 0 {
+			if abort := handleSecretMatches(cmd, app, matches); abort {
+				return errors.New(app.Catalog.T("guard.secrets.aborted_user"))
+			}
+		}
 	}
 
 	p := prompt.Build(loaded, app.Lang, parsed.String())
@@ -343,4 +357,38 @@ func openOutput(cmd *cobra.Command) (io.Writer, func(), error) {
 		return nil, nil, fmt.Errorf("open --output: %w", err)
 	}
 	return f, func() { _ = f.Close() }, nil
+}
+
+// handleSecretMatches formats the pre-send secret-scan warnings and
+// drives the y/N prompt (or non-interactive abort). Returns true when
+// the caller should abort the review. The matched substring is *never*
+// printed — only line numbers and pattern names — to keep the secret
+// out of stderr and any captured CI log.
+func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.SecretMatch) bool {
+	w := cmd.ErrOrStderr()
+	_, _ = fmt.Fprintln(w, app.Catalog.T("guard.secrets.detected", len(matches)))
+	for _, m := range matches {
+		_, _ = fmt.Fprintln(w, app.Catalog.T("guard.secrets.line", m.Line, strings.Join(m.Patterns, ", ")))
+	}
+	_, _ = fmt.Fprintln(w)
+
+	if global.yes {
+		_, _ = fmt.Fprintln(w, app.Catalog.T("guard.secrets.bypassed_yes"))
+		return false
+	}
+	if !ui.IsStdinTTY(os.Stdin) {
+		_, _ = fmt.Fprintln(w, app.Catalog.T("guard.secrets.aborted_non_interactive"))
+		return true
+	}
+
+	_, _ = fmt.Fprint(w, app.Catalog.T("guard.secrets.prompt"))
+	reader := bufio.NewScanner(os.Stdin)
+	if !reader.Scan() {
+		return true
+	}
+	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
+	if answer == "y" || answer == "yes" {
+		return false
+	}
+	return true
 }

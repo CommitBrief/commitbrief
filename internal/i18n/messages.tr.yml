@@ -19,6 +19,12 @@ cli.warn.merge_commit: "Uyarı: %s bir merge commit. Yalnızca ilk parent'a gör
 guard.prompt: ".commitbrief/ altında değişiklik var. Devam edilsin mi? [e/H]"
 guard.aborted: "Kullanıcı tarafından iptal edildi."
 guard.non_interactive: "İptal edildi (etkileşimsiz mod); zorlamak için --yes kullanın."
+guard.secrets.detected: "⚠  Diff'te olası gizli anahtar tespit edildi (%d satır):"
+guard.secrets.line: "   satır %d: %s"
+guard.secrets.prompt: "   Yine de LLM'e gönderilsin mi? [e/H]: "
+guard.secrets.aborted_user: "iptal edildi: pre-send secret scanner"
+guard.secrets.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --allow-secrets kullanın."
+guard.secrets.bypassed_yes: "ℹ Secret tarayıcı --yes ile atlandı."
 
 cache.hit: "(önbellekten)"
 cache.disabled: "(önbellek kapalı)"

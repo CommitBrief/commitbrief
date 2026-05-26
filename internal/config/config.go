@@ -8,6 +8,16 @@ type Config struct {
 	Providers map[string]ProviderConfig `yaml:"providers"`
 	Output    OutputConfig              `yaml:"output"`
 	Cache     CacheConfig               `yaml:"cache"`
+	Guard     GuardConfig               `yaml:"guard"`
+}
+
+// GuardConfig toggles pre-send protections that don't quite fit
+// elsewhere. SecretScan controls the credential-pattern scan added in
+// v0.8.0 (ADR-0007 follow-up); leaving it true is the safe default,
+// false disables it entirely for users who pipeline outputs through a
+// secrets manager and don't want the prompt.
+type GuardConfig struct {
+	SecretScan bool `yaml:"secret_scan"`
 }
 
 type ProviderConfig struct {
