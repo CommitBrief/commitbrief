@@ -10,29 +10,6 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
-### Changed
-- **Rich finding panels** — visual polish of the Cards Stage B layout
-  introduced in v0.6.0:
-  - **Rounded borders** (`╭ ╮ ╰ ╯`) replace the previous square corners
-    for a softer, more card-like silhouette.
-  - **Diff-colored snippets** — when a finding includes a code excerpt
-    with `-` / `+` prefixed lines, the renderer now colors removals red
-    (256-color 203, distinct from the critical-severity 196) and
-    additions green (42). Context lines stay muted (244). Composes
-    cleanly with the panel's severity-tinted background so the card
-    still reads as one block.
-  - **Severity-tinted backgrounds** via `lipgloss.AdaptiveColor`: each
-    panel gets a subtle background shade matching its border (darker on
-    dark terminals, paler on light terminals) so the card reads as one
-    block instead of disconnected text on the terminal default.
-  - **Severity icons** prefix the badge — `‼` critical, `⚠` high,
-    `▲` medium, `●` low, `ⓘ` info — colored to match the border. Text-
-    variant Unicode rather than emoji so `NO_COLOR` users still get a
-    visual anchor that's not dependent on hue.
-  - **Bullet separator** (` • `) between the severity badge and
-    `file:line` instead of the previous double-space, tightening the
-    eye-grouping of "where + how severe".
-
 ### Added
 - **`commitbrief list` config summary footer** — the command reference
   now ends with a `## Current configuration` section showing the active
@@ -48,6 +25,18 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   full panel layout so toggling the flag never re-shuffles findings.
   Empty case renders as a single `✓ No findings. Looks good.` line
   instead of the bordered success panel.
+
+### Changed
+- **Diff-colored snippets** — when a finding includes a code excerpt
+  with `-` / `+` prefixed lines, the renderer now colors removals red
+  (256-color 203, distinct from the critical-severity 196) and
+  additions green (42). Context lines stay muted (244). Composes
+  cleanly with the panel's severity-tinted background so the card
+  still reads as one block.
+
+## [0.7.0] - 2026-05-26
+
+### Added
 - **`commitbrief providers` subcommand** for multi-provider workflows
   without hand-editing YAML.
   - `providers list` — show every configured + registered provider, mark
@@ -74,6 +63,26 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   `providers.key.not_set`, `providers.use.*`, `providers.test.*`,
   `config.set.success` (EN+TR parity verified).
 
+### Changed
+- **Rich finding panels** — visual polish of the Cards Stage B layout
+  introduced in v0.6.0:
+  - **Rounded borders** (`╭ ╮ ╰ ╯`) replace the previous square corners
+    for a softer, more card-like silhouette.
+  - **Severity-tinted backgrounds** via `lipgloss.AdaptiveColor`: each
+    panel gets a subtle background shade matching its border (darker on
+    dark terminals, paler on light terminals) so the card reads as one
+    block instead of disconnected text on the terminal default.
+  - **Severity icons** prefix the badge — `‼` critical, `⚠` high,
+    `▲` medium, `●` low, `ⓘ` info — colored to match the border. Text-
+    variant Unicode rather than emoji so `NO_COLOR` users still get a
+    visual anchor that's not dependent on hue.
+  - **Bullet separator** (` • `) between the severity badge and
+    `file:line` instead of the previous double-space, tightening the
+    eye-grouping of "where + how severe".
+- **`commitbrief --version` output** no longer double-prints
+  "commitbrief version commitbrief X.Y.Z" — cobra's default version
+  template was overridden so the line reads `commitbrief X.Y.Z (commit …, built …)`.
+
 ### Fixed
 - **`commitbrief setup` no longer wipes previously-configured API keys.**
   Running setup a second time to add another provider (Anthropic → then
@@ -81,6 +90,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   silently destroying the first key. The wizard now loads the existing
   config at the target path (`--local` honoured) and layers the new
   provider's fields on top, leaving every other provider intact.
+- **CI lint pass** — fixed 4 staticcheck/gofmt/errcheck issues that
+  surfaced after the v0.6.0 push (no functional impact).
 
 ## [0.6.0] - 2026-05-26
 
