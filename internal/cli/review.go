@@ -42,6 +42,7 @@ func bindScopeFlags(cmd *cobra.Command) {
 	f.StringVarP(&reviewScope.commit, "commit", "c", "", "review changes in a commit hash")
 	f.StringVar(&reviewScope.pr, "pull-request", "", "review a PR-style diff target...feature")
 	f.StringVarP(&reviewScope.branch, "branch", "b", "", "review current branch vs target ref")
+	cmd.MarkFlagsMutuallyExclusive("staged", "unstaged", "file", "commit", "pull-request", "branch")
 }
 
 func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
@@ -53,6 +54,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	rawDiff, err := fetchDiff(app.Repo, scope)
 	if err != nil {
 		return err
+	}
+	if rawDiff.IsMerge {
+		infof("%s", app.Catalog.T("cli.warn.merge_commit", scope.commit))
 	}
 	parsed, err := diff.Parse(rawDiff)
 	if err != nil {

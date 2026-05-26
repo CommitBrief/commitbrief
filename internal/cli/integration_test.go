@@ -493,6 +493,99 @@ func TestRunOutsideGitRepo(t *testing.T) {
 	}
 }
 
+// ---------- review scope: --commit / --branch / --pull-request ----------
+
+func TestReviewCommitHappyPath(t *testing.T) {
+	e := newCLIEnv(t)
+	// Drop the staged-but-uncommitted change from newCLIEnv; we want to point
+	// --commit at a fresh, fully-committed change.
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	hash := commitChange(t, e.repoRoot, "feature.go",
+		"package app\n\nfunc Feature() int { return 1 }\n",
+		"feat: add feature")
+
+	if err := e.run("--commit", hash); err != nil {
+		t.Fatalf("review --commit: %v", err)
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock provider output; got:\n%s", e.out.String())
+	}
+}
+
+func TestReviewCommitInvalidHash(t *testing.T) {
+	e := newCLIEnv(t)
+	err := e.run("--commit", "deadbeef0000000000000000000000000000000")
+	if err == nil {
+		t.Error("expected error for invalid commit hash")
+	}
+}
+
+func TestReviewCommitMergeWarning(t *testing.T) {
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	mergeHash := makeMergeCommit(t, e.repoRoot)
+
+	// The merge warning is emitted via infof → os.Stderr, which cmd.SetErr
+	// cannot intercept. We redirect os.Stderr through a pipe for the duration
+	// of the run and assert on what gets written there.
+	stderr := captureStderr(t, func() {
+		if err := e.run("--commit", mergeHash); err != nil {
+			t.Fatalf("review --commit (merge): %v", err)
+		}
+	})
+	if !strings.Contains(stderr, "merge commit") {
+		t.Errorf("expected merge-commit warning on stderr; got:\n%s", stderr)
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock provider output despite merge warning; got:\n%s", e.out.String())
+	}
+}
+
+func TestReviewBranchScope(t *testing.T) {
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	gitCmd(t, e.repoRoot, "checkout", "-q", "-b", "feature")
+	commitChange(t, e.repoRoot, "feature.go",
+		"package app\n\nfunc Feature() int { return 1 }\n",
+		"feat: add feature")
+
+	if err := e.run("--branch", "main"); err != nil {
+		t.Fatalf("review --branch: %v", err)
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock output; got:\n%s", e.out.String())
+	}
+}
+
+func TestReviewPullRequestScope(t *testing.T) {
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	gitCmd(t, e.repoRoot, "checkout", "-q", "-b", "feature")
+	commitChange(t, e.repoRoot, "feature.go",
+		"package app\n\nfunc Feature() int { return 1 }\n",
+		"feat: add feature")
+
+	if err := e.run("--pull-request", "main...feature"); err != nil {
+		t.Fatalf("review --pull-request: %v", err)
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock output; got:\n%s", e.out.String())
+	}
+}
+
+func TestReviewMutuallyExclusiveScopes(t *testing.T) {
+	e := newCLIEnv(t)
+	err := e.run("--staged", "--unstaged")
+	if err == nil {
+		t.Fatal("expected error for mutually exclusive scope flags")
+	}
+	// Cobra's MarkFlagsMutuallyExclusive emits "if any flags in the group ...
+	// are set none of the others can be; [a b] were all set".
+	if !strings.Contains(err.Error(), "none of the others can be") {
+		t.Errorf("expected mutex-group error message; got: %v", err)
+	}
+}
+
 // ---------- helpers ----------
 
 func truncate(s string, n int) string {
@@ -500,4 +593,63 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// commitChange writes a file, stages and commits it; returns the new HEAD hash.
+func commitChange(t *testing.T, repo, path, content, msg string) string {
+	t.Helper()
+	writeFile(t, filepath.Join(repo, path), content)
+	gitCmd(t, repo, "add", path)
+	gitCmd(t, repo, "commit", "-q", "-m", msg)
+	return gitHead(t, repo)
+}
+
+// gitHead returns the current HEAD commit hash.
+func gitHead(t *testing.T, repo string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = repo
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("rev-parse: %v\n%s", err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// makeMergeCommit branches off HEAD, adds a commit on the branch, switches
+// back to the original branch, and merges with --no-ff. Returns the merge hash.
+func makeMergeCommit(t *testing.T, repo string) string {
+	t.Helper()
+	gitCmd(t, repo, "checkout", "-q", "-b", "feature")
+	commitChange(t, repo, "feature.go",
+		"package app\n\nfunc Feature() int { return 1 }\n",
+		"feat: add feature")
+	gitCmd(t, repo, "checkout", "-q", "main")
+	gitCmd(t, repo, "merge", "-q", "--no-ff", "-m", "merge feature", "feature")
+	return gitHead(t, repo)
+}
+
+// captureStderr redirects os.Stderr to an in-memory pipe for the duration of
+// fn() and returns whatever was written. Used to assert against output from
+// infof and other writers that go directly to os.Stderr (not cmd.OutOrStderr).
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = old }()
+
+	done := make(chan []byte, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		done <- buf.Bytes()
+	}()
+
+	fn()
+	_ = w.Close()
+	return string(<-done)
 }

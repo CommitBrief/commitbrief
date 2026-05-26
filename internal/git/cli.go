@@ -58,6 +58,16 @@ func (r *CLIRepo) CommitDiff(hash string) (Diff, error) {
 	if hash == "" {
 		return Diff{}, errors.New("git: CommitDiff requires a commit hash")
 	}
+	// `rev-list --parents -n 1 <hash>` emits "<hash> <p1> [<p2> ...]"; 2+ parents
+	// means a merge commit. The dispatcher routes merge commits through go-git
+	// in practice (CLI fallback only fires on ErrUnsupported, which CommitDiff
+	// returns only for initial commits), but we set IsMerge here too so direct
+	// CLIRepo usage stays consistent with the GoGitRepo behavior.
+	parents, err := r.run("rev-list", "--parents", "-n", "1", hash)
+	if err != nil {
+		return Diff{}, err
+	}
+	isMerge := len(strings.Fields(parents)) > 2
 	out, err := r.run("show", "--format=", "--no-color", "--no-ext-diff", hash)
 	if err != nil {
 		return Diff{}, err
@@ -66,6 +76,7 @@ func (r *CLIRepo) CommitDiff(hash string) (Diff, error) {
 		Content: out,
 		Origin:  OriginCommit,
 		Args:    map[string]string{"hash": hash},
+		IsMerge: isMerge,
 	}, nil
 }
 

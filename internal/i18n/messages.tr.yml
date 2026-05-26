@@ -14,6 +14,7 @@ cli.error.no_provider: "Sağlayıcı yapılandırılmamış. Önce 'commitbrief 
 cli.error.no_api_key: "%q sağlayıcısı için API anahtarı ayarlanmamış."
 cli.error.unknown_provider: "Bilinmeyen sağlayıcı: %s"
 cli.error.unsupported_lang: "Desteklenmeyen dil: %s"
+cli.warn.merge_commit: "Uyarı: %s bir merge commit. Yalnızca ilk parent'a göre diff gösteriliyor. Tam dal karşılaştırması için --pull-request <hedef>...<özellik> kullanın."
 
 guard.prompt: ".commitbrief/ altında değişiklik var. Devam edilsin mi? [e/H]"
 guard.aborted: "Kullanıcı tarafından iptal edildi."

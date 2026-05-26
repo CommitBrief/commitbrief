@@ -27,6 +27,9 @@ func newDryRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if rawDiff.IsMerge {
+				infof("%s", app.Catalog.T("cli.warn.merge_commit", reviewScope.commit))
+			}
 			parsed, err := diff.Parse(rawDiff)
 			if err != nil {
 				return err

@@ -14,6 +14,7 @@ cli.error.no_provider: "No provider configured. Run 'commitbrief setup' first."
 cli.error.no_api_key: "API key for provider %q is not set."
 cli.error.unknown_provider: "Unknown provider: %s"
 cli.error.unsupported_lang: "Unsupported language: %s"
+cli.warn.merge_commit: "Note: %s is a merge commit; showing first-parent diff only. Use --pull-request <target>...<feature> for full branch comparison."
 
 guard.prompt: "Diff includes changes under .commitbrief/. Continue? [y/N]"
 guard.aborted: "Aborted by user."

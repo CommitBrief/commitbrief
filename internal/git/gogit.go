@@ -59,6 +59,7 @@ func (g *GoGitRepo) CommitDiff(hash string) (Diff, error) {
 		Content: content,
 		Origin:  OriginCommit,
 		Args:    map[string]string{"hash": hash},
+		IsMerge: commit.NumParents() > 1,
 	}, nil
 }
 
