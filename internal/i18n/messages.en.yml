@@ -35,6 +35,15 @@ cost.bypassed_yes: "ℹ Cost preflight bypassed by --yes (estimate: $%.4f)."
 fail_on.threshold_reached: "%d finding(s) at or above '%s' severity"
 fail_on.degraded_skipped: "ℹ --fail-on skipped: LLM produced unparseable output, no findings to evaluate."
 
+install_hook.not_in_repo: "install-hook: not inside a git repository"
+install_hook.unsupported: "install-hook: unsupported hook %q (allowed: %s)"
+install_hook.exists: "install-hook: %s already exists; re-run with --yes to back it up and overwrite"
+install_hook.backed_up: "Backed up existing hook to %s"
+install_hook.success: "Installed %s"
+install_hook.not_installed: "install-hook: no commitbrief hook at %s (already uninstalled)"
+install_hook.foreign: "install-hook: %s was not written by commitbrief; refusing to remove. Delete it manually if intended."
+install_hook.uninstalled: "Removed %s"
+
 cache.hit: "(cached)"
 cache.disabled: "(cache disabled)"
 

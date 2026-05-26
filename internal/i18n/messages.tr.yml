@@ -35,6 +35,15 @@ cost.bypassed_yes: "ℹ Cost preflight --yes ile atlandı (tahmin: $%.4f)."
 fail_on.threshold_reached: "'%s' seviyesinde veya üstünde %d bulgu"
 fail_on.degraded_skipped: "ℹ --fail-on atlandı: LLM çözümlenemeyen çıktı üretti, değerlendirilecek bulgu yok."
 
+install_hook.not_in_repo: "install-hook: bir git deposunun içinde değilsiniz"
+install_hook.unsupported: "install-hook: desteklenmeyen hook %q (izin verilenler: %s)"
+install_hook.exists: "install-hook: %s zaten mevcut; yedekleyip üzerine yazmak için --yes ile çalıştırın"
+install_hook.backed_up: "Mevcut hook %s konumuna yedeklendi"
+install_hook.success: "%s kuruldu"
+install_hook.not_installed: "install-hook: %s konumunda commitbrief hook'u yok (zaten kurulu değil)"
+install_hook.foreign: "install-hook: %s commitbrief tarafından yazılmamış; kaldırılmıyor. Manuel silmek için kendiniz yapın."
+install_hook.uninstalled: "%s kaldırıldı"
+
 cache.hit: "(önbellekten)"
 cache.disabled: "(önbellek kapalı)"
 
