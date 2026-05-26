@@ -43,6 +43,11 @@ func newCLIEnv(t *testing.T) *cliEnv {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// Windows: os.UserHomeDir() reads USERPROFILE, not HOME. Without this
+	// override the test reads the real user's ~/.commitbrief/config.yml
+	// (or, on a clean runner, no config at all) and the default provider
+	// "anthropic" wins instead of the mock config we just wrote.
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", home) // some libs prefer this; harmless either way
 	t.Setenv("COMMITBRIEF_CONFIG", "")
 	t.Setenv("LANG", "en_US.UTF-8")

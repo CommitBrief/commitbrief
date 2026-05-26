@@ -21,12 +21,12 @@ type fakeProvider struct {
 	gotReq   provider.Request
 }
 
-func (f *fakeProvider) Name() string                                  { return "fake" }
-func (f *fakeProvider) DefaultModel() string                          { return "fake-1" }
-func (f *fakeProvider) ContextWindow(string) int                      { return 100_000 }
-func (f *fakeProvider) EstimateTokens(s string) int                   { return len(s) / 4 }
-func (f *fakeProvider) Pricing(string) provider.Pricing               { return provider.Pricing{} }
-func (f *fakeProvider) TestConnection(context.Context) error          { return nil }
+func (f *fakeProvider) Name() string                         { return "fake" }
+func (f *fakeProvider) DefaultModel() string                 { return "fake-1" }
+func (f *fakeProvider) ContextWindow(string) int             { return 100_000 }
+func (f *fakeProvider) EstimateTokens(s string) int          { return len(s) / 4 }
+func (f *fakeProvider) Pricing(string) provider.Pricing      { return provider.Pricing{} }
+func (f *fakeProvider) TestConnection(context.Context) error { return nil }
 func (f *fakeProvider) ReviewStream(context.Context, provider.Request) (<-chan provider.Event, error) {
 	return nil, errors.New("not used")
 }
@@ -148,11 +148,11 @@ func TestRunNilProviderErrors(t *testing.T) {
 
 func TestPostProcessStripsPreamble(t *testing.T) {
 	cases := map[string]string{
-		"Here is the compressed file:\n# Rules\n":            "# Rules\n",
-		"Sure, here is the compressed version:\n# Rules\n":   "# Rules\n",
-		"# Rules\nNo preamble at all\n":                      "# Rules\nNo preamble at all\n",
-		"```markdown\n# Rules\nWrapped\n```":                 "# Rules\nWrapped\n",
-		"```\n# Rules\nUnnamed fence\n```":                   "# Rules\nUnnamed fence\n",
+		"Here is the compressed file:\n# Rules\n":          "# Rules\n",
+		"Sure, here is the compressed version:\n# Rules\n": "# Rules\n",
+		"# Rules\nNo preamble at all\n":                    "# Rules\nNo preamble at all\n",
+		"```markdown\n# Rules\nWrapped\n```":               "# Rules\nWrapped\n",
+		"```\n# Rules\nUnnamed fence\n```":                 "# Rules\nUnnamed fence\n",
 	}
 	for in, want := range cases {
 		got := postProcess(in)
@@ -210,7 +210,7 @@ func TestApplyWritesBackupAndCompressed(t *testing.T) {
 	if string(bgot) != original {
 		t.Errorf("backup content = %q, want %q", bgot, original)
 	}
-	if !strings.Contains(backupPath, ".commitbrief/backups") {
+	if !strings.Contains(filepath.ToSlash(backupPath), ".commitbrief/backups") {
 		t.Errorf("backupPath = %q, expected to be under .commitbrief/backups/", backupPath)
 	}
 	if !strings.Contains(backupPath, ts) {

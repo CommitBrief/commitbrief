@@ -307,11 +307,11 @@ func fakeStreamingMessageServer(t *testing.T, deltas []string, finalInput, final
 		writeEvent("message_start", map[string]any{
 			"type": "message_start",
 			"message": map[string]any{
-				"id":    "msg_test",
-				"type":  "message",
-				"role":  "assistant",
-				"model": ModelOpus47,
-				"content": []any{},
+				"id":            "msg_test",
+				"type":          "message",
+				"role":          "assistant",
+				"model":         ModelOpus47,
+				"content":       []any{},
 				"stop_reason":   nil,
 				"stop_sequence": nil,
 				"usage": map[string]any{

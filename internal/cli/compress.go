@@ -81,14 +81,14 @@ func newCompressCmd() *cobra.Command {
 			perReviewSavedUSD := float64(deltaTokens) * pricing.InputPer1M / 1_000_000
 
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Original:   %d chars / ~%d tokens\n",
+			_, _ = fmt.Fprintf(out, "Original:   %d chars / ~%d tokens\n",
 				result.OriginalChars, result.OriginalTokens)
-			fmt.Fprintf(out, "Compressed: %d chars / ~%d tokens\n",
+			_, _ = fmt.Fprintf(out, "Compressed: %d chars / ~%d tokens\n",
 				result.CompressedChars, result.CompressedTokens)
-			fmt.Fprintf(out, "Reduction:  %.1f%% (%d tokens)\n", percent, deltaTokens)
-			fmt.Fprintf(out, "Per-review input savings: $%.5f (at %s rate)\n",
+			_, _ = fmt.Fprintf(out, "Reduction:  %.1f%% (%d tokens)\n", percent, deltaTokens)
+			_, _ = fmt.Fprintf(out, "Per-review input savings: $%.5f (at %s rate)\n",
 				perReviewSavedUSD, model)
-			fmt.Fprintf(out, "Compression call cost: in=%d out=%d (≈$%.5f), latency %s\n",
+			_, _ = fmt.Fprintf(out, "Compression call cost: in=%d out=%d (≈$%.5f), latency %s\n",
 				result.Usage.InputTokens, result.Usage.OutputTokens,
 				pricing.Cost(result.Usage), latency.Round(time.Millisecond))
 
