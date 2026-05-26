@@ -319,8 +319,22 @@ func TestReviewJSONOutput(t *testing.T) {
 	if doc["schema"] != float64(1) {
 		t.Errorf("schema = %v, want 1", doc["schema"])
 	}
-	if !strings.Contains(doc["content"].(string), "mock review") {
-		t.Errorf("content unexpected: %v", doc["content"])
+	// ADR-0014 happy path: content is empty (vestigial), findings carries
+	// the parsed structured response. The mock provider's canned payload
+	// produces exactly one finding titled "mock review output".
+	if got := doc["content"]; got != "" {
+		t.Errorf("content should be empty on happy path; got %q", got)
+	}
+	findings, ok := doc["findings"].([]any)
+	if !ok {
+		t.Fatalf("findings is not an array; got %T (%v)", doc["findings"], doc["findings"])
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings length = %d, want 1", len(findings))
+	}
+	first := findings[0].(map[string]any)
+	if first["title"] != "mock review output" {
+		t.Errorf("findings[0].title = %v, want %q", first["title"], "mock review output")
 	}
 }
 

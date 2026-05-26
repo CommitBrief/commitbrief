@@ -29,6 +29,19 @@ type KeyMeta struct {
 type Result struct {
 	Content string `json:"content"`
 	Tokens  Tokens `json:"tokens"`
+
+	// Format records which renderer path the cached entry should take on
+	// replay. Values (ADR-0014 §4):
+	//   "json"               — Content is the structured-findings JSON; the
+	//                          renderer parses it as usual.
+	//   "markdown-fallback"  — provider produced unparseable output; the
+	//                          retry also failed. The cached Content is the
+	//                          raw text and the renderer skips the parse
+	//                          step entirely (no warning re-emitted).
+	// Empty string is treated as "json" for backwards compatibility with
+	// pre-ADR-0014 cache entries; they'll be invalidated next request
+	// anyway via the system-prompt SHA change (ADR-0014 §6).
+	Format string `json:"format,omitempty"`
 }
 
 type Tokens struct {
@@ -36,6 +49,13 @@ type Tokens struct {
 	Output int `json:"output"`
 	Cached int `json:"cached"`
 }
+
+// Format values for cache.Result.Format. Kept as package-level constants so
+// callers (CLI, renderer) avoid stringly-typed comparisons.
+const (
+	FormatJSON             = "json"
+	FormatMarkdownFallback = "markdown-fallback"
+)
 
 type Cache struct {
 	dir      string

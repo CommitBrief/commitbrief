@@ -170,7 +170,9 @@ func TestRegisteredViaInit(t *testing.T) {
 // fakeMessageServer is a minimal httptest.Server that mimics Anthropic's
 // /v1/messages endpoint for the non-streaming case. The SDK's request body
 // is JSON; we don't deeply validate it, we just confirm a request arrived
-// and respond with a canned Message payload.
+// and respond with a canned text-block payload. After ADR-0014 the client
+// prefers a tool_use block — use fakeMessageServerToolUse when you want to
+// exercise the structured-output happy path.
 func fakeMessageServer(t *testing.T, response string, inputTokens, outputTokens int) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -178,32 +180,69 @@ func fakeMessageServer(t *testing.T, response string, inputTokens, outputTokens 
 			http.NotFound(w, r)
 			return
 		}
-		payload := map[string]any{
-			"id":            "msg_test",
-			"type":          "message",
-			"role":          "assistant",
-			"model":         ModelOpus47,
-			"content":       []map[string]any{{"type": "text", "text": response}},
-			"stop_reason":   "end_turn",
-			"stop_sequence": nil,
-			"usage": map[string]any{
-				"input_tokens":                inputTokens,
-				"output_tokens":               outputTokens,
-				"cache_creation_input_tokens": 0,
-				"cache_read_input_tokens":     0,
-				"cache_creation":              map[string]any{},
-				"server_tool_use":             map[string]any{},
-				"service_tier":                "standard",
-				"inference_geo":               "us",
-			},
-			"container": map[string]any{},
-		}
+		payload := messagePayload(
+			[]map[string]any{{"type": "text", "text": response}},
+			inputTokens, outputTokens,
+		)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(payload)
 	}))
 }
 
-func TestReviewWithFakeServer(t *testing.T) {
+// fakeMessageServerToolUse responds with a tool_use content block carrying
+// the supplied JSON `input`. Mirrors the response shape Anthropic returns
+// when the model calls the `report_findings` tool.
+func fakeMessageServerToolUse(t *testing.T, toolInput map[string]any, inputTokens, outputTokens int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/messages") {
+			http.NotFound(w, r)
+			return
+		}
+		payload := messagePayload(
+			[]map[string]any{
+				{
+					"type":   "tool_use",
+					"id":     "tool_test_1",
+					"name":   toolName,
+					"input":  toolInput,
+					"caller": map[string]any{"type": "direct"},
+				},
+			},
+			inputTokens, outputTokens,
+		)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(payload)
+	}))
+}
+
+func messagePayload(content []map[string]any, inputTokens, outputTokens int) map[string]any {
+	return map[string]any{
+		"id":            "msg_test",
+		"type":          "message",
+		"role":          "assistant",
+		"model":         ModelOpus47,
+		"content":       content,
+		"stop_reason":   "end_turn",
+		"stop_sequence": nil,
+		"usage": map[string]any{
+			"input_tokens":                inputTokens,
+			"output_tokens":               outputTokens,
+			"cache_creation_input_tokens": 0,
+			"cache_read_input_tokens":     0,
+			"cache_creation":              map[string]any{},
+			"server_tool_use":             map[string]any{},
+			"service_tier":                "standard",
+			"inference_geo":               "us",
+		},
+		"container": map[string]any{},
+	}
+}
+
+func TestReviewWithFakeServerDegradesToText(t *testing.T) {
+	// Model returned a text block instead of calling report_findings — the
+	// client falls back to the text content so the renderer can graceful-
+	// degrade (ADR-0014 §4). Exercise that fallback explicitly.
 	srv := fakeMessageServer(t, "review output here", 100, 50)
 	defer srv.Close()
 
@@ -221,7 +260,50 @@ func TestReviewWithFakeServer(t *testing.T) {
 		t.Fatalf("Review: %v", err)
 	}
 	if resp.Content != "review output here" {
-		t.Errorf("Content = %q", resp.Content)
+		t.Errorf("Content = %q (expected text fallback)", resp.Content)
+	}
+	if resp.Usage.InputTokens != 100 || resp.Usage.OutputTokens != 50 {
+		t.Errorf("Usage = %+v", resp.Usage)
+	}
+}
+
+func TestReviewWithToolUseFakeServer(t *testing.T) {
+	// Happy path: model calls report_findings; client extracts the JSON
+	// payload, returns it as Content for the renderer to parse.
+	toolInput := map[string]any{
+		"findings": []map[string]any{
+			{
+				"severity":    "critical",
+				"file":        "internal/auth/session.go",
+				"line":        142,
+				"title":       "SQL fragment built from request input",
+				"description": "Concatenation feeds db.Query directly.",
+			},
+		},
+	}
+	srv := fakeMessageServerToolUse(t, toolInput, 100, 50)
+	defer srv.Close()
+
+	c, err := New(config.ProviderConfig{APIKey: "sk-test", BaseURL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := c.Review(context.Background(), provider.Request{
+		Model:        ModelOpus47,
+		SystemPrompt: "rules",
+		UserPrompt:   "diff",
+		MaxTokens:    256,
+	})
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	// Content should be a JSON document with the structured findings — both
+	// the top-level wrap and the critical finding's title must survive.
+	if !strings.Contains(resp.Content, `"findings"`) {
+		t.Errorf("Content missing findings wrapper: %q", resp.Content)
+	}
+	if !strings.Contains(resp.Content, "SQL fragment built from request input") {
+		t.Errorf("Content missing finding title: %q", resp.Content)
 	}
 	if resp.Usage.InputTokens != 100 || resp.Usage.OutputTokens != 50 {
 		t.Errorf("Usage = %+v", resp.Usage)

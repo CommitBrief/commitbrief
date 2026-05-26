@@ -78,8 +78,17 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 	if err != nil {
 		return provider.Response{}, mapError(err)
 	}
+	content := extractText(msg)
+	// Prefer the structured tool_use payload (ADR-0014). The model is
+	// instructed via tool_choice to call the report tool; if it complied,
+	// the JSON document is the canonical Content. If it refused (some
+	// models occasionally emit a text-only apology), fall back to the
+	// text blocks and let the renderer degrade gracefully.
+	if structured, ok := extractStructured(msg); ok {
+		content = structured
+	}
 	return provider.Response{
-		Content: extractText(msg),
+		Content: content,
 		Model:   string(msg.Model),
 		Usage:   mapUsage(msg.Usage),
 	}, nil
@@ -124,6 +133,8 @@ func (c *Client) buildParams(req provider.Request) sdk.MessageNewParams {
 		Messages: []sdk.MessageParam{
 			sdk.NewUserMessage(sdk.NewTextBlock(req.UserPrompt)),
 		},
+		Tools:      []sdk.ToolUnionParam{buildReportTool()},
+		ToolChoice: sdk.ToolChoiceParamOfTool(toolName),
 	}
 }
 

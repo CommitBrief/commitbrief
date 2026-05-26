@@ -123,7 +123,9 @@ func (c *Client) buildParams(req provider.Request) ([]*sdk.Content, *sdk.Generat
 		{Role: sdk.RoleUser, Parts: []*sdk.Part{sdk.NewPartFromText(req.UserPrompt)}},
 	}
 	cfg := &sdk.GenerateContentConfig{
-		MaxOutputTokens: maxTokens,
+		MaxOutputTokens:  maxTokens,
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   responseSchema(),
 	}
 	if req.SystemPrompt != "" {
 		cfg.SystemInstruction = &sdk.Content{

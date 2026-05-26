@@ -11,6 +11,15 @@ import (
 
 const defaultName = "mock"
 
+// DefaultResponseContent is the canned JSON the mock provider returns when
+// no override is set on ResponseContent. It matches the ADR-0014 JSON
+// findings schema so the renderer's happy path is exercised end-to-end in
+// any CLI integration test that doesn't explicitly stage its own payload.
+// The single finding's title is "mock review output" — historically
+// asserted by CLI tests that previously expected a plain-text body; the
+// string survives the format change as a finding-title match.
+const DefaultResponseContent = `{"findings":[{"severity":"info","file":"mock.go","line":1,"title":"mock review output","description":"Synthetic finding produced by the mock provider for tests."}]}`
+
 type Provider struct {
 	mu sync.Mutex
 
@@ -45,7 +54,7 @@ func New() *Provider {
 		NameValue:        defaultName,
 		DefaultModelName: "mock-model",
 		Window:           100_000,
-		ResponseContent:  "mock review output",
+		ResponseContent:  DefaultResponseContent,
 		ChunkCount:       3,
 		InputTokens:      100,
 		OutputTokens:     50,

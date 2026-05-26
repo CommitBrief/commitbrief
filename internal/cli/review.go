@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -139,12 +140,19 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 				LinesRemoved: parsed.DeletedLines(),
 				RulesLoaded:  loaded.Source != rules.SourceDefault,
 			}
-			return renderResult(cmd, entry.Result.Content, outputLoaded.Content, meta)
+			// Parse Findings unless the entry was written in markdown-fallback
+			// mode — in that case the original write already emitted the
+			// stderr warning and we honour it silently on replay.
+			var findings []render.Finding
+			if entry.Result.Format != cache.FormatMarkdownFallback {
+				findings, _ = render.ParseFindings(entry.Result.Content)
+			}
+			return renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta)
 		}
 	}
 
 	start := time.Now()
-	resp, err := prov.Review(ctx, provider.Request{
+	content, usage, format, err := tryStructuredReview(ctx, prov, provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,
 		UserPrompt:   p.User,
@@ -155,12 +163,22 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	}
 	latency := time.Since(start)
 
+	// Parse + warn happen here on a fresh call (the cache-hit path above
+	// honours the cached Format and skips this warning to avoid repeats).
+	var findings []render.Finding
+	if format == cache.FormatJSON {
+		findings, _ = render.ParseFindings(content)
+	} else {
+		fmt.Fprintln(cmd.ErrOrStderr(), "warning: LLM produced malformed JSON; falling back to plain-text view.")
+	}
+
+	respModel := model
 	meta := render.Meta{
 		Provider:     prov.Name(),
-		Model:        resp.Model,
+		Model:        respModel,
 		Lang:         app.Lang.Code,
-		Usage:        resp.Usage,
-		Cost:         prov.Pricing(resp.Model).Cost(resp.Usage),
+		Usage:        usage,
+		Cost:         prov.Pricing(respModel).Cost(usage),
 		Latency:      latency,
 		Timestamp:    time.Now().UTC(),
 		Files:        parsed.FileCount(),
@@ -175,20 +193,57 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 				DiffHash:         "sha256:" + cacheKey[:16],
 				SystemPromptHash: "",
 				Provider:         prov.Name(),
-				Model:            resp.Model,
+				Model:            respModel,
 				Lang:             app.Lang.Code,
 			},
 			Result: cache.Result{
-				Content: resp.Content,
+				Content: content,
+				Format:  format,
 				Tokens: cache.Tokens{
-					Input:  resp.Usage.InputTokens,
-					Output: resp.Usage.OutputTokens,
-					Cached: resp.Usage.CachedInputTokens,
+					Input:  usage.InputTokens,
+					Output: usage.OutputTokens,
+					Cached: usage.CachedInputTokens,
 				},
 			},
 		})
 	}
-	return renderResult(cmd, resp.Content, outputLoaded.Content, meta)
+	return renderResult(cmd, content, outputLoaded.Content, findings, meta)
+}
+
+// tryStructuredReview runs Review and, on parse failure, retries once.
+// Returns (content, totalUsage, format, err). format is FormatJSON when
+// either the first or retry response parses cleanly; FormatMarkdownFallback
+// when both attempts fail (the caller emits the user warning and stores
+// the marker in cache so replays stay silent).
+//
+// Token usage is summed across both attempts so the verbose footer / cost
+// reflects what the user actually spent, even on a graceful degrade.
+func tryStructuredReview(ctx context.Context, prov provider.Provider, req provider.Request) (string, provider.Usage, string, error) {
+	resp, err := prov.Review(ctx, req)
+	if err != nil {
+		return "", provider.Usage{}, "", err
+	}
+	if _, parseErr := render.ParseFindings(resp.Content); parseErr == nil {
+		return resp.Content, resp.Usage, cache.FormatJSON, nil
+	}
+	// First attempt unparseable — ADR-0014 §4 retry-once.
+	resp2, err2 := prov.Review(ctx, req)
+	if err2 != nil {
+		// Network/auth failure on retry: surface the first response with
+		// the fallback marker; the caller can still render via degrade.
+		return resp.Content, resp.Usage, cache.FormatMarkdownFallback, nil
+	}
+	totalUsage := provider.Usage{
+		InputTokens:       resp.Usage.InputTokens + resp2.Usage.InputTokens,
+		OutputTokens:      resp.Usage.OutputTokens + resp2.Usage.OutputTokens,
+		CachedInputTokens: resp.Usage.CachedInputTokens + resp2.Usage.CachedInputTokens,
+	}
+	if _, parseErr := render.ParseFindings(resp2.Content); parseErr == nil {
+		return resp2.Content, totalUsage, cache.FormatJSON, nil
+	}
+	// Both attempts produced unparseable output — degrade with first
+	// response cached as the canonical fallback content.
+	return resp.Content, totalUsage, cache.FormatMarkdownFallback, nil
 }
 
 func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, cat *i18n.Catalog) (git.Diff, error) {
@@ -239,18 +294,10 @@ func openCache(repoRoot string) (*cache.Cache, error) {
 	})
 }
 
-func renderResult(cmd *cobra.Command, content, outputTemplate string, meta render.Meta) error {
-	// Try to parse the LLM response as structured findings (ADR-0014). On
-	// parse failure we emit a stderr warning and continue with Findings nil
-	// so each renderer falls back to its degrade path (raw Content). The
-	// retry-once provider-side recovery lives in Stage 4; here we deal only
-	// with what the cache/provider actually handed us.
-	findings, parseErr := render.ParseFindings(content)
-	if parseErr != nil {
-		fmt.Fprintln(cmd.ErrOrStderr(), "warning: LLM produced malformed JSON; falling back to plain-text view.")
-		findings = nil
-	}
-
+func renderResult(cmd *cobra.Command, content, outputTemplate string, findings []render.Finding, meta render.Meta) error {
+	// Findings is pre-resolved by the caller — fresh-call retries and
+	// cache-hit format markers are handled there so renderResult never
+	// emits the malformed-JSON warning twice for the same review.
 	payload := render.Payload{
 		Content:        content,
 		Findings:       findings,

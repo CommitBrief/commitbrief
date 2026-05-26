@@ -130,6 +130,7 @@ func (c *Client) buildParams(req provider.Request) sdk.ChatCompletionNewParams {
 		Model:               shared.ChatModel(model),
 		MaxCompletionTokens: sdk.Int(maxTokens),
 		Messages:            messages,
+		ResponseFormat:      buildResponseFormat(),
 	}
 }
 

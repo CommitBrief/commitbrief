@@ -143,6 +143,7 @@ func (c *Client) buildBody(req provider.Request, stream bool) chatRequest {
 		Model:    model,
 		Messages: messages,
 		Stream:   stream,
+		Format:   formatJSON,
 		Options:  &chatOptions{NumPredict: maxTokens},
 	}
 }
@@ -181,6 +182,7 @@ type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
 	Stream   bool          `json:"stream"`
+	Format   string        `json:"format,omitempty"`
 	Options  *chatOptions  `json:"options,omitempty"`
 }
 
