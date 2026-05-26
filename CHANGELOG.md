@@ -10,6 +10,23 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **Rich finding panels** — visual polish of the Cards Stage B layout
+  introduced in v0.6.0:
+  - **Rounded borders** (`╭ ╮ ╰ ╯`) replace the previous square corners
+    for a softer, more card-like silhouette.
+  - **Severity-tinted backgrounds** via `lipgloss.AdaptiveColor`: each
+    panel gets a subtle background shade matching its border (darker on
+    dark terminals, paler on light terminals) so the card reads as one
+    block instead of disconnected text on the terminal default.
+  - **Severity icons** prefix the badge — `‼` critical, `⚠` high,
+    `▲` medium, `●` low, `ⓘ` info — colored to match the border. Text-
+    variant Unicode rather than emoji so `NO_COLOR` users still get a
+    visual anchor that's not dependent on hue.
+  - **Bullet separator** (` • `) between the severity badge and
+    `file:line` instead of the previous double-space, tightening the
+    eye-grouping of "where + how severe".
+
 ### Added
 - **`commitbrief providers` subcommand** for multi-provider workflows
   without hand-editing YAML.

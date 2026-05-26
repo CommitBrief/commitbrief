@@ -103,6 +103,74 @@ func TestCardsOrdersBySeverity(t *testing.T) {
 	}
 }
 
+func TestCardsPanelHasSeverityIcon(t *testing.T) {
+	// Each severity's badge must be prefixed by its mapped icon glyph so
+	// users get a visual anchor independent of color (a11y for users with
+	// red/green confusion or NO_COLOR set).
+	cases := map[Severity]string{
+		SeverityCritical: "‼",
+		SeverityHigh:     "⚠",
+		SeverityMedium:   "▲",
+		SeverityLow:      "●",
+		SeverityInfo:     "ⓘ",
+	}
+	for sev, icon := range cases {
+		t.Run(string(sev), func(t *testing.T) {
+			p := samplePayload()
+			p.Findings = []Finding{{
+				Severity: sev, File: "a.go", Line: 1, Title: "t", Description: "d",
+			}}
+			var w bytes.Buffer
+			if err := Cards(&w, p); err != nil {
+				t.Fatal(err)
+			}
+			plain := stripANSI(w.String())
+			if !strings.Contains(plain, icon) {
+				t.Errorf("panel for %s missing icon %q; got:\n%s", sev, icon, plain)
+			}
+		})
+	}
+}
+
+func TestCardsPanelHasBulletSeparator(t *testing.T) {
+	// Per the v0.6.0 visual polish: badge and file:line are separated by
+	// " • " (U+2022 bullet) so the eye groups severity with its location.
+	p := samplePayload()
+	p.Findings = []Finding{{
+		Severity: SeverityCritical, File: "a.go", Line: 42, Title: "t", Description: "d",
+	}}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	if !strings.Contains(plain, "CRITICAL • a.go:42") {
+		t.Errorf("expected 'CRITICAL • a.go:42' substring; got:\n%s", plain)
+	}
+}
+
+func TestCardsPanelUsesRoundedBorder(t *testing.T) {
+	// Rounded borders use ╭ ╮ ╰ ╯ corner glyphs (lipgloss.RoundedBorder)
+	// instead of the ┌ ┐ └ ┘ used by NormalBorder. Easiest visual diff.
+	p := samplePayload()
+	p.Findings = sampleFindings()
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
+		if !strings.Contains(plain, corner) {
+			t.Errorf("rounded-border corner %q missing; got:\n%s", corner, plain)
+		}
+	}
+	for _, sharp := range []string{"┌", "┐", "└", "┘"} {
+		if strings.Contains(plain, sharp) {
+			t.Errorf("sharp-border corner %q should not appear in rounded layout; got:\n%s", sharp, plain)
+		}
+	}
+}
+
 func TestCardsEmptyFindings(t *testing.T) {
 	p := samplePayload()
 	p.Findings = []Finding{} // non-nil empty: a clean review

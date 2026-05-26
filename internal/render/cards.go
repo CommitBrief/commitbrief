@@ -86,8 +86,8 @@ var (
 	styleBullet = lipgloss.NewStyle().Foreground(lipgloss.Color("238")) // very dim
 )
 
-// severityColors maps each severity level to its lipgloss color, per
-// ADR-0014 §1. Keep these in sync with the rubric in
+// severityColors maps each severity level to its lipgloss border color,
+// per ADR-0014 §1. Keep these in sync with the rubric in
 // internal/rules/prompt.go — they're the visual half of the contract.
 var severityColors = map[Severity]lipgloss.Color{
 	SeverityCritical: lipgloss.Color("196"), // red
@@ -95,6 +95,30 @@ var severityColors = map[Severity]lipgloss.Color{
 	SeverityMedium:   lipgloss.Color("220"), // yellow
 	SeverityLow:      lipgloss.Color("33"),  // soft blue
 	SeverityInfo:     lipgloss.Color("244"), // dim grey
+}
+
+// severityBG is a subtly-tinted shade of the border color used as the
+// panel background. Adaptive so dark-terminal users see a darker tint
+// and light-terminal users a paler one; either way the card reads as a
+// distinct block without overpowering the surrounding terminal.
+var severityBG = map[Severity]lipgloss.AdaptiveColor{
+	SeverityCritical: {Dark: "52", Light: "224"},  // dark red / light pink
+	SeverityHigh:     {Dark: "94", Light: "223"},  // brown / peach
+	SeverityMedium:   {Dark: "100", Light: "229"}, // dark olive / cream
+	SeverityLow:      {Dark: "17", Light: "153"},  // dark blue / light blue
+	SeverityInfo:     {Dark: "237", Light: "252"}, // dark grey / light grey
+}
+
+// severityIcon prefixes the badge with a glyph that visually anchors
+// the severity. Glyphs are text-variant Unicode (no emoji VS-16
+// selector) so lipgloss foreground colors apply — emoji would lock to
+// their built-in palette and ignore the severity color.
+var severityIcon = map[Severity]string{
+	SeverityCritical: "‼", // double exclamation
+	SeverityHigh:     "⚠", // warning triangle
+	SeverityMedium:   "▲", // up-pointing triangle
+	SeverityLow:      "●", // bullet/circle
+	SeverityInfo:     "ⓘ", // circled info
 }
 
 // cardsHeader: "commitbrief vX.Y.Z · provider: name/model · cache: hit"
@@ -167,10 +191,12 @@ func cardsFooter(m Meta, findings []Finding) string {
 	return strings.Join(segments, bullet)
 }
 
-// cardsFindingPanel renders one Finding as a bordered panel. The border
-// color comes from the severity. Layout inside the panel:
+// cardsFindingPanel renders one Finding as a rounded-border panel. The
+// border color and a subtly-tinted background both come from the
+// severity, with an icon glyph anchoring the badge. Layout:
 //
-//	<SEVERITY>  file:line — title
+//	‼ CRITICAL • file:line
+//	title
 //
 //	description
 //
@@ -182,42 +208,59 @@ func cardsFindingPanel(f Finding) string {
 	if !ok {
 		color = severityColors[SeverityInfo]
 	}
-	style := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+	bg, ok := severityBG[f.Severity]
+	if !ok {
+		bg = severityBG[SeverityInfo]
+	}
+	icon := severityIcon[f.Severity]
+	if icon == "" {
+		icon = severityIcon[SeverityInfo]
+	}
+
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(color).
+		Background(bg).
 		Padding(0, 1).
 		Width(terminalWordWrap)
 
-	badge := lipgloss.NewStyle().
-		Foreground(color).
-		Bold(true).
-		Render(strings.ToUpper(string(f.Severity)))
-	location := styleMuted.Render(fmt.Sprintf("%s:%d", f.File, f.Line))
-	title := lipgloss.NewStyle().Bold(true).Render(f.Title)
+	// All inline segments share the panel's tinted background so the
+	// card reads as a single block; lipgloss otherwise leaks the default
+	// terminal background between pre-rendered runs.
+	onBg := lipgloss.NewStyle().Background(bg)
 
-	header := badge + "  " + location + "\n" + title
+	badge := onBg.Foreground(color).Bold(true).Render(icon + " " + strings.ToUpper(string(f.Severity)))
+	sep := onBg.Foreground(lipgloss.Color("244")).Render(" • ")
+	location := onBg.Foreground(lipgloss.Color("244")).Render(fmt.Sprintf("%s:%d", f.File, f.Line))
+	title := onBg.Bold(true).Render(f.Title)
 
-	body := f.Description
+	header := badge + sep + location + "\n" + title
+
+	body := onBg.Render(f.Description)
 	if f.Snippet != "" {
 		fence := "```"
-		body += "\n\n" + fence + f.Language + "\n" + f.Snippet + "\n" + fence
+		body += "\n\n" + onBg.Render(fence+f.Language+"\n"+f.Snippet+"\n"+fence)
 	}
 
-	return style.Render(header + "\n\n" + body)
+	return panel.Render(header + "\n\n" + body)
 }
 
 // cardsEmptyPanel is the success view for a review that produced zero
 // findings. Per ADR-0014 §3 it is a single short panel with a green
 // checkmark and the canonical message kept in sync with the default
-// OUTPUT.md template.
+// OUTPUT.md template. Uses the same rounded look as finding panels.
 func cardsEmptyPanel() string {
 	color := severityColors[SeverityInfo]
-	style := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+	bg := severityBG[SeverityInfo]
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(color).
+		Background(bg).
 		Padding(0, 1)
-	check := styleOK.Render("✓ ")
-	return style.Render(check + "No findings. Looks good.")
+	onBg := lipgloss.NewStyle().Background(bg)
+	check := onBg.Foreground(lipgloss.Color("42")).Bold(true).Render("✓ ")
+	msg := onBg.Render("No findings. Looks good.")
+	return panel.Render(check + msg)
 }
 
 func plural(n int, word string) string {
