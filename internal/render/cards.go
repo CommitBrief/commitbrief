@@ -161,6 +161,14 @@ var severityBG = map[Severity]lipgloss.AdaptiveColor{
 	SeverityInfo:     {Dark: "237", Light: "252"}, // dark grey / light grey
 }
 
+// cardText is the high-contrast foreground used for panel body text
+// (title, description, default context). Pure white on dark terminals,
+// near-black on light terminals — both directions sit on top of the
+// severityBG tints with enough contrast to stay readable. The severity
+// badge keeps its own color (red/orange/yellow/blue/grey) so the
+// finding's urgency is still the eye's anchor.
+var cardText = lipgloss.AdaptiveColor{Dark: "255", Light: "232"}
+
 // severityIcon prefixes the badge with a glyph that visually anchors
 // the severity. Glyphs are text-variant Unicode (no emoji VS-16
 // selector) so lipgloss foreground colors apply — emoji would lock to
@@ -284,11 +292,16 @@ func cardsFindingPanel(f Finding) string {
 	badge := onBg.Foreground(color).Bold(true).Render(icon + " " + strings.ToUpper(string(f.Severity)))
 	sep := onBg.Foreground(lipgloss.Color("244")).Render(" • ")
 	location := onBg.Foreground(lipgloss.Color("244")).Render(fmt.Sprintf("%s:%d", f.File, f.Line))
-	title := onBg.Bold(true).Render(f.Title)
+	// Title + description ride the severity-tinted bg, so we force a
+	// high-contrast adaptive foreground (white-ish on dark terminals,
+	// near-black on light) instead of trusting the terminal's default —
+	// which is "black" on light themes and made dark-tinted backgrounds
+	// hard to read.
+	title := onBg.Foreground(cardText).Bold(true).Render(f.Title)
 
 	header := badge + sep + location + "\n" + title
 
-	body := onBg.Render(f.Description)
+	body := onBg.Foreground(cardText).Render(f.Description)
 	if f.Snippet != "" {
 		fence := "```"
 		body += "\n\n" + onBg.Render(fence+f.Language) + "\n" + colorizeSnippet(f.Snippet, onBg) + "\n" + onBg.Render(fence)
@@ -335,7 +348,7 @@ func cardsEmptyPanel() string {
 		Padding(0, 1)
 	onBg := lipgloss.NewStyle().Background(bg)
 	check := onBg.Foreground(lipgloss.Color("42")).Bold(true).Render("✓ ")
-	msg := onBg.Render("No findings. Looks good.")
+	msg := onBg.Foreground(cardText).Render("No findings. Looks good.")
 	return panel.Render(check + msg)
 }
 

@@ -33,6 +33,14 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   additions green (42). Context lines stay muted (244). Composes
   cleanly with the panel's severity-tinted background so the card
   still reads as one block.
+- **High-contrast card text** — title and description text in finding
+  panels (and the "No findings. Looks good." empty case) now use an
+  adaptive foreground: near-white (256-color 255) on dark terminals,
+  near-black (232) on light terminals. Fixes legibility against the
+  severity-tinted backgrounds, which previously left the body text in
+  the terminal default and could render as dark-on-dark or black-on-
+  pastel depending on theme. Severity badge keeps its own color so
+  urgency stays the eye's anchor.
 
 ## [0.7.0] - 2026-05-26
 

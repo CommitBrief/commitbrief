@@ -186,14 +186,30 @@ func TestCardsPanelUsesRoundedBorder(t *testing.T) {
 }
 
 // ansiContainsLineWithColor returns true if the rendered output has any
-// line that contains both the given color code AND the given content
-// substring. Lets snippet-color assertions isolate the snippet region
-// from incidental color use elsewhere in the panel (footer's green
-// checkmark, severity badge, muted location, etc.).
+// line that contains both the given foreground color code AND the given
+// content substring. Matches "38;5;<code>" anywhere inside an ANSI CSI
+// sequence — covers both the lone "\x1b[38;5;255m" form and the merged
+// "\x1b[1;38;5;255;48;5;52m" form lipgloss emits when multiple style
+// attributes (bold + fg + bg) collapse into one escape. Lets color
+// assertions isolate a single region (a snippet line, a title) from
+// incidental color use elsewhere in the panel.
 func ansiContainsLineWithColor(rendered, fgCode, contentSubstring string) bool {
-	colorOpen := "\x1b[38;5;" + fgCode
+	colorMatch := "38;5;" + fgCode
 	for _, line := range strings.Split(rendered, "\n") {
-		if strings.Contains(line, colorOpen) && strings.Contains(line, contentSubstring) {
+		if !strings.Contains(line, "\x1b[") {
+			continue
+		}
+		if !strings.Contains(line, colorMatch) {
+			continue
+		}
+		// Ensure the digit run terminates on a semicolon or 'm' — guards
+		// against "38;5;25" falsely matching a request for "38;5;2".
+		idx := strings.Index(line, colorMatch)
+		end := idx + len(colorMatch)
+		if end < len(line) && line[end] != ';' && line[end] != 'm' {
+			continue
+		}
+		if strings.Contains(line, contentSubstring) {
 			return true
 		}
 	}
@@ -274,6 +290,44 @@ func TestCardsSnippetIntegratedWithPanel(t *testing.T) {
 	}
 	if !ansiContainsLineWithColor(raw, "203", "- old") {
 		t.Errorf("integrated panel: '-' line should carry red ANSI; got:\n%q", raw)
+	}
+}
+
+func TestCardsPanelTitleUsesHighContrastForeground(t *testing.T) {
+	// TestMain forces ANSI256 with a dark-mode probe, so cardText resolves
+	// to its Dark variant ("255" — near-white). Title and description text
+	// must carry that color or they're invisible against severity-tinted
+	// backgrounds on dark terminals.
+	p := samplePayload()
+	p.Findings = []Finding{{
+		Severity: SeverityCritical, File: "a.go", Line: 1,
+		Title: "title-text", Description: "description-text",
+	}}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	raw := w.String()
+	if !ansiContainsLineWithColor(raw, "255", "title-text") {
+		t.Errorf("title line should carry the high-contrast cardText (ANSI 255) on dark terminals; got:\n%q", raw)
+	}
+	if !ansiContainsLineWithColor(raw, "255", "description-text") {
+		t.Errorf("description line should carry the high-contrast cardText (ANSI 255); got:\n%q", raw)
+	}
+}
+
+func TestCardsEmptyPanelUsesHighContrastForeground(t *testing.T) {
+	// Same guard for the "No findings. Looks good." panel — the message
+	// sits on the info-severity bg and needs the contrast forced.
+	p := samplePayload()
+	p.Findings = []Finding{}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	raw := w.String()
+	if !ansiContainsLineWithColor(raw, "255", "No findings") {
+		t.Errorf("empty-panel message should carry cardText (ANSI 255); got:\n%q", raw)
 	}
 }
 
