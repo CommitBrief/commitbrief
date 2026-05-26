@@ -1,0 +1,43 @@
+# Compiled binaries
+/commitbrief
+/commitbrief.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries and coverage
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Dependency vendoring (we do not vendor)
+/vendor/
+
+# Release artifacts (goreleaser output)
+/dist/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment
+.env
+.env.local
+
+# CommitBrief runtime artifacts when dogfooding the tool inside its own repo
+# (.commitbrief/config.yml is per-user; cache/ is local-only)
+/.commitbrief/
