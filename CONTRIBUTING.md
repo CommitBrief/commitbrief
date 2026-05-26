@@ -37,6 +37,70 @@ Live provider tests (real API keys required) are gated behind a build tag:
 make test-live    # = go test -tags=live ./...
 ```
 
+## Performance
+
+PRD §7.1 sets four ceilings for local-only work (no network):
+
+| Target | Ceiling | Where it lives |
+|---|---|---|
+| Cold start (`commitbrief --version`) | < 100 ms | binary startup |
+| Local pipeline on a 10k-line diff (parse + filter + token estimate) | < 200 ms | `internal/diff` |
+| `dry-run` total wall time | < 500 ms | `internal/cli` (integration) |
+| Cache hit additional latency | < 100 ms | `internal/cache` |
+
+The two component targets are exercised by `make bench`
+(`internal/diff/bench_test.go`, `internal/cache/bench_test.go`).
+Cold start is a binary-startup measurement, not a Go benchmark; time
+it on a release build with the shell builtin (see below). The
+`dry-run` target is integration-level — time it end-to-end after a
+real `git init` + staged change.
+
+### Reproducing
+
+```sh
+# Component benchmarks (parse + filter + token estimate + cache hit):
+make bench
+
+# Cold start (steady state — discard the first run, it includes
+# macOS Gatekeeper / unsigned-binary verification ~600 ms on a
+# `go build` artifact; brew-installed binaries are verified once at
+# install time):
+make build
+for i in 1 2 3 4 5; do { time ./commitbrief --version >/dev/null; } 2>&1 | tail -1; done
+
+# dry-run wall time (against a real staged change):
+time commitbrief dry-run --staged
+```
+
+### Reference run
+
+Reference numbers on **darwin/arm64 (Apple M4 Pro), Go 1.25.6,
+v0.6.0-pre**. Update the table when you bump targets, change
+algorithms, or add a new layer to the pipeline:
+
+| Benchmark | ns/op | ms/op | vs PRD target |
+|---|---|---|---|
+| `Parse10kLines` | 656,745 | 0.66 | — (component) |
+| `Filter10kLines` | 1,931,639 | 1.93 | — (component) |
+| `EstimateTokens10kLines` | 11,052 | 0.011 | — (component) |
+| `Pipeline10kLines` (headline) | 2,602,795 | **2.60** | < 200 ms ✅ (~75× headroom) |
+| `CacheHit` | 12,764 | 0.013 | < 100 ms ✅ (~7700× headroom) |
+| Cold start (steady) | — | ~16 | < 100 ms ✅ (~6× headroom) |
+
+Hot-path watch-outs that have eaten margin in the past:
+
+- **`bufio.Scanner` buffer** in `internal/diff/parse.go` is sized to
+  16 MiB to tolerate a single huge hunk. Shrinking this hits very-large
+  diffs hard; do not lower without measurement.
+- **`go-git`'s gitignore matcher** is allocation-heavy on initial
+  pattern compile but cheap per match; `ignore.Compose` does the
+  compile once per `Filter()` call. Per-file matching is the bulk of
+  `Filter10kLines`.
+
+If a benchmark in this table regresses by **>20%** in a PR, mention
+it explicitly in the description with a justification (a clearer
+implementation that costs a few ns may still be net-positive).
+
 ## Project layout
 
 - `cmd/commitbrief/` — thin entry point.

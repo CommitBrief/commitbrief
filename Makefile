@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: help build test test-live lint fmt tidy clean release-check license-check manpage smoke
+.PHONY: help build test test-live bench lint fmt tidy clean release-check license-check manpage smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -26,6 +26,9 @@ test: ## Run unit + integration tests (live provider tests excluded)
 
 test-live: ## Run live provider tests (real API keys required)
 	$(GO) test -tags=live ./...
+
+bench: ## Run local-pipeline + cache benchmarks (PRD §7.1 targets)
+	$(GO) test -bench=. -benchmem -run=^$$ ./internal/diff ./internal/cache
 
 lint: ## Run golangci-lint
 	golangci-lint run
