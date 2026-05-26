@@ -82,15 +82,15 @@ func TestAskYesNoNonInteractive(t *testing.T) {
 
 func TestAskYesNoAnswers(t *testing.T) {
 	cases := map[string]bool{
-		"y":       true,
-		"Y":       true,
-		"yes":     true,
-		"YES":     true,
-		"  yes  ": true,
-		"":        false,
-		"n":       false,
-		"no":      false,
-		"yep":     false,
+		"y":        true,
+		"Y":        true,
+		"yes":      true,
+		"YES":      true,
+		"  yes  ":  true,
+		"":         false,
+		"n":        false,
+		"no":       false,
+		"yep":      false,
 		"anything": false,
 	}
 	for ans, want := range cases {

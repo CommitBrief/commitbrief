@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	repoConfigSubdir  = ".commitbrief"
-	configFilename    = "config.yml"
-	globalConfigDir   = ".commitbrief"
+	repoConfigSubdir = ".commitbrief"
+	configFilename   = "config.yml"
+	globalConfigDir  = ".commitbrief"
 )
 
 // GlobalConfigPath returns the canonical user-level config path.

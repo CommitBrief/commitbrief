@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -47,21 +46,31 @@ func newDryRunCmd() *cobra.Command {
 				Lang:         app.Lang.Code,
 			})
 
-			fmt.Fprintln(os.Stdout, "Dry run — no provider call.")
-			fmt.Fprintf(os.Stdout, "Origin:        %s\n", rawDiff.Origin)
-			fmt.Fprintf(os.Stdout, "Files:         %d (filtered from %d)\n", parsed.FileCount(), before)
-			fmt.Fprintf(os.Stdout, "Added lines:   %d\n", parsed.AddedLines())
-			fmt.Fprintf(os.Stdout, "Deleted lines: %d\n", parsed.DeletedLines())
-			fmt.Fprintf(os.Stdout, "Provider:      %s\n", app.Config.Provider)
-			fmt.Fprintf(os.Stdout, "Model:         %s\n", app.Config.Providers[app.Config.Provider].Model)
-			fmt.Fprintf(os.Stdout, "Lang:          %s (source: %s)\n", app.Lang.Code, app.Lang.Source)
-			fmt.Fprintf(os.Stdout, "Rules source:  %s", loaded.Source)
-			if loaded.Path != "" {
-				fmt.Fprintf(os.Stdout, " (%s)", loaded.Path)
+			w := cmd.OutOrStdout()
+			lines := []string{
+				"Dry run — no provider call.",
+				fmt.Sprintf("Origin:        %s", rawDiff.Origin),
+				fmt.Sprintf("Files:         %d (filtered from %d)", parsed.FileCount(), before),
+				fmt.Sprintf("Added lines:   %d", parsed.AddedLines()),
+				fmt.Sprintf("Deleted lines: %d", parsed.DeletedLines()),
+				fmt.Sprintf("Provider:      %s", app.Config.Provider),
+				fmt.Sprintf("Model:         %s", app.Config.Providers[app.Config.Provider].Model),
+				fmt.Sprintf("Lang:          %s (source: %s)", app.Lang.Code, app.Lang.Source),
 			}
-			fmt.Fprintln(os.Stdout)
-			fmt.Fprintf(os.Stdout, "Est. tokens:   %d\n", p.EstimatedTokens())
-			fmt.Fprintf(os.Stdout, "Cache key:     %s\n", cacheKey)
+			rulesLine := fmt.Sprintf("Rules source:  %s", loaded.Source)
+			if loaded.Path != "" {
+				rulesLine += fmt.Sprintf(" (%s)", loaded.Path)
+			}
+			lines = append(lines,
+				rulesLine,
+				fmt.Sprintf("Est. tokens:   %d", p.EstimatedTokens()),
+				fmt.Sprintf("Cache key:     %s", cacheKey),
+			)
+			for _, line := range lines {
+				if _, err := fmt.Fprintln(w, line); err != nil {
+					return fmt.Errorf("dry-run: write: %w", err)
+				}
+			}
 			return nil
 		},
 	}

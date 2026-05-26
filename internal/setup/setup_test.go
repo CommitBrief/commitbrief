@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -124,6 +125,9 @@ func TestWriteConfigCreatesParent(t *testing.T) {
 }
 
 func TestWriteConfigPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows uses ACLs rather than POSIX mode bits; os.WriteFile's mode argument is informational there")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yml")
 	if err := WriteConfig(path, config.Default()); err != nil {
