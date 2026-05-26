@@ -7,6 +7,7 @@ import (
 	// global provider registry.
 	_ "github.com/CommitBrief/commitbrief/internal/provider/anthropic"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/gemini"
+	_ "github.com/CommitBrief/commitbrief/internal/provider/ollama"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/openai"
 )
 

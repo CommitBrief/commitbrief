@@ -10,6 +10,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **OpenAI provider** (`internal/provider/openai`) — `gpt-4o`, `gpt-4o-mini`
+  via the official `github.com/openai/openai-go` SDK; honors automatic
+  prompt caching (cached input tokens reported under
+  `usage.prompt_tokens_details.cached_tokens`).
+- **Google Gemini provider** (`internal/provider/gemini`) — `gemini-2.5-pro`
+  (2M context!), `gemini-2.5-flash`, `gemini-1.5-flash` via the unified
+  `google.golang.org/genai` SDK; `cachedContentTokenCount` surfaced for
+  future context-cache integration.
+- **Ollama provider** (`internal/provider/ollama`) — local-only HTTP
+  client against `/api/chat` + `/api/tags` model discovery; no SDK, no
+  API key; `TestConnection` pings `/api/tags` rather than spending
+  inference time on a real completion.
+- Setup wizard's `DefaultSpecs` now lists current model IDs for Gemini
+  (2.5 family) and registers all four providers; running `commitbrief
+  setup` cycles through anthropic / openai / gemini / ollama choices.
+
+### Changed
+- `internal/config.Default()` updated Gemini's default model from
+  `gemini-1.5-pro` to `gemini-2.5-pro`.
+
 ## [0.1.0] - 2026-05-26
 
 First tagged build. **Private repository**; no public artifacts. The

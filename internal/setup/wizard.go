@@ -40,7 +40,7 @@ var DefaultSpecs = []ProviderSpec{
 		Name:       "gemini",
 		Label:      "Google Gemini",
 		NeedsKey:   true,
-		Models:     []string{"gemini-1.5-pro", "gemini-1.5-flash"},
+		Models:     []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-flash"},
 		APIKeyHelp: "Get an API key from https://aistudio.google.com/",
 	},
 	{
