@@ -10,7 +10,25 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`commitbrief compress`** — full implementation (ADR-0010). Three
+  embedded compression prompts (`light`, `balanced` default,
+  `aggressive`) at `internal/compress/prompts/`. Pipeline: read
+  `COMMITBRIEF.md` → wrap in `<user_rules>` (prompt-injection guard) →
+  provider call → strip preamble/code-fence wrappers → display
+  chars/tokens before/after + per-review savings + compression-call
+  cost → ask `[y/N]` (or `--yes`) → backup to
+  `.commitbrief/backups/COMMITBRIEF-<ISO-timestamp>.md` (Windows-safe,
+  no colons) → atomic temp+rename. Refuses to apply when the result
+  isn't smaller. `--out <path>` writes elsewhere without touching the
+  original.
+
 ### Changed
+- **Verbose footer** now labels cost differently on cache hits: `Cost:`
+  becomes `Saved:` (no provider call was made; the figure is what would
+  have been spent). The tokens line distinguishes the provider's own
+  prompt cache (`provider cached: N`) from CommitBrief's local response
+  cache (`local cache hit`).
 - `commitbrief dry-run` now reports per-layer filter counts (`built-in
   ignore filtered: N`, `.commitbriefignore net filtered: M`) instead of
   a single aggregate. A negative `M` means a `!pattern` in
@@ -18,12 +36,20 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 - `commitbrief list` includes a "Filtering" section documenting the
   three-layer pipeline (built-in → `.commitbriefignore` →
   `COMMITBRIEF.md` semantic) with a worked `.commitbriefignore` example.
+- **`README.md`** rewritten for the public release: Quick Start, install
+  matrix (Homebrew/Scoop/`go install`/Releases), provider+pricing table,
+  filtering pipeline, build-from-source.
 
 ### Tests
 - `scripts/smoke-test.sh` now exercises `.commitbriefignore` end-to-end:
   it stages a `go.sum`, confirms the built-in layer filters it, then adds
   `!go.sum` to `.commitbriefignore` and confirms the negative pattern
   reverts the built-in exclusion.
+- 15 new compress tests (level parsing, embedded prompts non-empty,
+  happy-path with fake provider, abort-when-larger, prompt-injection
+  guard wrap, system-prompt selection, post-processing of preamble +
+  code-fence wrappers, backup + atomic apply round-trip).
+- 4 new render tests covering the verbose-footer cache-savings label.
 
 ## [0.2.0] - 2026-05-26
 
