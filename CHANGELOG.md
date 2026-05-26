@@ -10,6 +10,98 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-26
+
+Scope expansion. Every review scope advertised in `commitbrief list` now
+works end-to-end; `--lang` becomes a first-class override with correct
+source attribution; the JSON output is locked at schema v1 with a
+documented contract and drift-guard golden test; user-facing action
+messages flow through the i18n catalog (Turkish parity verified).
+
+### Added
+- **`--commit <hash>` review scope.** Backend (`internal/git.CommitDiff`)
+  was wired in earlier phases; v0.5.0 finishes the surface with merge-
+  commit handling (OQ-03, decision (b)): when the requested hash has
+  two or more parents, the diff is taken against the first parent only
+  and a stderr warning suggests `--pull-request <target>...<feature>`
+  for full branch comparison. The `IsMerge` flag is set by both the
+  go-git and CLI git backends; `runReview` and `dry-run` emit the same
+  i18n-aware warning.
+- **`--branch <target>` and `--pull-request <target>...<feature>`
+  review scopes.** `BranchDiff` and `RangeDiff` were already wired in
+  the dispatcher; this release adds the integration test coverage that
+  was missing (`TestReviewBranchScope`, `TestReviewPullRequestScope`,
+  `TestReviewCommitHappyPath`, `TestReviewCommitInvalidHash`,
+  `TestReviewCommitMergeWarning`).
+- **Mutually exclusive scope flags.** Passing two scope flags at once
+  (e.g. `--staged --unstaged`) now fails before the pipeline runs, with
+  cobra's mutex-group error message naming both offenders. Covers all
+  six scopes: `--staged`, `--unstaged`, `--file`, `--commit`,
+  `--pull-request`, `--branch`. `TestReviewMutuallyExclusiveScopes`
+  guards it.
+- **`lang.SourceCLIFlag`** — new Source enum value for D-21 chain step
+  0 (CLI `--lang` flag wins over all other inputs). Previously the
+  override was attributed to `SourceRepoConfig` in dry-run output,
+  which was misleading; the new constant fixes the
+  `Lang: tr (source: cli flag)` line. `TestDryRunLangFlagOverride`
+  confirms end-to-end.
+- **Drift-guard golden test for `--json` output.**
+  `internal/render/testdata/json/v1.golden` is the byte-exact fixture;
+  `TestJSONv1Golden` diffs each run's output against it. Any rename,
+  type change, or removal trips the test. Use
+  `go test ./internal/render -update` to regenerate intentionally.
+- **`pickErrorCatalog()` helper** (`internal/cli/root.go`) — the
+  top-level `Error:` prefix shown when a command fails before
+  `appContext` is built now honors `--lang` and `LANG` env on a
+  best-effort basis. Adds `common.error_prefix` key (EN/TR).
+- **`.gitattributes`** — pins text files to LF in the working tree
+  (`* text=auto eol=lf` + per-extension reinforcement) so byte-exact
+  golden fixtures stop breaking on Windows CI with
+  `core.autocrlf=true`.
+
+### Changed
+- **CLI user-facing strings routed through `i18n.Catalog.T()`.**
+  Sixteen new keys cover the action paths: `init.exists`, `init.wrote`,
+  `review.no_changes`, `review.cache_disabled`, `review.pr_format`,
+  `compress.no_rules`, `compress.compressing`,
+  `compress.aborted_larger`, `compress.wrote_out`,
+  `compress.replace_prompt`, `compress.aborted_user`,
+  `compress.backed_up`, `compress.wrote_compressed`,
+  `setup.saved_local`, `setup.saved_global`, `common.error_prefix`.
+  Turkish translations ship for every key; `TestKeyParity` (MustHave)
+  stays green. Pragmatic scope: `%w` error wrappers (`stat %s: %w`,
+  `mkdir %s: %w`, `provider %s: %w`) and tabular output (dry-run
+  column labels, compress savings table) stay English by design.
+- **`internal/render/json.go` `SchemaVersion` constant** carries the
+  full versioning policy as a doc block: additive changes are not a
+  version bump; renames, removals, or type changes require
+  `SchemaVersion = 2` and a CHANGELOG entry. The shape itself is
+  unchanged from v0.4.0: `{schema, content, findings, summary, meta}`
+  with `findings` and `summary` reserved (always empty in v1).
+- **`fetchDiff` signature** now takes the i18n catalog
+  (`fetchDiff(repo, scope, cat)`) so the `--pull-request` format error
+  can be translated. Internal-only API; no consumer impact.
+- **`setup` command resolves `appContext` up front** even when
+  `--local` isn't set, so the post-wizard `Configuration saved to …`
+  line honors `--lang`. `resolveContext(false)` tolerates a missing
+  repo, which is the normal case for global `commitbrief setup`.
+- **OQ-03 (merge-commit handling) and OQ-24 (`--quiet` mode) marked
+  ✅ RESOLVED** in the maintainer's open-questions log; both
+  decisions are now reflected in code.
+
+### Fixed
+- **Windows golden-file test now passes** regardless of
+  `core.autocrlf`. `TestJSONv1Golden` normalizes `\r\n` → `\n` in the
+  on-disk fixture before comparison; `.gitattributes` (above) is the
+  long-term hygiene.
+
+## [0.4.0] - 2026-05-26
+
+First publicly released version. Performance and savings: response
+caching is fully wired, `commitbrief compress` lands as a feature, the
+verbose footer surfaces token/cost/latency, and the release pipeline
+(GitHub Releases + Homebrew + Scoop) goes live.
+
 ### Added
 - **`commitbrief compress`** — full implementation (ADR-0010). Three
   embedded compression prompts (`light`, `balanced` default,
@@ -227,6 +319,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/CommitBrief/commitbrief/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/CommitBrief/commitbrief/compare/v0.2.0...v0.4.0
 [0.2.0]: https://github.com/CommitBrief/commitbrief/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/CommitBrief/commitbrief/releases/tag/v0.1.0
