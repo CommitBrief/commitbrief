@@ -2,11 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/CommitBrief/commitbrief/internal/cache"
 	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/ignore"
 	"github.com/CommitBrief/commitbrief/internal/prompt"
 	"github.com/CommitBrief/commitbrief/internal/rules"
 )
@@ -29,9 +31,14 @@ func newDryRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			matcher := buildMatcher(app.RepoRoot)
 			before := parsed.FileCount()
-			parsed = diff.Filter(parsed, matcher)
+			builtinMatcher := ignore.Builtin()
+			afterBuiltin := diff.Filter(parsed, builtinMatcher)
+			repoIgnore, _ := ignore.ParseFile(filepath.Join(app.RepoRoot, ignore.Filename))
+			combined := ignore.Compose(builtinMatcher, repoIgnore)
+			parsed = diff.Filter(parsed, combined)
+			builtinExcluded := before - afterBuiltin.FileCount()
+			repoExcluded := afterBuiltin.FileCount() - parsed.FileCount()
 			loaded, err := rules.Load(app.RepoRoot)
 			if err != nil {
 				return err
@@ -54,7 +61,10 @@ func newDryRunCmd() *cobra.Command {
 			lines := []string{
 				"Dry run — no provider call.",
 				fmt.Sprintf("Origin:        %s", rawDiff.Origin),
-				fmt.Sprintf("Files:         %d (filtered from %d)", parsed.FileCount(), before),
+				fmt.Sprintf("Files (input): %d", before),
+				fmt.Sprintf("  built-in ignore filtered:        %d", builtinExcluded),
+				fmt.Sprintf("  .commitbriefignore net filtered: %d", repoExcluded),
+				fmt.Sprintf("Files (review): %d", parsed.FileCount()),
 				fmt.Sprintf("Added lines:   %d", parsed.AddedLines()),
 				fmt.Sprintf("Deleted lines: %d", parsed.DeletedLines()),
 				fmt.Sprintf("Provider:      %s", app.Config.Provider),

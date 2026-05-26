@@ -97,6 +97,31 @@ key2=$(echo "$out2" | awk '/Cache key:/ {print $3}')
 [ "$key1" != "$key2" ] || fail "cache key did not invalidate after COMMITBRIEF.md edit"
 ok "cache key invalidated after rules change (was $key1 → $key2)"
 
+# 7. .commitbriefignore — stage a file that the built-in layer filters
+#    (go.sum), confirm it's excluded; then add a negative pattern to
+#    .commitbriefignore and confirm it gets reviewed.
+step ".commitbriefignore exclusion + negative-pattern revert"
+(
+  cd "$TMPDIR"
+  cat > go.sum <<'EOF'
+example.com/foo v1.0.0/go.mod h1:abc
+EOF
+  git add go.sum
+)
+out3=$(cd "$TMPDIR" && "$OLDPWD/$BIN" dry-run --staged)
+builtin_filtered=$(echo "$out3" | awk '/built-in ignore filtered:/ {print $NF}')
+[ "$builtin_filtered" -ge 1 ] || fail "built-in layer did not catch go.sum (filtered=$builtin_filtered)"
+ok "built-in layer filtered $builtin_filtered file(s) including go.sum"
+
+(cd "$TMPDIR" && echo '!go.sum' > .commitbriefignore)
+out4=$(cd "$TMPDIR" && "$OLDPWD/$BIN" dry-run --staged)
+builtin_after=$(echo "$out4" | awk '/built-in ignore filtered:/ {print $NF}')
+repo_net=$(echo "$out4" | awk '/.commitbriefignore net filtered:/ {print $NF}')
+# Negative pattern: built-in still reports the match, but repo layer reverts it
+# (net effect: one file un-filtered).
+[ "$repo_net" -lt 0 ] || fail "negative pattern did not revert built-in (repo_net=$repo_net)"
+ok "!go.sum reverted built-in exclusion (repo net = $repo_net)"
+
 echo
 ok "smoke-test: all checks passed"
 echo

@@ -10,6 +10,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- `commitbrief dry-run` now reports per-layer filter counts (`built-in
+  ignore filtered: N`, `.commitbriefignore net filtered: M`) instead of
+  a single aggregate. A negative `M` means a `!pattern` in
+  `.commitbriefignore` reverted built-in exclusions.
+- `commitbrief list` includes a "Filtering" section documenting the
+  three-layer pipeline (built-in → `.commitbriefignore` →
+  `COMMITBRIEF.md` semantic) with a worked `.commitbriefignore` example.
+
+### Tests
+- `scripts/smoke-test.sh` now exercises `.commitbriefignore` end-to-end:
+  it stages a `go.sum`, confirms the built-in layer filters it, then adds
+  `!go.sum` to `.commitbriefignore` and confirms the negative pattern
+  reverts the built-in exclusion.
+
+## [0.2.0] - 2026-05-26
+
+Provider matrix. The CLI now talks to OpenAI, Google Gemini, and Ollama
+in addition to Anthropic; `commitbrief setup` cycles through all four
+during the wizard. Private repository; no public artifacts.
+
 ### Added
 - **OpenAI provider** (`internal/provider/openai`) — `gpt-4o`, `gpt-4o-mini`
   via the official `github.com/openai/openai-go` SDK; honors automatic
@@ -129,5 +150,6 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/CommitBrief/commitbrief/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/CommitBrief/commitbrief/releases/tag/v0.1.0
