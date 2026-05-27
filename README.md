@@ -16,6 +16,9 @@ commitbrief --unstaged --dir app/Models    # narrow any scope to a directory
 Output is rendered as colored markdown in the terminal, plain markdown
 to a file, or strict JSON for tooling — your choice.
 
+<img width="970" height="594" alt="commitbrief" src="https://github.com/user-attachments/assets/7cf97b78-36f9-4376-8549-6e3bc2e47674" />
+
+
 ## Why
 
 A real reviewer is the gold standard, but they aren't always available
