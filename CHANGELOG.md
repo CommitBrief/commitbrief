@@ -30,8 +30,17 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   Borders are drawn manually (`╭ ╮ ╰ ╯ ─ │` painted on the panel bg)
   with a `\x1b[0m\x1b[49m\x1b[K` terminator on every row so colored
   backgrounds don't bleed past the card's right edge in wide
-  terminals. Each card auto-sizes to its widest content row + 24-char
-  breathing-room padding rather than sharing a fixed outer width.
+  terminals.
+
+  **Fixed inner content width** of 96 columns (100 outer, including
+  borders + side padding) — long LLM descriptions and titles wrap to
+  panel-bg-filled continuation rows via lipgloss `Width()` instead of
+  expanding the card past the terminal edge. Diff lines wrap the same
+  way; truncation was rejected because code reviewers want to see
+  whole lines even when the wrap break lands mid-statement. Earlier
+  secguard `contentWidth + 24` heuristic dropped — it made each card
+  a different size based on its content, which broke alignment in
+  multi-finding views.
   - **Border now blends with the panel background** via
     `BorderBackground(bg)`. The rounded corners (`╭ ╮ ╰ ╯`) previously
     sat on the terminal-default colour, which read as a dark gap

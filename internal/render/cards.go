@@ -170,6 +170,16 @@ var (
 // right border when the terminal line is wider than the rendered card.
 const clearEOL = "\x1b[0m\x1b[49m\x1b[K"
 
+// cardContentWidth is the fixed inner content width of a finding panel.
+// Outer card = cardContentWidth + 4 (2 borders + 1 space padding each
+// side) = 100 columns, matching typical terminal width. Title and
+// description wrap to this width via lipgloss `Width()`; long diff
+// lines wrap inside their colored strip. Without a cap, real LLM
+// descriptions (often 200+ chars without line breaks) would balloon
+// the card past the terminal width and the right border would fall
+// off-screen.
+const cardContentWidth = 96
+
 // cardsHeader: "commitbrief vX.Y.Z · provider: name/model · cache: hit"
 // Each segment is colored independently; bullets stay quiet.
 func cardsHeader(m Meta) string {
@@ -323,48 +333,41 @@ func cardsFindingPanel(f Finding) string {
 	gap := lipgloss.NewStyle().Background(theme.panelBg).Render("  ")
 	header := lipgloss.JoinHorizontal(lipgloss.Top, chip, gap, path)
 
+	// Title and description wrap to cardContentWidth via lipgloss
+	// `Width()` — long inputs (LLM descriptions can easily run 200+
+	// chars without line breaks) get broken into multiple panel-bg
+	// rows instead of expanding the card past the terminal edge.
 	title := lipgloss.NewStyle().
 		Foreground(cardWhite).
 		Background(theme.panelBg).
 		Bold(true).
+		Width(cardContentWidth).
 		Render(f.Title)
 
 	desc := lipgloss.NewStyle().
 		Foreground(cardMuted).
 		Background(theme.panelBg).
+		Width(cardContentWidth).
 		Render(f.Description)
 
 	diff := parseSnippetToDiffLines(f.Snippet)
 
-	contentWidth := lipgloss.Width(header)
-	for _, w := range []int{lipgloss.Width(title), lipgloss.Width(desc)} {
-		if w > contentWidth {
-			contentWidth = w
-		}
-	}
-	for _, l := range diff {
-		if w := lipgloss.Width(l.text) + 4; w > contentWidth {
-			contentWidth = w
-		}
-	}
-	contentWidth += 24
-
-	fill := lipgloss.NewStyle().Background(theme.panelBg).Width(contentWidth)
+	// Header is JoinHorizontal'd (no Width on it yet); pad to the
+	// fixed content width so trailing space gets the panel bg.
+	fill := lipgloss.NewStyle().Background(theme.panelBg).Width(cardContentWidth)
 	header = fill.Render(header)
-	title = fill.Render(title)
-	desc = fill.Render(desc)
 	blank := fill.Render("")
 
 	parts := []string{blank, header, blank, title, desc, blank}
 	if len(diff) > 0 {
-		parts = append(parts, renderDiff(diff, contentWidth), blank)
+		parts = append(parts, renderDiff(diff, cardContentWidth), blank)
 	}
 	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	borderStyle := lipgloss.NewStyle().Foreground(theme.border).Background(theme.panelBg)
 	padStyle := lipgloss.NewStyle().Background(theme.panelBg)
 
-	dashes := borderStyle.Render(strings.Repeat("─", contentWidth+2))
+	dashes := borderStyle.Render(strings.Repeat("─", cardContentWidth+2))
 	top := borderStyle.Render("╭") + dashes + borderStyle.Render("╮")
 	bot := borderStyle.Render("╰") + dashes + borderStyle.Render("╯")
 
@@ -381,18 +384,16 @@ func cardsFindingPanel(f Finding) string {
 }
 
 // renderDiff turns the parsed diff lines into a styled multi-line
-// string. Added/removed lines get a 100%-width colored strip (sign
+// string. Added/removed lines get a fixed-width colored strip (sign
 // char in a faint signFg, body in fg+bg pair); context lines pass
-// through with codeFg on default bg so they read as "this is around
-// the change, not part of it".
-func renderDiff(lines []diffLine, minWidth int) string {
-	width := minWidth
-	for _, l := range lines {
-		if n := lipgloss.Width(l.text) + 4; n > width {
-			width = n
-		}
-	}
-
+// through with codeFg on default bg.
+//
+// Width is fixed at the caller's `width` parameter — long source
+// lines wrap via lipgloss `Width()` into multiple strip rows rather
+// than extending the panel past the terminal edge. Truncation was
+// considered but rejected: code reviewers want to see the whole
+// line, even if the wrap break lands mid-statement.
+func renderDiff(lines []diffLine, width int) string {
 	var out []string
 	for _, l := range lines {
 		var bg, fg lipgloss.Color
@@ -415,7 +416,7 @@ func renderDiff(lines []diffLine, minWidth int) string {
 				Width(width - lipgloss.Width(sign))
 			out = append(out, signStyle.Render(sign)+textStyle.Render(l.text))
 		} else {
-			style := lipgloss.NewStyle().Foreground(fg)
+			style := lipgloss.NewStyle().Foreground(fg).Width(width)
 			out = append(out, style.Render(sign+l.text))
 		}
 	}
