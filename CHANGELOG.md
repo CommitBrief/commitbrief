@@ -10,6 +10,59 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Migration guide (v0.x → v1.0)
+
+The v1.0.0 line is the **API freeze checkpoint**. CLI flag surface,
+JSON schema v1, and the `COMMITBRIEF.md` / `OUTPUT.md` formats follow
+strict semver from here on — breaking changes wait for v2.x. If
+you're upgrading from anywhere on the v0.x line, the moves below are
+the ones that matter:
+
+- **Scope flags replaced with `commitbrief diff`.** `--commit
+  <hash>`, `--branch <name>`, and `--pull-request <range>` were
+  collapsed into the single `diff` subcommand in v0.9.0, which
+  forwards verbatim to `git diff <args>`. Rewrites:
+
+  | v0.x                                 | v1.0                                |
+  |--------------------------------------|--------------------------------------|
+  | `commitbrief --commit abc123`        | `commitbrief diff abc123`            |
+  | `commitbrief --branch main feature`  | `commitbrief diff main feature`      |
+  | `commitbrief --pull-request main...feature` | `commitbrief diff main...feature` |
+
+  `--staged` and `--unstaged` are unchanged.
+
+- **`--yes` no longer bypasses the secret scanner or cost preflight.**
+  Use the dedicated flags: `--allow-secrets` to acknowledge a
+  credential-shaped string in the diff, `--no-cost-check` to skip
+  the preflight prompt. CI scripts that wired `--yes` in for both
+  guard prompts AND cost approval need to opt in to each
+  explicitly now. (UC-01, UC-06, shipped v0.9.1)
+
+- **`cache.max_size_mb` config key removed.** It was defined in the
+  struct but nothing ever read it; the cache only honors `enabled`
+  and `ttl_days`. Setting it now errors as an unknown field. Remove
+  the line from your config; eviction is TTL-based. (UC-02, shipped v0.9.1)
+
+- **Locale surface is now strictly `{en, tr}`.** Pre-v0.9.2 the
+  config accepted any ISO code; `i18n.Load` silently fell through
+  to English for everything except `tr`, leaving the dry-run footer
+  claiming "Lang: Deutsch" while the output was actually English.
+  Now `output.lang: <unsupported>` is coerced to `en` while the
+  Resolution's `Source` is preserved. (UC-09, shipped v0.9.2)
+
+- **`Diff.IsMerge` field removed.** The merge-commit warning was
+  retired with the scope-flag collapse — `commitbrief diff
+  <merge-sha>` gives first-parent semantics with no special prompt
+  (same as `git diff <merge-sha>`). Library consumers reading the
+  field need to drop it. (UC-20, shipped v1.0.0-rc.1)
+
+JSON schema v1 (`{schema, content, findings, summary, meta}`) is
+unchanged across the upgrade — anything piping `--json` to a tool
+keeps working. The `findings[].suggestion` field is required from
+v0.9.0 onwards; older parsers that treated it as optional still work
+since the field is always populated, but new parsers should rely on
+it being present.
+
 ### Changed
 - **CLAUDE.md documents the `make check` post-development gate.** New
   hard rule: any Go change under `commitbrief/` must pass
@@ -28,6 +81,31 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   CLI-scopes note updated to reflect the post-v0.9.0 surface. (UC-20)
 
 ### Added
+- **README "Stability" section.** Declares the v1.0.0 API freeze
+  scope: CLI flag surface, JSON schema v1, `COMMITBRIEF.md` /
+  `OUTPUT.md` formats, public config keys — all under strict semver
+  from v1.0.0 onwards. Links to the upgrade-from-v0.x migration
+  guide in CHANGELOG.
+
+- **BENCHMARKS.md baseline snapshot.** Captures the diff-pipeline
+  and cache-hit numbers at the v1.0.0-rc.1 freeze point on the
+  reference hardware (Apple M4 Pro, Go 1.25, darwin/arm64). Used
+  as a regression detector — a future 2× slowdown is the trigger
+  for an investigation. Not auto-failed in CI (cross-runner CPU
+  variance generates too much noise).
+
+- **CHANGELOG migration guide (v0.x → v1.0).** Single section
+  collecting every breaking change since the v0.9.x line started:
+  scope-flag collapse, `--yes` scope narrowing, `cache.max_size_mb`
+  removal, locale narrow, `Diff.IsMerge` removal. Linked from
+  README.
+
+- **README command-surface refresh.** Adds `init --force`,
+  `compress --dry-run`, `--cli`, `--allow-secrets`, and
+  `--no-cost-check` to the Global flags list and command table.
+  The `--provider-agnostic` bullet at the top now mentions
+  `claude-cli` / `gemini-cli` alongside the four API providers.
+
 - **New `make check` target.** Runs every guard CI runs, in CI order,
   bailing on the first failure. Single entry-point for "is this
   push-ready?" — see CLAUDE.md hard rules.

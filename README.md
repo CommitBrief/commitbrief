@@ -24,8 +24,9 @@ read on your diff before another human (or your future self) sees it.
 
 - **Local-first.** Diffs and review output stay on your machine. The
   only network egress is to the provider you chose.
-- **Provider-agnostic.** Anthropic, OpenAI, Gemini, or Ollama (no API
-  key needed for local Ollama).
+- **Provider-agnostic.** Anthropic, OpenAI, Gemini, or Ollama as
+  API-backed providers; `claude-cli` and `gemini-cli` reuse your
+  local Claude Code / Gemini CLI subscription (no extra API key).
 - **Cache aware.** Re-running on an unchanged diff is essentially free —
   one disk read, no token spend. `--verbose` shows what you saved.
 - **Custom review rules.** A repo's `COMMITBRIEF.md` is sent as the
@@ -58,6 +59,20 @@ go install github.com/CommitBrief/commitbrief/cmd/commitbrief@latest
 Pre-built binaries for Linux, macOS, and Windows on amd64 and arm64 are
 attached to each tagged release at
 [github.com/CommitBrief/commitbrief/releases](https://github.com/CommitBrief/commitbrief/releases).
+
+## Stability
+
+The v1.0.0 line is an **API freeze**. CLI flag surface, the JSON
+schema v1 (`{schema, content, findings, summary, meta}` — emitted by
+`--json`), `COMMITBRIEF.md` and `OUTPUT.md` formats, and the public
+config keys all follow strict semver from v1.0.0 onwards — breaking
+changes ship in v2.x. The current line is `v1.0.0-rc.1`, the freeze
+checkpoint; anything locked in here is the long-term contract.
+
+Upgrading from v0.x? See the [migration guide in
+CHANGELOG.md](CHANGELOG.md#migration-guide-v0x--v10) — the scope
+flags (`--commit` / `--branch` / `--pull-request`) and `--yes`
+semantics changed during the v0.9.x line.
 
 ## Quick start
 
@@ -142,25 +157,29 @@ commitbrief --unstaged --dir database/seeder --dir app/Models
 commitbrief diff HEAD~3 HEAD --dir docs
 
 # Setup and rules
-commitbrief setup [--local]                # provider + API key wizard
-commitbrief providers list|use|test        # switch active provider without re-running setup
-commitbrief config show|get|set            # inspect / tweak the merged YAML config
-commitbrief init                           # write COMMITBRIEF.md + OUTPUT.md template
-commitbrief compress [--level=balanced]    # shrink COMMITBRIEF.md
-commitbrief doctor                         # health-check the pipeline
-commitbrief install-hook [--hook=...]      # install a git hook that runs commitbrief
-commitbrief dry-run                        # pipeline preview; no API call
-commitbrief list                           # command reference
+commitbrief setup [--local]                  # provider + API key wizard
+commitbrief providers list|use|test          # switch active provider without re-running setup
+commitbrief config show|get|set              # inspect / tweak the merged YAML config
+commitbrief init [--force]                   # write COMMITBRIEF.md + OUTPUT.md template
+commitbrief compress [--level=balanced] [--dry-run]  # shrink COMMITBRIEF.md (preview first if you want)
+commitbrief doctor                           # health-check the pipeline
+commitbrief install-hook [--hook=...]        # install a git hook that runs commitbrief
+commitbrief dry-run                          # pipeline preview; no API call
+commitbrief list                             # command reference
 
 # Cache maintenance
 commitbrief cache clear                    # wipe every cached LLM response for this repo
 commitbrief cache prune [flags]            # bounded cleanup; defaults --keep-last 500 --older-than 7d
 ```
 
-Global flags include `--json`, `--markdown`, `--output <file>`, `--copy`,
+Global flags: `--json`, `--markdown`, `--output <file>`, `--copy`,
 `--compact`, `--no-cache`, `--fail-on=<sev>`, `-f/--file` (repeatable),
 `-d/--dir` (repeatable), `--yes`, `--verbose`, `--quiet`, `--lang`,
-`--provider`, `--model`, `--color`. See `commitbrief --help`.
+`--provider`, `--model`, `--cli <claude|gemini>` (shorthand for the
+CLI-tool-backed providers; mutually exclusive with `--json` /
+`--markdown`), `--allow-secrets` (acknowledge a flagged credential in
+the diff), `--no-cost-check` (skip cost preflight), `--color`. See
+`commitbrief --help`.
 
 ## Providers and pricing
 
