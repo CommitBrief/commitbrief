@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-27
+
 ### Changed
 - **Diff aggregate caching.** `Diff.AddedLines()` / `DeletedLines()`
   switched from O(N) live traversal to O(1) reads of fields populated
@@ -47,11 +49,11 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   same string different "sizes". Leaf package with zero deps; no
   import-cycle risk.
 
-  Sourced from a Gemini-authored optimization review (see
-  `commitbrief/reviews/optimization.md` — maintainer-private). Two
-  Gemini findings deferred to v1.x: the template-parse-per-render
-  finding (not actually hot — once per CLI run) and the rest of the
-  filter-layer optimization (only 1–2× per review, low ROI vs effort).
+  Sourced from a Gemini-authored optimization review of the
+  codebase. Two of Gemini's findings deferred to v1.x: the
+  template-parse-per-render finding (not actually hot — render runs
+  once per CLI invocation) and the remaining filter-layer
+  optimizations (fires 1–2× per review, low ROI vs. effort).
 
 ### Added
 - **Per-finding `suggestion` field — required actionable remediation.**
