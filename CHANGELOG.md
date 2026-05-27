@@ -34,6 +34,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   Backend. (UC-23)
 
 ### Added
+- **CLI splash logo on every run.** A 16×16 half-block rendering of
+  the CommitBrief mark (the same gradient + arrow as the favicon
+  and web logo), shown alongside the wordmark, tagline, and OSC 8
+  hyperlinks to Home / Docs / GitHub / Sponsor / Author. Printed to
+  stderr only — `commitbrief --json | jq` and `--markdown > file`
+  stay uncorrupted — and gated on a TTY-capable stderr so redirected
+  CI logs don't fill with raw 24-bit color escapes. The wordmark
+  line embeds the resolved build version (`version.Version`), so it
+  always matches the running binary.
+
 - **`--cli` is mutually exclusive with `--json` and `--markdown`.**
   CLI-provider output is pre-formatted plain text; combining it with
   a structured renderer either re-flows the formatting we just paid

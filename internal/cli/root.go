@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra/doc"
 
 	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/logo"
 	"github.com/CommitBrief/commitbrief/internal/ui"
 	"github.com/CommitBrief/commitbrief/internal/version"
 )
@@ -139,6 +140,17 @@ func Execute() {
 	// the review.
 	_ = ui.EnableANSI(os.Stdout)
 	_ = ui.EnableANSI(os.Stderr)
+
+	// Branding: render the CommitBrief logo on every run so the mark
+	// is the first thing the user sees. Writes to stderr only so a
+	// piped stdout (`commitbrief --json | jq`, `--markdown > file`)
+	// stays uncorrupted; gated on a TTY-capable stderr so redirected
+	// CI logs don't fill up with raw 24-bit color escapes. The version
+	// string is the resolved value (ldflags-injected at release time,
+	// debug.BuildInfo for `go install`, or "dev" for ad-hoc builds).
+	if ui.ColorEnabled(os.Stderr, ui.ColorAuto) {
+		logo.Print(os.Stderr, version.Version)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
