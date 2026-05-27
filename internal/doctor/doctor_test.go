@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/provider/mock"
 )
@@ -130,6 +131,83 @@ func TestCheckProviderConfiguredFailsWhenOllamaConfiguredButInactive(t *testing.
 	got := r.checkProviderConfigured()
 	if got.Status != StatusFail {
 		t.Errorf("Status = %v, want StatusFail when no keys and ollama not active", got.Status)
+	}
+}
+
+func TestCheckActiveProviderFailsWhenActiveLacksCredentials(t *testing.T) {
+	// UC-03 regression guard. Even when *another* provider has a key,
+	// the doctor must fail the active provider check if the active one
+	// has no credentials of its own — otherwise users hit a silent 401
+	// at first review. This is precisely the gap checkProviderConfigured
+	// papered over.
+	r := minimalRunner(t)
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Catalog = cat
+	for n := range r.Config.Providers {
+		r.Config.Providers[n] = config.ProviderConfig{}
+	}
+	r.Config.Providers["anthropic"] = config.ProviderConfig{APIKey: "sk-test"}
+	r.Config.Provider = "openai" // openai is the active selection, but it has no key
+
+	got := r.checkActiveProvider()
+	if got.Status != StatusFail {
+		t.Errorf("active=openai with only anthropic key should Fail; got %v (detail=%q)", got.Status, got.Detail)
+	}
+	if !strings.Contains(got.Detail, "openai") {
+		t.Errorf("detail should name the misconfigured provider; got %q", got.Detail)
+	}
+}
+
+func TestCheckActiveProviderOKWhenActiveHasKey(t *testing.T) {
+	r := minimalRunner(t)
+	for n := range r.Config.Providers {
+		r.Config.Providers[n] = config.ProviderConfig{}
+	}
+	r.Config.Providers["openai"] = config.ProviderConfig{APIKey: "sk-openai-test"}
+	r.Config.Provider = "openai"
+
+	got := r.checkActiveProvider()
+	if got.Status != StatusOK {
+		t.Errorf("active=openai with own key should be OK; got %v (detail=%q)", got.Status, got.Detail)
+	}
+}
+
+func TestCheckActiveProviderOKWhenActiveIsOllamaWithBaseURL(t *testing.T) {
+	r := minimalRunner(t)
+	for n := range r.Config.Providers {
+		r.Config.Providers[n] = config.ProviderConfig{}
+	}
+	r.Config.Providers["ollama"] = config.ProviderConfig{BaseURL: "http://localhost:11434"}
+	r.Config.Provider = "ollama"
+
+	got := r.checkActiveProvider()
+	if got.Status != StatusOK {
+		t.Errorf("ollama-active with base_url should be OK; got %v", got.Status)
+	}
+}
+
+func TestCheckActiveProviderFailsWhenActiveNotInProvidersMap(t *testing.T) {
+	// A typo or hand-edited config can leave Provider pointing at a key
+	// that doesn't exist in Providers — surface this as a distinct Fail
+	// instead of misreporting it as "no credentials".
+	r := minimalRunner(t)
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Catalog = cat
+	r.Config.Provider = "nonexistent-provider"
+	delete(r.Config.Providers, "nonexistent-provider")
+
+	got := r.checkActiveProvider()
+	if got.Status != StatusFail {
+		t.Errorf("unknown active provider should Fail; got %v", got.Status)
+	}
+	if !strings.Contains(got.Detail, "nonexistent-provider") {
+		t.Errorf("detail should name the offending provider; got %q", got.Detail)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -394,10 +395,12 @@ func TestDoctorQuietOnlyShowsNonOK(t *testing.T) {
 
 func TestDoctorExitMessageNamesFailureCount(t *testing.T) {
 	// When something does fail, the cobra-surfaced error should be
-	// specific enough that CI logs are actionable.
+	// specific enough that CI logs are actionable. An empty providers
+	// section trips both `provider_configured` and `active_provider`
+	// (UC-03), so we expect at least one check to be named in the
+	// summary — the exact count is allowed to grow as new checks land.
 	e := newCLIEnv(t)
 	cfgPath := filepath.Join(e.homeDir, ".commitbrief", "config.yml")
-	// Empty providers section → provider_configured Fail.
 	if err := os.WriteFile(cfgPath, []byte("version: 1\nprovider: mock\nproviders:\n  mock:\n    model: mock-model\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -405,8 +408,12 @@ func TestDoctorExitMessageNamesFailureCount(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on no-keys config")
 	}
-	if !strings.Contains(err.Error(), "1 check") && !strings.Contains(err.Error(), "1 kontrol") {
-		t.Errorf("error %q should mention how many checks failed", err.Error())
+	msg := err.Error()
+	if !strings.Contains(msg, "check") && !strings.Contains(msg, "kontrol") {
+		t.Errorf("error %q should reference checks at all", msg)
+	}
+	if !regexp.MustCompile(`\b[1-9]\d* (check|kontrol)`).MatchString(msg) {
+		t.Errorf("error %q should mention a positive failure count", msg)
 	}
 }
 

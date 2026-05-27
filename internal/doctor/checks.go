@@ -36,6 +36,7 @@ func (r *Runner) RunAll(ctx context.Context) []Result {
 		r.checkRules(),
 		r.checkOutput(),
 		r.checkProviderConfigured(),
+		r.checkActiveProvider(),
 		r.checkCache(),
 		r.checkGitignore(),
 	}
@@ -127,6 +128,42 @@ func (r *Runner) checkProviderConfigured() Result {
 		}
 	}
 	return Result{Name: name, Status: StatusFail, Detail: r.t("doctor.detail.no_provider")}
+}
+
+// checkActiveProvider verifies that the *currently selected* provider
+// (Config.Provider) has the credentials it needs to run a review. The
+// earlier checkProviderConfigured returns OK as long as *any* provider
+// is configured — which papered over a real footgun: a user could pick
+// `provider: openai` while only `anthropic.api_key` is set, and doctor
+// would say "all good" right up until the next review call exploded
+// with a 401. UC-03 in PATCH_ROADMAP closes that gap.
+//
+// "Has credentials" means the same predicate the runtime uses:
+//   - an API key on the active provider's entry, OR
+//   - the active provider is ollama AND its base_url is set
+//
+// Returns Fail (not Warn) — a misaligned active provider blocks every
+// review, so it deserves the red glyph and a non-zero exit code.
+func (r *Runner) checkActiveProvider() Result {
+	name := r.t("doctor.check.active_provider")
+	active := r.Config.Provider
+	if active == "" {
+		// checkConfig already flagged this; reuse the same Fail signal
+		// here so the table reads top-to-bottom without one stage
+		// silently depending on another.
+		return Result{Name: name, Status: StatusFail, Detail: r.t("doctor.detail.config_no_provider")}
+	}
+	pc, ok := r.Config.Providers[active]
+	if !ok {
+		return Result{Name: name, Status: StatusFail, Detail: r.t("doctor.detail.active_provider_unknown", active)}
+	}
+	if pc.APIKey != "" {
+		return Result{Name: name, Status: StatusOK, Detail: active}
+	}
+	if active == "ollama" && pc.BaseURL != "" {
+		return Result{Name: name, Status: StatusOK, Detail: active}
+	}
+	return Result{Name: name, Status: StatusFail, Detail: r.t("doctor.detail.active_provider_no_creds", active)}
 }
 
 // checkProviderConnections pings every provider that looks configured
