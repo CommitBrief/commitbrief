@@ -37,8 +37,7 @@ read on your diff before another human (or your future self) sees it.
 ### Homebrew (macOS / Linux)
 
 ```sh
-brew tap CommitBrief/tap
-brew install commitbrief
+brew install CommitBrief/tap/commitbrief
 ```
 
 ### Scoop (Windows)
