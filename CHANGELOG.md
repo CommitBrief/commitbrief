@@ -40,21 +40,6 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   the host CLI for or, worse, parses prose as JSON. Cobra now rejects
   the pairing before any provider call. (UC-07)
 
-### Fixed
-- **`commitbrief diff` now accepts pathspecs and >2 args.** The
-  subcommand used to cap at two positional args, which rejected
-  legitimate `git diff <ref> -- <pathspec>` invocations (e.g.
-  `commitbrief diff main -- '*.go'`). Cobra constraint relaxed to
-  `MinimumNArgs(1)`; everything past the first arg is forwarded to
-  `git diff` verbatim and git itself arbitrates validity. (UC-08)
-
-- **`ui.EnableANSI` is now called from `Execute`.** On legacy Windows
-  consoles the VT100 escape mode must be opted into before any ANSI
-  codes are written; we shipped the helper but never invoked it at
-  the entry point, so colored output landed as raw escape sequences
-  on those terminals. POSIX builds keep the no-op stub. (UC-18)
-
-### Added
 - **`dry-run` now reports output tokens, context window, and cost
   estimate.** The previous report stopped at the input-tokens
   estimate, which made it useful for "will this fit?" but useless
@@ -70,6 +55,19 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   rewrite. Mutually exclusive with `--out`. (UC-22)
 
 ### Fixed
+- **`commitbrief diff` now accepts pathspecs and >2 args.** The
+  subcommand used to cap at two positional args, which rejected
+  legitimate `git diff <ref> -- <pathspec>` invocations (e.g.
+  `commitbrief diff main -- '*.go'`). Cobra constraint relaxed to
+  `MinimumNArgs(1)`; everything past the first arg is forwarded to
+  `git diff` verbatim and git itself arbitrates validity. (UC-08)
+
+- **`ui.EnableANSI` is now called from `Execute`.** On legacy Windows
+  consoles the VT100 escape mode must be opted into before any ANSI
+  codes are written; we shipped the helper but never invoked it at
+  the entry point, so colored output landed as raw escape sequences
+  on those terminals. POSIX builds keep the no-op stub. (UC-18)
+
 - **Shared interactive stdin across the review pipeline.** Guard,
   secret scanner, and cost preflight used to each instantiate their
   own `bufio.Scanner` over `os.Stdin`. With multiple prompts firing
