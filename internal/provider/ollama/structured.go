@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package ollama
 
 // formatJSON is the value Ollama's /api/chat `format` field accepts to

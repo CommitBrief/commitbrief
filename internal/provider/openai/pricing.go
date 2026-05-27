@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package openai
 
 import "github.com/CommitBrief/commitbrief/internal/provider"

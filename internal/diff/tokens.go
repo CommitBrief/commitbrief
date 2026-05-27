@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package diff
 
 // EstimateTokens returns a rough token count from byte length using the

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package doctor provides a pipeline health check surface for the
 // `commitbrief doctor` subcommand. Each "check" inspects one concern
 // (git binary on PATH, config validity, provider reachability, cache

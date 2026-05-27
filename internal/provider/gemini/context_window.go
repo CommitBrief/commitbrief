@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package gemini
 
 const defaultContextWindow = 1_000_000

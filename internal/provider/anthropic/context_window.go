@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package anthropic
 
 const defaultContextWindow = 200_000

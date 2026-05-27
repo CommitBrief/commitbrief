@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package clipboard pushes a text payload onto the host's system
 // clipboard. Two transports are tried in tandem:
 //

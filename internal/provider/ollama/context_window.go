@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package ollama
 
 // defaultContextWindow is a conservative fallback for unknown local

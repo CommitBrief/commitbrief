@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package lang
 
 import "github.com/CommitBrief/commitbrief/internal/config"
