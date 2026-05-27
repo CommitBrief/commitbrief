@@ -11,6 +11,60 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **`commitbrief diff <args...>` subcommand** — git-diff passthrough
+  for reviewing arbitrary historic ranges. Args are forwarded verbatim
+  to `git diff --no-color --no-ext-diff <args>` (1 or 2 positional
+  args; cobra rejects 0 or 3+). Replaces the v0.8.x scope flags
+  `--commit`, `--branch`, and `--pull-request` — anything those did,
+  git's native syntax does:
+
+  | Old                                     | New                                |
+  |-----------------------------------------|------------------------------------|
+  | `commitbrief --commit HEAD~1`           | `commitbrief diff HEAD~1`          |
+  | `commitbrief --branch main`             | `commitbrief diff main`            |
+  | `commitbrief --pull-request main...x`   | `commitbrief diff main...x`        |
+  |                                         | `commitbrief diff HEAD~3 HEAD`     |
+
+  `--file` / `--dir` path filters compose on top.
+
+- **Global `--file` / `-f` and `--dir` / `-d` flags** — path filters
+  applied post-parse, repeatable, work on any scope (`--staged`,
+  `--unstaged`, `diff`). When neither scope flag is given, the path
+  filters default to `--staged` semantics — `commitbrief --file x.go`
+  ≡ `commitbrief --staged --file x.go`. Examples:
+
+  ```
+  commitbrief --unstaged --file app/Http/Controllers/API.php --file routes/web.php
+  commitbrief --unstaged --dir database/seeder --dir app/Models
+  commitbrief diff HEAD~3 HEAD --dir docs
+  ```
+
+  `--dir` matches by `<path>/` prefix on path-segment boundaries
+  (`database/seed` does NOT match `database/seedother/*`). Renamed
+  files match on either new path or `OldPath` so the user can refer
+  to either side of a rename. New `diff.KeepPaths(d, files, dirs)`
+  helper in `internal/diff/filter.go`.
+
+- **`commitbrief cache prune` subcommand** — bounded cache cleanup
+  with sensible defaults. No flags ⇒ `--keep-last 500 --older-than
+  7d`: entries survive only when both windows are satisfied; ones
+  beyond the newest 500 OR older than seven days get deleted.
+
+  | Flag                  | Default | Behavior                                                          |
+  |-----------------------|---------|-------------------------------------------------------------------|
+  | `--keep-last <int>`   | `500`   | Keep the N newest entries (within the active filter scope).       |
+  | `--older-than <dur>`  | `7d`    | Delete entries older than this. Units: d / w / m (30d) / y (365d).|
+  | `--provider <name>`   | —       | Narrow the candidate pool to one provider; others stay untouched. |
+  | `--model <name>`      | —       | Narrow the candidate pool to one model; others stay untouched.    |
+
+  Provider/model are NARROWING filters: omitting them includes every
+  entry; supplying them limits what the keep-last + older-than rules
+  touch, so other providers'/models' caches are unaffected. Custom
+  duration parser (`internal/cli/cache_prune.go`) accepts only
+  `<int>[d|w|m|y]` — bare integers, decimals, negatives, mixed
+  units, and stdlib `h/m/s` shorthand all reject, so off-by-one
+  surprises are impossible.
+
 - **Multi-line findings via `line_end` (schema-additive)** — Finding
   payloads can now carry a `line_end` integer alongside `line` to mark
   spans like a function body or a multi-statement block. When set and
@@ -31,6 +85,37 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   reason `language` / `snippet` already do (strict mode rejects
   optional properties). Anthropic and Gemini tests cover the
   end-to-end round-trip.
+
+### Removed
+- **`--commit`, `--branch`, `--pull-request` review-scope flags**
+  collapse into `commitbrief diff <args...>`. The three flags were
+  three slightly-different wrappers around `git diff` shapes the user
+  already knows by hand. Replacement table:
+
+  ```
+  --commit HEAD~1            →  diff HEAD~1
+  --branch main              →  diff main
+  --pull-request main...x    →  diff main...x
+  ```
+
+  BREAKING: scripts and aliases relying on the old flags must
+  migrate. Path filtering (previously a side-effect of `--file`)
+  is now a global `--file`/`--dir` filter that layers on any
+  scope, so the cross-cutting cases work out of the box.
+
+- **Single-path `--file` scope flag** replaced by the repeatable
+  global `--file`/`--dir` filter pair (see Added above). The old
+  shape — `commitbrief --file path/to/file.go` — still parses but
+  now means "filter this file out of the staged review" rather
+  than "fetch only this file's diff against HEAD". For the
+  HEAD-vs-working-tree-single-file behavior, use
+  `commitbrief diff HEAD --file path/to/file.go`.
+
+- **`cli.warn.merge_commit` i18n key** (EN + TR) — the warning
+  fired only on the `--commit <merge>` path, which no longer
+  exists. `commitbrief diff <hash>` users see git's own first-parent
+  semantics, which they already know if they're typing `git diff`
+  syntax.
 
 ### Changed
 - **Tightened snippet contract** in the system prompt so findings

@@ -7,31 +7,9 @@ import (
 	"testing"
 )
 
-func TestSplitThreeDot(t *testing.T) {
-	cases := map[string]struct {
-		target, feature string
-		ok              bool
-	}{
-		"main...feature":     {"main", "feature", true},
-		"origin/main...HEAD": {"origin/main", "HEAD", true},
-		"missing-separator":  {"", "", false},
-		"":                   {"", "", false},
-		"a..b":               {"", "", false},
-	}
-	for input, want := range cases {
-		t.Run(input, func(t *testing.T) {
-			gotT, gotF, gotOK := splitThreeDot(input)
-			if gotOK != want.ok || gotT != want.target || gotF != want.feature {
-				t.Errorf("splitThreeDot(%q) = (%q, %q, %v), want (%q, %q, %v)",
-					input, gotT, gotF, gotOK, want.target, want.feature, want.ok)
-			}
-		})
-	}
-}
-
 func TestRootCommandHasSubcommands(t *testing.T) {
 	root := newRootCmd()
-	want := []string{"cache", "compress", "config", "doctor", "dry-run", "init", "install-hook", "list", "providers", "setup"}
+	want := []string{"cache", "compress", "config", "diff", "doctor", "dry-run", "init", "install-hook", "list", "providers", "setup"}
 	got := []string{}
 	for _, c := range root.Commands() {
 		// cobra adds `help` and `completion` automatically; filter to ours.

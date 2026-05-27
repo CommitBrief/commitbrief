@@ -23,6 +23,7 @@ func newCacheCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 	}
 	cmd.AddCommand(newCacheClearCmd())
+	cmd.AddCommand(newCachePruneCmd())
 	return cmd
 }
 

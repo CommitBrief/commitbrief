@@ -29,7 +29,9 @@ type globalFlags struct {
 	provider     string
 	model        string
 	color        string
-	genMan       string // hidden: --gen-man <dir> writes man pages and exits
+	files        []string // global --file (repeatable); path filter applied post-parse
+	dirs         []string // global --dir (repeatable); prefix filter applied post-parse
+	genMan       string   // hidden: --gen-man <dir> writes man pages and exits
 }
 
 var global globalFlags
@@ -62,7 +64,7 @@ func newRootCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReview(cmd, reviewScope)
+			return runReview(cmd, reviewScope, nil)
 		},
 	}
 	cmd.SetVersionTemplate("{{.Version}}\n")
@@ -84,6 +86,8 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
+	flags.StringSliceVarP(&global.files, "file", "f", nil, "review only these files (repeatable); combines with the active scope flag")
+	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories (repeatable); combines with the active scope flag")
 
 	// Hidden: drives scripts/manpage.sh; not part of the user-visible surface.
 	flags.StringVar(&global.genMan, "gen-man", "", "generate man pages into <dir> and exit (hidden)")
@@ -105,6 +109,7 @@ func newRootCmd() *cobra.Command {
 		newListCmd(),
 		newCompressCmd(),
 		newCacheCmd(),
+		newDiffCmd(),
 	)
 	return cmd
 }

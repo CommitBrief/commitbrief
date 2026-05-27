@@ -1,15 +1,16 @@
 # CommitBrief
 
 LLM-powered local code review for git diffs. Run a "second pair of eyes"
-review on your staged changes, a single commit, or a PR-style three-dot
-range — without leaving the terminal.
+review on your staged changes, a specific file, a single commit, or a
+PR-style three-dot range — without leaving the terminal.
 
 Pick a provider once, then:
 
 ```sh
-commitbrief                  # review your staged changes
-commitbrief --commit HEAD    # review the latest commit
-commitbrief --pull-request main...feature/x   # review a PR
+commitbrief                                # review your staged changes
+commitbrief diff HEAD                      # review working tree vs HEAD
+commitbrief diff main...feature/x          # review a PR
+commitbrief --unstaged --dir app/Models    # narrow any scope to a directory
 ```
 
 Output is rendered as colored markdown in the terminal, plain markdown
@@ -128,23 +129,39 @@ suitable for `>> review.md`.
 ## Command surface
 
 ```sh
-commitbrief                       # = --staged (default scope)
-commitbrief --unstaged            # working-tree changes
-commitbrief --file <path>         # changes in a single file vs HEAD
-commitbrief --commit <hash>       # one commit
-commitbrief --pull-request a...b  # three-dot PR-style range
-commitbrief --branch <target>     # current branch vs target ref
+# Review scopes
+commitbrief                                # = --staged (default scope)
+commitbrief --unstaged                     # working-tree changes
+commitbrief diff HEAD                      # working tree vs HEAD (git-diff passthrough)
+commitbrief diff HEAD~3 HEAD               # the last three commits
+commitbrief diff main feature              # one branch vs another
+commitbrief diff main...feature            # three-dot PR-style range
 
-commitbrief setup [--local]       # provider + API key wizard
-commitbrief init                  # write COMMITBRIEF.md + OUTPUT.md template
-commitbrief compress [--level=balanced]  # shrink COMMITBRIEF.md
-commitbrief dry-run               # pipeline preview; no API call
-commitbrief list                  # command reference
+# Narrow any scope with repeatable path filters
+commitbrief --unstaged --file app/Http/Controllers/API.php --file routes/web.php
+commitbrief --unstaged --dir database/seeder --dir app/Models
+commitbrief diff HEAD~3 HEAD --dir docs
+
+# Setup and rules
+commitbrief setup [--local]                # provider + API key wizard
+commitbrief providers list|use|test        # switch active provider without re-running setup
+commitbrief config show|get|set            # inspect / tweak the merged YAML config
+commitbrief init                           # write COMMITBRIEF.md + OUTPUT.md template
+commitbrief compress [--level=balanced]    # shrink COMMITBRIEF.md
+commitbrief doctor                         # health-check the pipeline
+commitbrief install-hook [--hook=...]      # install a git hook that runs commitbrief
+commitbrief dry-run                        # pipeline preview; no API call
+commitbrief list                           # command reference
+
+# Cache maintenance
+commitbrief cache clear                    # wipe every cached LLM response for this repo
+commitbrief cache prune [flags]            # bounded cleanup; defaults --keep-last 500 --older-than 7d
 ```
 
-Global flags include `--json`, `--markdown`, `--output <file>`,
-`--no-cache`, `--yes`, `--verbose`, `--quiet`, `--lang`, `--provider`,
-`--model`, `--color`. See `commitbrief --help`.
+Global flags include `--json`, `--markdown`, `--output <file>`, `--copy`,
+`--compact`, `--no-cache`, `--fail-on=<sev>`, `-f/--file` (repeatable),
+`-d/--dir` (repeatable), `--yes`, `--verbose`, `--quiet`, `--lang`,
+`--provider`, `--model`, `--color`. See `commitbrief --help`.
 
 ## Providers and pricing
 
@@ -272,9 +289,14 @@ The cache key is a SHA-256 of `diff + system prompt + provider + model
 review. Default TTL is 7 days; configurable via `cache.ttl_days`.
 
 **Can I run it in CI?**
-Not yet, by design. CommitBrief targets the developer's terminal, not
-pipelines. CI integration (`--fail-on=<severity>`, severity exit codes,
-GitHub Action wrapper) is on the v1.x roadmap.
+The primary target is the developer's terminal, but the CI-friendly
+pieces are in place: `--fail-on=<severity>` (or `--fail-on=any`)
+returns a non-zero exit code when a finding meets or exceeds the
+threshold, `--json` emits the structured-findings document machine-
+readably, and `commitbrief install-hook` scaffolds a pre-commit /
+commit-msg / pre-push hook locally. A dedicated GitHub Action wrapper
+is still on the v1.x roadmap; for now drive the binary directly from
+your workflow.
 
 **Why GPL-3.0?**
 The CLI is end-user software, and copyleft keeps forks and

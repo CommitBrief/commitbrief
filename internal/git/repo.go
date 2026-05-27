@@ -11,6 +11,7 @@ const (
 	OriginCommit   Origin = "commit"
 	OriginRange    Origin = "range"
 	OriginBranch   Origin = "branch"
+	OriginDiff     Origin = "diff" // `commitbrief diff <args...>` passthrough
 )
 
 type Diff struct {
@@ -33,6 +34,14 @@ type Repo interface {
 	CommitDiff(hash string) (Diff, error)
 	RangeDiff(target, feature string) (Diff, error)
 	BranchDiff(target string) (Diff, error)
+	// Diff is the generic `git diff <args>` passthrough used by the
+	// `commitbrief diff` subcommand. args are forwarded verbatim
+	// after `--no-color --no-ext-diff` so the renderer/parser see
+	// stable unified-diff output. Backends that can't faithfully
+	// implement arbitrary git arg combinations may return
+	// ErrUnsupported; the DispatchRepo then falls through to the
+	// CLI path.
+	Diff(args []string) (Diff, error)
 	Root() string
 }
 

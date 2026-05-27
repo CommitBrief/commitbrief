@@ -18,13 +18,15 @@ const commandReference = `# CommitBrief Commands
 ## Review (default)
 
 ` + "```" + `
-commitbrief                       # review staged changes (= --staged)
-commitbrief --unstaged            # review unstaged working-tree changes
-commitbrief --file <path>         # review changes in a single file
-commitbrief --commit <hash>       # review a specific commit
-commitbrief --pull-request a...b  # review a PR-style three-dot diff
-commitbrief --branch <target>     # review current branch vs target ref
+commitbrief                            # review staged changes (= --staged)
+commitbrief --unstaged                 # review unstaged working-tree changes
+commitbrief diff HEAD                  # review working tree vs HEAD (passthrough)
+commitbrief diff HEAD~3 HEAD           # review the last three commits
+commitbrief diff main feature          # review feature vs main
+commitbrief diff main...feature        # PR-style three-dot diff
 ` + "```" + `
+
+Narrow any scope with ` + "`--file`" + ` / ` + "`--dir`" + ` (repeatable, see below).
 
 ## Setup and rules
 
@@ -44,7 +46,8 @@ commitbrief list                  # this reference
 
 ` + "```" + `
 commitbrief compress              # shrink COMMITBRIEF.md losslessly
-commitbrief cache clear           # remove cached LLM responses for this repo
+commitbrief cache clear           # remove every cached LLM response for this repo
+commitbrief cache prune [flags]   # drop old/excess entries; defaults --keep-last 500 --older-than 7d
 ` + "```" + `
 
 ## Global flags
@@ -53,6 +56,8 @@ commitbrief cache clear           # remove cached LLM responses for this repo
 - ` + "`--markdown`" + ` — plain markdown, no ANSI
 - ` + "`-o, --output <file>`" + ` — write to file instead of stdout
 - ` + "`--no-cache`" + ` — bypass cache read and write
+- ` + "`-f, --file <path>`" + ` — narrow review to this file (repeatable)
+- ` + "`-d, --dir <path>`" + ` — narrow review to files under this directory (repeatable)
 - ` + "`--copy`" + ` — copy findings (severity, path, title, description) to the system clipboard
 - ` + "`-y, --yes`" + ` — auto-confirm prompts
 - ` + "`-v, --verbose`" + ` — show token/cost/latency footer

@@ -25,12 +25,9 @@ func newDryRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rawDiff, err := fetchDiff(app.Repo, reviewScope, app.Catalog)
+			rawDiff, err := fetchDiff(app.Repo, reviewScope, nil)
 			if err != nil {
 				return err
-			}
-			if rawDiff.IsMerge {
-				infof("%s", app.Catalog.T("cli.warn.merge_commit", reviewScope.commit))
 			}
 			parsed, err := diff.Parse(rawDiff)
 			if err != nil {
@@ -44,6 +41,9 @@ func newDryRunCmd() *cobra.Command {
 			parsed = diff.Filter(parsed, combined)
 			builtinExcluded := before - afterBuiltin.FileCount()
 			repoExcluded := afterBuiltin.FileCount() - parsed.FileCount()
+			beforePathFilter := parsed.FileCount()
+			parsed = diff.KeepPaths(parsed, global.files, global.dirs)
+			pathFilterExcluded := beforePathFilter - parsed.FileCount()
 			loaded, err := rules.Load(app.RepoRoot)
 			if err != nil {
 				return err
@@ -76,6 +76,7 @@ func newDryRunCmd() *cobra.Command {
 				fmt.Sprintf("Files (input): %d", before),
 				fmt.Sprintf("  built-in ignore filtered:        %d", builtinExcluded),
 				fmt.Sprintf("  .commitbriefignore net filtered: %d", repoExcluded),
+				fmt.Sprintf("  --file/--dir path filter:        %d", pathFilterExcluded),
 				fmt.Sprintf("Files (review): %d", parsed.FileCount()),
 				fmt.Sprintf("Added lines:   %d", parsed.AddedLines()),
 				fmt.Sprintf("Deleted lines: %d", parsed.DeletedLines()),

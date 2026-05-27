@@ -39,6 +39,13 @@ func (g *GoGitRepo) FileDiff(string) (Diff, error) {
 	return Diff{}, ErrUnsupported
 }
 
+// Diff (arbitrary `git diff <args>` passthrough) is intentionally
+// unsupported on the go-git backend — re-implementing every git diff
+// CLI shorthand (HEAD, A..B, A...B, --merge-base, etc.) by hand
+// would balloon the surface area and drift. DispatchRepo falls back
+// to the CLI here.
+func (g *GoGitRepo) Diff([]string) (Diff, error) { return Diff{}, ErrUnsupported }
+
 func (g *GoGitRepo) CommitDiff(hash string) (Diff, error) {
 	if hash == "" {
 		return Diff{}, errors.New("git: CommitDiff requires a commit hash")

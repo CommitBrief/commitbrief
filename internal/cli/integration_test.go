@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -1275,85 +1276,7 @@ func TestRunOutsideGitRepo(t *testing.T) {
 	}
 }
 
-// ---------- review scope: --commit / --branch / --pull-request ----------
-
-func TestReviewCommitHappyPath(t *testing.T) {
-	e := newCLIEnv(t)
-	// Drop the staged-but-uncommitted change from newCLIEnv; we want to point
-	// --commit at a fresh, fully-committed change.
-	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
-	hash := commitChange(t, e.repoRoot, "feature.go",
-		"package app\n\nfunc Feature() int { return 1 }\n",
-		"feat: add feature")
-
-	if err := e.run("--commit", hash); err != nil {
-		t.Fatalf("review --commit: %v", err)
-	}
-	if !strings.Contains(e.out.String(), "mock review output") {
-		t.Errorf("expected mock provider output; got:\n%s", e.out.String())
-	}
-}
-
-func TestReviewCommitInvalidHash(t *testing.T) {
-	e := newCLIEnv(t)
-	err := e.run("--commit", "deadbeef0000000000000000000000000000000")
-	if err == nil {
-		t.Error("expected error for invalid commit hash")
-	}
-}
-
-func TestReviewCommitMergeWarning(t *testing.T) {
-	e := newCLIEnv(t)
-	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
-	mergeHash := makeMergeCommit(t, e.repoRoot)
-
-	// The merge warning is emitted via infof → os.Stderr, which cmd.SetErr
-	// cannot intercept. We redirect os.Stderr through a pipe for the duration
-	// of the run and assert on what gets written there.
-	stderr := captureStderr(t, func() {
-		if err := e.run("--commit", mergeHash); err != nil {
-			t.Fatalf("review --commit (merge): %v", err)
-		}
-	})
-	if !strings.Contains(stderr, "merge commit") {
-		t.Errorf("expected merge-commit warning on stderr; got:\n%s", stderr)
-	}
-	if !strings.Contains(e.out.String(), "mock review output") {
-		t.Errorf("expected mock provider output despite merge warning; got:\n%s", e.out.String())
-	}
-}
-
-func TestReviewBranchScope(t *testing.T) {
-	e := newCLIEnv(t)
-	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
-	gitCmd(t, e.repoRoot, "checkout", "-q", "-b", "feature")
-	commitChange(t, e.repoRoot, "feature.go",
-		"package app\n\nfunc Feature() int { return 1 }\n",
-		"feat: add feature")
-
-	if err := e.run("--branch", "main"); err != nil {
-		t.Fatalf("review --branch: %v", err)
-	}
-	if !strings.Contains(e.out.String(), "mock review output") {
-		t.Errorf("expected mock output; got:\n%s", e.out.String())
-	}
-}
-
-func TestReviewPullRequestScope(t *testing.T) {
-	e := newCLIEnv(t)
-	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
-	gitCmd(t, e.repoRoot, "checkout", "-q", "-b", "feature")
-	commitChange(t, e.repoRoot, "feature.go",
-		"package app\n\nfunc Feature() int { return 1 }\n",
-		"feat: add feature")
-
-	if err := e.run("--pull-request", "main...feature"); err != nil {
-		t.Fatalf("review --pull-request: %v", err)
-	}
-	if !strings.Contains(e.out.String(), "mock review output") {
-		t.Errorf("expected mock output; got:\n%s", e.out.String())
-	}
-}
+// ---------- dry-run language override ----------
 
 func TestDryRunLangFlagOverride(t *testing.T) {
 	// Config defaults to en (writeUserConfig). --lang tr should win over
@@ -1378,6 +1301,214 @@ func TestReviewMutuallyExclusiveScopes(t *testing.T) {
 	// are set none of the others can be; [a b] were all set".
 	if !strings.Contains(err.Error(), "none of the others can be") {
 		t.Errorf("expected mutex-group error message; got: %v", err)
+	}
+}
+
+// ---------- diff subcommand ----------
+
+func TestDiffCmdSingleCommit(t *testing.T) {
+	// `commitbrief diff HEAD` ≡ `git diff HEAD` (working tree vs HEAD)
+	// — pipes through the same review pipeline as --staged.
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	commitChange(t, e.repoRoot, "feature.go",
+		"package app\n\nfunc Feature() int { return 1 }\n",
+		"feat: add feature")
+
+	if err := e.run("diff", "HEAD~1"); err != nil {
+		t.Fatalf("commitbrief diff HEAD~1: %v\nstderr:\n%s",
+			err, e.errOut.String())
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock provider output; got:\n%s",
+			truncate(e.out.String(), 400))
+	}
+}
+
+func TestDiffCmdTwoRefs(t *testing.T) {
+	// `commitbrief diff HEAD~3 HEAD` — review the last three commits
+	// in one shot. The arg-forwarding contract is git's; we don't
+	// parse the refs ourselves.
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	for i := 0; i < 3; i++ {
+		commitChange(t, e.repoRoot,
+			fmt.Sprintf("feat_%d.go", i),
+			fmt.Sprintf("package app\n\nfunc F%d() int { return %d }\n", i, i),
+			fmt.Sprintf("feat: add f%d", i))
+	}
+
+	if err := e.run("diff", "HEAD~3", "HEAD"); err != nil {
+		t.Fatalf("commitbrief diff HEAD~3 HEAD: %v\nstderr:\n%s",
+			err, e.errOut.String())
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock provider output; got:\n%s",
+			truncate(e.out.String(), 400))
+	}
+}
+
+func TestDiffCmdThreeDotRange(t *testing.T) {
+	// `commitbrief diff main...feature` — PR-style range. git parses
+	// the `...` natively, we just forward.
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	gitCmd(t, e.repoRoot, "checkout", "-q", "-b", "feature")
+	commitChange(t, e.repoRoot, "feature.go",
+		"package app\n\nfunc Feature() int { return 1 }\n",
+		"feat: add feature")
+
+	if err := e.run("diff", "main...feature"); err != nil {
+		t.Fatalf("commitbrief diff main...feature: %v\nstderr:\n%s",
+			err, e.errOut.String())
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock provider output; got:\n%s",
+			truncate(e.out.String(), 400))
+	}
+}
+
+func TestDiffCmdRejectsZeroArgs(t *testing.T) {
+	// Cobra's RangeArgs(1, 2) rejects zero positional args. The error
+	// message references the command surface so users know they need
+	// at least one ref.
+	e := newCLIEnv(t)
+	err := e.run("diff")
+	if err == nil {
+		t.Fatal("expected error for `diff` with no args; got nil")
+	}
+	if !strings.Contains(err.Error(), "accepts between 1 and 2") {
+		t.Errorf("expected cobra arg-count error; got: %v", err)
+	}
+}
+
+func TestDiffCmdRejectsThreeArgs(t *testing.T) {
+	// More than two refs is also rejected — `git diff A B C` isn't a
+	// thing, and accepting it silently would hide the user's typo.
+	e := newCLIEnv(t)
+	err := e.run("diff", "HEAD~1", "HEAD", "HEAD~2")
+	if err == nil {
+		t.Fatal("expected error for `diff` with three args; got nil")
+	}
+	if !strings.Contains(err.Error(), "accepts between 1 and 2") {
+		t.Errorf("expected cobra arg-count error; got: %v", err)
+	}
+}
+
+func TestDiffCmdInvalidRef(t *testing.T) {
+	// Bogus refs bubble up the underlying git error so the user can
+	// see what went wrong (typo, missing fetch, etc.).
+	e := newCLIEnv(t)
+	err := e.run("diff", "deadbeef0000000000000000000000000000000")
+	if err == nil {
+		t.Fatal("expected error for invalid ref; got nil")
+	}
+}
+
+// ---------- --file / --dir global path filters ----------
+
+func TestPathFilterFileNarrowsReviewToOneFile(t *testing.T) {
+	// Stage two files; review should only consider the one named in
+	// --file. Dry-run path lets us inspect the post-filter file count
+	// without involving the provider.
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "second.go"),
+		"package app\n\nfunc Other() {}\n")
+	gitCmd(t, e.repoRoot, "add", "second.go")
+
+	if err := e.run("dry-run", "--staged", "--file", "app.go"); err != nil {
+		t.Fatalf("dry-run --file: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Files (review): 1") {
+		t.Errorf("expected one file after --file filter; got:\n%s", truncate(out, 600))
+	}
+	if !strings.Contains(out, "--file/--dir path filter:        1") {
+		t.Errorf("expected dry-run footer to report 1 file excluded; got:\n%s",
+			truncate(out, 600))
+	}
+}
+
+func TestPathFilterMultipleFiles(t *testing.T) {
+	// --file is repeatable; supplying it twice keeps both named files.
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "second.go"),
+		"package app\n\nfunc Other() {}\n")
+	writeFile(t, filepath.Join(e.repoRoot, "third.go"),
+		"package app\n\nfunc Third() {}\n")
+	gitCmd(t, e.repoRoot, "add", "second.go", "third.go")
+
+	if err := e.run("dry-run", "--staged",
+		"--file", "app.go", "--file", "third.go"); err != nil {
+		t.Fatalf("dry-run --file (multi): %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Files (review): 2") {
+		t.Errorf("expected two files after two --file flags; got:\n%s",
+			truncate(out, 600))
+	}
+}
+
+func TestPathFilterDir(t *testing.T) {
+	// --dir keeps every file beneath the supplied directory. Stage one
+	// in-dir and one out-of-dir file; only the in-dir one should
+	// survive the filter.
+	e := newCLIEnv(t)
+	if err := os.MkdirAll(filepath.Join(e.repoRoot, "models"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(e.repoRoot, "models", "user.go"),
+		"package models\n\ntype User struct{}\n")
+	writeFile(t, filepath.Join(e.repoRoot, "noise.go"),
+		"package app\n\nvar Noise = 1\n")
+	gitCmd(t, e.repoRoot, "add", "models/user.go", "noise.go")
+
+	if err := e.run("dry-run", "--staged", "--dir", "models"); err != nil {
+		t.Fatalf("dry-run --dir: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Files (review): 1") {
+		t.Errorf("expected one file under --dir models; got:\n%s",
+			truncate(out, 600))
+	}
+}
+
+func TestPathFilterFileAndDirCombine(t *testing.T) {
+	// --file + --dir union semantics — a file is kept if it matches
+	// EITHER list (not both, not neither).
+	e := newCLIEnv(t)
+	if err := os.MkdirAll(filepath.Join(e.repoRoot, "routes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(e.repoRoot, "routes", "web.go"),
+		"package routes\n\nvar W = 1\n")
+	writeFile(t, filepath.Join(e.repoRoot, "extra.go"),
+		"package app\n\nvar X = 1\n")
+	gitCmd(t, e.repoRoot, "add", "routes/web.go", "extra.go")
+
+	if err := e.run("dry-run", "--staged",
+		"--dir", "routes", "--file", "app.go"); err != nil {
+		t.Fatalf("dry-run --dir+--file: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Files (review): 2") {
+		t.Errorf("expected union to keep 2 files; got:\n%s", truncate(out, 600))
+	}
+}
+
+func TestPathFilterDefaultsToStagedScope(t *testing.T) {
+	// Per the spec: --file/--dir without an explicit scope flag falls
+	// back to --staged (the same default as plain `commitbrief`). Just
+	// asserting the run succeeds is enough — the harness stages a
+	// change in app.go before each test.
+	e := newCLIEnv(t)
+	if err := e.run("--file", "app.go", "--no-cache", "--no-cost-check"); err != nil {
+		t.Fatalf("--file without --staged should default to --staged: %v\nstderr:\n%s",
+			err, e.errOut.String())
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock provider output; got:\n%s",
+			truncate(e.out.String(), 400))
 	}
 }
 

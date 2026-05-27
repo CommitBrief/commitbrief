@@ -18,7 +18,6 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/guard"
-	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/ignore"
 	"github.com/CommitBrief/commitbrief/internal/prompt"
 	"github.com/CommitBrief/commitbrief/internal/provider"
@@ -30,10 +29,6 @@ import (
 type reviewScopeFlags struct {
 	staged   bool
 	unstaged bool
-	file     string
-	commit   string
-	pr       string
-	branch   string
 }
 
 var reviewScope reviewScopeFlags
@@ -42,25 +37,18 @@ func bindScopeFlags(cmd *cobra.Command) {
 	f := cmd.Flags()
 	f.BoolVarP(&reviewScope.staged, "staged", "s", false, "review staged changes (default)")
 	f.BoolVarP(&reviewScope.unstaged, "unstaged", "u", false, "review unstaged changes")
-	f.StringVarP(&reviewScope.file, "file", "f", "", "review changes in a single file")
-	f.StringVarP(&reviewScope.commit, "commit", "c", "", "review changes in a commit hash")
-	f.StringVar(&reviewScope.pr, "pull-request", "", "review a PR-style diff target...feature")
-	f.StringVarP(&reviewScope.branch, "branch", "b", "", "review current branch vs target ref")
-	cmd.MarkFlagsMutuallyExclusive("staged", "unstaged", "file", "commit", "pull-request", "branch")
+	cmd.MarkFlagsMutuallyExclusive("staged", "unstaged")
 }
 
-func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
+func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) error {
 	ctx := cmd.Context()
 	app, err := resolveContext(true)
 	if err != nil {
 		return err
 	}
-	rawDiff, err := fetchDiff(app.Repo, scope, app.Catalog)
+	rawDiff, err := fetchDiff(app.Repo, scope, diffArgs)
 	if err != nil {
 		return err
-	}
-	if rawDiff.IsMerge {
-		infof("%s", app.Catalog.T("cli.warn.merge_commit", scope.commit))
 	}
 	parsed, err := diff.Parse(rawDiff)
 	if err != nil {
@@ -68,6 +56,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	}
 	matcher := buildMatcher(app.RepoRoot)
 	parsed = diff.Filter(parsed, matcher)
+	parsed = diff.KeepPaths(parsed, global.files, global.dirs)
 	if parsed.Empty() {
 		infof("%s", app.Catalog.T("review.no_changes"))
 		return nil
@@ -328,33 +317,14 @@ func tryStructuredReview(ctx context.Context, prov provider.Provider, req provid
 	return resp.Content, totalUsage, cache.FormatMarkdownFallback, nil
 }
 
-func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, cat *i18n.Catalog) (git.Diff, error) {
-	switch {
-	case scope.unstaged:
+func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, diffArgs []string) (git.Diff, error) {
+	if len(diffArgs) > 0 {
+		return repo.Diff(diffArgs)
+	}
+	if scope.unstaged {
 		return repo.UnstagedDiff()
-	case scope.file != "":
-		return repo.FileDiff(scope.file)
-	case scope.commit != "":
-		return repo.CommitDiff(scope.commit)
-	case scope.pr != "":
-		t, f, ok := splitThreeDot(scope.pr)
-		if !ok {
-			return git.Diff{}, errors.New(cat.T("review.pr_format", scope.pr))
-		}
-		return repo.RangeDiff(t, f)
-	case scope.branch != "":
-		return repo.BranchDiff(scope.branch)
-	default:
-		return repo.StagedDiff()
 	}
-}
-
-func splitThreeDot(s string) (target, feature string, ok bool) {
-	i := strings.Index(s, "...")
-	if i < 0 {
-		return "", "", false
-	}
-	return s[:i], s[i+3:], true
+	return repo.StagedDiff()
 }
 
 func buildMatcher(repoRoot string) *ignore.Matcher {

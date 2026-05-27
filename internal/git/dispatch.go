@@ -86,6 +86,10 @@ func (d *DispatchRepo) BranchDiff(target string) (Diff, error) {
 	return d.dispatch("BranchDiff", func(r Repo) (Diff, error) { return r.BranchDiff(target) })
 }
 
+func (d *DispatchRepo) Diff(args []string) (Diff, error) {
+	return d.dispatch("Diff", func(r Repo) (Diff, error) { return r.Diff(args) })
+}
+
 func (d *DispatchRepo) dispatch(op string, call func(Repo) (Diff, error)) (Diff, error) {
 	if d.primary != nil {
 		diff, err := call(d.primary)
