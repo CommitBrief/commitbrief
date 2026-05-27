@@ -103,15 +103,3 @@ func TestAskYesNoAnswers(t *testing.T) {
 	}
 }
 
-func TestSpinnerNonTTYIsInert(t *testing.T) {
-	s := NewSpinner(&bytes.Buffer{}, "loading")
-	s.Start()
-	s.Update("still loading")
-	s.Stop()
-	// No assertions: just verifying nothing panics or hangs.
-}
-
-func TestSpinnerStopBeforeStartSafe(t *testing.T) {
-	s := NewSpinner(&bytes.Buffer{}, "x")
-	s.Stop() // should not deadlock / panic
-}

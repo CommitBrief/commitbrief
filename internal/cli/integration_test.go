@@ -646,6 +646,58 @@ func TestFailOnRendersBeforeExiting(t *testing.T) {
 
 // ---------- end --fail-on ----------
 
+// ---------- progress UI ----------
+
+func TestProgressEmitsStageLabelsToStderrInPlainMode(t *testing.T) {
+	// The test harness runs with a non-TTY bytes.Buffer for stderr, so
+	// Progress falls back to plain-mode line emission. Verify each
+	// pipeline stage produces its label.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--no-cost-check"); err != nil {
+		t.Fatalf("review: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	stderr := e.errOut.String()
+	for _, want := range []string{
+		"[start] Searching for changes...",
+		"[done]  Searching for changes...",
+		"[start] Preparing request...",
+		"[done]  Preparing request...",
+		"[start] Thinking...",
+		"[done]  Thinking...",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("progress missing %q; stderr:\n%s", want, truncate(stderr, 1200))
+		}
+	}
+	// Diff-stats info line should also appear, format is "N files +M -K".
+	if !strings.Contains(stderr, "[info]  ") {
+		t.Errorf("expected an [info] stats line in progress output; stderr:\n%s",
+			truncate(stderr, 1200))
+	}
+}
+
+func TestProgressSuppressedByQuietFlag(t *testing.T) {
+	// --quiet disables the Progress entirely; no [start]/[done] lines
+	// should land on stderr.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--no-cost-check", "--quiet"); err != nil {
+		t.Fatalf("review --quiet: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	stderr := e.errOut.String()
+	for _, forbidden := range []string{
+		"[start]", "[done]", "[info]",
+		"Searching for changes",
+		"Thinking...",
+	} {
+		if strings.Contains(stderr, forbidden) {
+			t.Errorf("--quiet should suppress progress; saw %q in stderr:\n%s",
+				forbidden, truncate(stderr, 800))
+		}
+	}
+}
+
+// ---------- end progress UI ----------
+
 // ---------- --copy (clipboard) ----------
 
 func TestCopyFlagEmitsOSC52OnStderrAndHint(t *testing.T) {

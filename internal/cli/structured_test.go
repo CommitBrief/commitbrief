@@ -16,7 +16,7 @@ import (
 func TestTryStructuredReviewHappyPath(t *testing.T) {
 	m := mock.New()
 	// Default response is already valid Findings JSON (DefaultResponseContent).
-	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{})
+	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestTryStructuredReviewRetriesOnce(t *testing.T) {
 	m := mock.New()
 	m.ResponseContent = "not actually JSON"
 
-	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{})
+	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestTryStructuredReviewRetryRecovers(t *testing.T) {
 		usage:     provider.Usage{InputTokens: 50, OutputTokens: 10},
 	}
 
-	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{})
+	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestTryStructuredReviewBubblesFirstCallError(t *testing.T) {
 	m := mock.New()
 	m.ReviewErr = errors.New("provider down")
 
-	_, _, _, err := tryStructuredReview(context.Background(), m, provider.Request{})
+	_, _, _, err := tryStructuredReview(context.Background(), m, provider.Request{}, nil)
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -115,7 +115,7 @@ func TestTryStructuredReviewRetryNetworkErrorFallsBack(t *testing.T) {
 		usage:     provider.Usage{InputTokens: 30, OutputTokens: 5},
 	}
 
-	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{})
+	content, usage, format, err := tryStructuredReview(context.Background(), m, provider.Request{}, nil)
 	if err != nil {
 		t.Fatalf("retry network error should not bubble; got %v", err)
 	}

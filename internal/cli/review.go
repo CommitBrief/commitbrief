@@ -48,22 +48,11 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	if err != nil {
 		return err
 	}
-	rawDiff, err := fetchDiff(app.Repo, scope, diffArgs)
-	if err != nil {
-		return err
-	}
-	parsed, err := diff.Parse(rawDiff)
-	if err != nil {
-		return err
-	}
-	matcher := buildMatcher(app.RepoRoot)
-	parsed = diff.Filter(parsed, matcher)
-	parsed = diff.KeepPaths(parsed, global.files, global.dirs)
-	if parsed.Empty() {
-		infof("%s", app.Catalog.T("review.no_changes"))
-		return nil
-	}
 
+	// Load rules + output template up front so any "using built-in"
+	// infof emissions land BEFORE the progress UI starts animating —
+	// otherwise they would interleave with the spinner's cursor-up
+	// redraws and look garbled.
 	loaded, err := rules.Load(app.RepoRoot)
 	if err != nil {
 		return err
@@ -84,6 +73,37 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		return errors.New(app.Catalog.T("output.template.invalid", outputLoaded.Path, err.Error()))
 	}
 
+	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
+	defer prog.Close()
+
+	prog.Start(app.Catalog.T("progress.searching"))
+	rawDiff, err := fetchDiff(app.Repo, scope, diffArgs)
+	if err != nil {
+		prog.Fail(err)
+		return err
+	}
+	parsed, err := diff.Parse(rawDiff)
+	if err != nil {
+		prog.Fail(err)
+		return err
+	}
+	matcher := buildMatcher(app.RepoRoot)
+	parsed = diff.Filter(parsed, matcher)
+	parsed = diff.KeepPaths(parsed, global.files, global.dirs)
+	if parsed.Empty() {
+		prog.Finish()
+		prog.Close()
+		infof("%s", app.Catalog.T("review.no_changes"))
+		return nil
+	}
+	prog.Info(app.Catalog.T("progress.diff_stats",
+		parsed.FileCount(), parsed.AddedLines(), parsed.DeletedLines()))
+
+	// Guard + secret scan can prompt interactively. Pause the animation
+	// so the prompt has a clean canvas; Resume redraws the tree below
+	// the prompt afterwards. Both are typically silent (no-op) on a
+	// clean diff, so the brief flicker is rare in practice.
+	prog.Pause()
 	if res, _ := guard.CheckDiffForLocalConfig(parsed, guard.Options{
 		AssumeYes:      global.yes,
 		NonInteractive: !ui.IsStdinTTY(os.Stdin),
@@ -103,11 +123,14 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			}
 		}
 	}
+	prog.Resume()
 
+	prog.Start(app.Catalog.T("progress.preparing"))
 	p := prompt.Build(loaded, app.Lang, parsed.String())
 
 	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 	model := app.Config.Providers[app.Config.Provider].Model
@@ -130,6 +153,11 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 
 	if !global.noCache && cacheStore != nil {
 		if entry, hit := cacheStore.Get(cacheKey); hit {
+			prog.Finish()
+			// Cards/JSON/Markdown render takes over the screen — clear
+			// the progress tree so the breadcrumbs don't sit above the
+			// real output as duplicate clutter.
+			prog.Clear()
 			usage := provider.Usage{
 				InputTokens:       entry.Result.Tokens.Input,
 				OutputTokens:      entry.Result.Tokens.Output,
@@ -166,31 +194,51 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		}
 	}
 
+	prog.Finish() // Preparing → done
+
 	// Cost preflight (11.5.6): we're past the cache lookup and about to
 	// spend real tokens. If the estimated cost exceeds the configured
 	// threshold, prompt the user (TTY) or abort (non-TTY). --yes and
-	// --no-cost-check both bypass with an info notice.
+	// --no-cost-check both bypass with an info notice. Pause the
+	// progress animation around the prompt so the user sees a clean
+	// y/N question instead of a flickering tree underneath.
 	if !global.noCostCheck {
 		estUsage := provider.Usage{
 			InputTokens:  p.EstimatedTokens(),
 			OutputTokens: estimateOutputTokens(p.EstimatedTokens()),
 		}
 		estCost := prov.Pricing(model).Cost(estUsage)
+		prog.Pause()
 		if abort := handleCostPreflight(cmd, app, estCost); abort {
 			return errors.New(app.Catalog.T("cost.aborted_user"))
 		}
+		prog.Resume()
 	}
 
+	prog.Start(app.Catalog.T("progress.thinking"))
 	start := time.Now()
 	content, usage, format, err := tryStructuredReview(ctx, prov, provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,
 		UserPrompt:   p.User,
 		Lang:         app.Lang.Code,
+	}, func() {
+		// First attempt produced unparseable JSON; ADR-0014 §4 retry
+		// fires next. Mark the current "Thinking..." as Soft (neutral)
+		// and start a fresh "Retrying..." stage so the user sees we
+		// noticed the first attempt was iffy.
+		prog.Soft()
+		prog.Start(app.Catalog.T("progress.retrying"))
 	})
 	if err != nil {
+		prog.Fail(err)
 		return fmt.Errorf("provider %s: %w", prov.Name(), err)
 	}
+	prog.Finish()
+	// Cards / JSON / Markdown render takes over the screen below —
+	// erase the progress tree so the breadcrumbs don't sit above the
+	// real output as duplicate clutter.
+	prog.Clear()
 	latency := time.Since(start)
 
 	// Parse + warn happen here on a fresh call (the cache-hit path above
@@ -291,7 +339,17 @@ func handleCopyFlag(cmd *cobra.Command, app *appContext, findings []render.Findi
 //
 // Token usage is summed across both attempts so the verbose footer / cost
 // reflects what the user actually spent, even on a graceful degrade.
-func tryStructuredReview(ctx context.Context, prov provider.Provider, req provider.Request) (string, provider.Usage, string, error) {
+//
+// onRetry, if non-nil, fires after the first attempt parses-fails but
+// before the retry call goes out. The progress UI uses it to flip the
+// "Thinking..." stage to a soft (neutral) state and start a fresh
+// "Retrying..." stage so the user sees what happened.
+func tryStructuredReview(
+	ctx context.Context,
+	prov provider.Provider,
+	req provider.Request,
+	onRetry func(),
+) (string, provider.Usage, string, error) {
 	resp, err := prov.Review(ctx, req)
 	if err != nil {
 		return "", provider.Usage{}, "", err
@@ -300,6 +358,9 @@ func tryStructuredReview(ctx context.Context, prov provider.Provider, req provid
 		return resp.Content, resp.Usage, cache.FormatJSON, nil
 	}
 	// First attempt unparseable — ADR-0014 §4 retry-once.
+	if onRetry != nil {
+		onRetry()
+	}
 	resp2, err2 := prov.Review(ctx, req)
 	if err2 != nil {
 		// Network/auth failure on retry: surface the first response with

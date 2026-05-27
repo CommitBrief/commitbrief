@@ -11,6 +11,38 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **Progress animation during the review pipeline** — four-stage tree
+  with breathing-dot animation on the active stage and palette-aligned
+  terminal states for completed/failed stages. Stages:
+
+  ```
+  ├─ ⏺ Searching for changes...     ← fetchDiff + parse + filter
+  ├─   36 files +1233 -34            ← static info line (no glyph)
+  ├─ ⏺ Preparing request...          ← rules / prompt / cache lookup
+  └─ ⏺ Thinking...                   ← provider Review call
+  ```
+
+  Dot color cycles through the cards palette muted greys
+  (`#3a3f4f → #6b7280 → #9CA3AF`) every ~1.1s. Finished stage → solid
+  `#22d3a0` green (cardAddFg). Failed stage → solid `#ff6b8a` red
+  (cardDelFg) with the error indented underneath. Retry-once
+  (ADR-0014 §4) marks the first Thinking attempt as neutral muted
+  (`#9CA3AF`) and starts a fresh `Retrying...` stage so the user
+  sees the recovery.
+
+  Three operating modes decided at construction: animated (TTY +
+  colors), plain (non-TTY → `[start]/[done]/[info]/[fail]` lines for
+  CI logs), silent (`--quiet`). `Pause()`/`Resume()` hand the
+  terminal back to the cost-preflight prompt and the secret-scan
+  prompt so animations never overdraw a `y/N` question. New
+  `internal/ui/progress.go` (~300 LoC), 13 unit tests covering each
+  mode + the breathing cycle, 2 integration tests pinning the
+  pipeline emissions.
+
+  `tryStructuredReview` gained an `onRetry func()` callback (nil-safe)
+  so the CLI layer drives the Soft/Start transition without leaking
+  retry semantics into the provider package.
+
 - **`commitbrief diff <args...>` subcommand** — git-diff passthrough
   for reviewing arbitrary historic ranges. Args are forwarded verbatim
   to `git diff --no-color --no-ext-diff <args>` (1 or 2 positional
@@ -135,6 +167,11 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 - **`internal/ui/stream.go`** (`Drain` channel consumer) — was the
   CLI-side counterpart to `ReviewStream`. Removed with it.
+
+- **`internal/ui/spinner.go`** — the single-operation spinner primitive
+  was never wired into any caller. Its role is now covered by the
+  multi-stage `Progress` UI added in this release. Net deletion: the
+  type + 2 tests.
 
 ### Changed
 - **Tightened snippet contract** in the system prompt so findings

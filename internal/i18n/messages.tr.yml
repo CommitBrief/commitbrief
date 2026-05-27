@@ -56,6 +56,12 @@ clipboard.copied: "%d bulgu panoya kopyalandı (%s) — istediğin yere yapışt
 clipboard.empty: "Kopyalanacak bir şey yok: review 0 bulgu çıkardı."
 clipboard.failed: "Panoya kopyalanamadı (OSC 52 destekleyen terminal yok ve native araç bulunamadı)."
 
+progress.searching: "Değişiklikler taranıyor..."
+progress.diff_stats: "%d dosya +%d -%d"
+progress.preparing: "İstek hazırlanıyor..."
+progress.thinking: "Düşünüyor..."
+progress.retrying: "Yeniden deneniyor..."
+
 rules.using_default: "ℹ Yerleşik review kuralları kullanılıyor. Özelleştirmek için 'commitbrief init' çalıştırın."
 rules.output.using_default: "ℹ Yerleşik çıktı formatı kullanılıyor. Özelleştirmek için ~/.commitbrief/OUTPUT.md veya <repo>/.commitbrief/OUTPUT.md oluşturun."
 
