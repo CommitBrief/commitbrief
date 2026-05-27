@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: help build test test-live bench lint fmt tidy clean release-check license-check i18n-check manpage smoke
+.PHONY: help build test test-live bench lint fmt tidy clean check release-check license-check i18n-check manpage smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -56,6 +56,24 @@ license-check: ## Audit dependency licenses for GPL-3.0 compatibility
 
 i18n-check: ## Flag i18n catalog keys with no Go source reference (UC-25)
 	bash scripts/i18n-deadkey-check.sh
+
+check: ## Run every guard CI runs (fmt-drift, vet, lint, test, release-check, i18n-check)
+	@echo "==> gofmt drift"
+	@drift=$$(gofmt -l -s . | grep -v '^vendor/' || true); \
+	if [ -n "$$drift" ]; then \
+		echo "gofmt: needs '-s -w' on:"; echo "$$drift"; exit 1; \
+	fi
+	@echo "==> go vet"
+	@$(GO) vet ./...
+	@echo "==> golangci-lint"
+	@$(MAKE) -s lint
+	@echo "==> go test"
+	@$(GO) test ./...
+	@echo "==> release-check"
+	@$(MAKE) -s release-check
+	@echo "==> i18n-check"
+	@$(MAKE) -s i18n-check
+	@echo "==> all checks passed"
 
 manpage: ## Regenerate man/commitbrief.1
 	bash scripts/manpage.sh
