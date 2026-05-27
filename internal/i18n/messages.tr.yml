@@ -28,13 +28,11 @@ guard.secrets.line: "   satır %d: %s"
 guard.secrets.prompt: "   Yine de LLM'e gönderilsin mi? [e/H]: "
 guard.secrets.aborted_user: "iptal edildi: pre-send secret scanner"
 guard.secrets.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --allow-secrets kullanın."
-guard.secrets.bypassed_yes: "ℹ Secret tarayıcı --yes ile atlandı."
 
 cost.estimate: "⚠  Tahmini maliyet: $%.4f (eşik: $%.4f)"
 cost.confirm_prompt: "   Review devam etsin mi? [e/H]: "
 cost.aborted_user: "iptal edildi: cost preflight"
 cost.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --no-cost-check veya cost.warn_threshold_usd değerini yükseltin."
-cost.bypassed_yes: "ℹ Cost preflight --yes ile atlandı (tahmin: $%.4f)."
 
 fail_on.threshold_reached: "'%s' seviyesinde veya üstünde %d bulgu"
 fail_on.degraded_skipped: "ℹ --fail-on atlandı: LLM çözümlenemeyen çıktı üretti, değerlendirilecek bulgu yok."

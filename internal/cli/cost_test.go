@@ -76,23 +76,27 @@ func TestHandleCostPreflightDisabledThresholdSilent(t *testing.T) {
 	}
 }
 
-func TestHandleCostPreflightYesBypassWithInfo(t *testing.T) {
+func TestHandleCostPreflightYesDoesNotBypass(t *testing.T) {
+	// UC-06 regression guard. Setting --yes used to silently approve
+	// any above-threshold cost; that behaviour is gone — --yes only
+	// auto-answers the guard prompt now. In a non-TTY context with
+	// --yes, the preflight must still abort and must NOT emit any
+	// "bypassed by --yes" line (the catalog key was removed).
 	resetGlobalFlags(t)
 	global.yes = true
 	cmd, errBuf := stubCmd(t)
 	app := stubApp(t, 0.10)
 
 	abort := handleCostPreflight(cmd, app, 0.50)
-	if abort {
-		t.Errorf("--yes should bypass preflight; got abort=true")
+	if !abort {
+		t.Errorf("--yes must not bypass cost preflight; got abort=false")
 	}
-	if !strings.Contains(errBuf.String(), "bypassed by --yes") {
-		t.Errorf("--yes bypass should emit info line; got stderr:\n%s", errBuf.String())
+	out := errBuf.String()
+	if strings.Contains(out, "bypassed by --yes") {
+		t.Errorf("legacy --yes bypass line should be gone; got stderr:\n%s", out)
 	}
-	// The dollar amount should appear in the info line so the user
-	// knows what they bypassed.
-	if !strings.Contains(errBuf.String(), "$0.5000") {
-		t.Errorf("bypass line should include estimated cost; got stderr:\n%s", errBuf.String())
+	if !strings.Contains(out, "non-interactive") {
+		t.Errorf("non-TTY abort message should still surface; got:\n%s", out)
 	}
 }
 

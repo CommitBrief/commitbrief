@@ -166,6 +166,33 @@ func TestScanForSecretsReportsLineNumber(t *testing.T) {
 	}
 }
 
+func TestScanTextFlagsRawContent(t *testing.T) {
+	// UC-05 regression guard. ScanText operates on arbitrary text with
+	// no diff prefixes — used for COMMITBRIEF.md / output.md rules
+	// content before it's embedded into the system prompt.
+	content := "## Project rules\n\nDo not log " + fakeAWS + " or " + fakeGithubPAT + "\nThe end.\n"
+	matches := ScanText(content)
+	if len(matches) != 1 {
+		t.Fatalf("expected one match line; got %+v", matches)
+	}
+	if matches[0].Line != 3 {
+		t.Errorf("expected match on line 3; got %+v", matches)
+	}
+	got := strings.Join(matches[0].Patterns, ",")
+	if !strings.Contains(got, "AWS Access Key") || !strings.Contains(got, "GitHub Token") {
+		t.Errorf("both patterns should be reported; got %q", got)
+	}
+}
+
+func TestScanTextEmptyAndCleanReturnNil(t *testing.T) {
+	if ScanText("") != nil {
+		t.Errorf("empty input should return nil")
+	}
+	if got := ScanText("nothing\nto see\nhere\n"); got != nil {
+		t.Errorf("clean text should return nil; got %+v", got)
+	}
+}
+
 func TestSecretPatternNamesReturnsSortedUniqueList(t *testing.T) {
 	names := SecretPatternNames()
 	if len(names) < 8 {

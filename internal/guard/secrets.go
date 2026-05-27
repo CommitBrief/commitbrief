@@ -52,12 +52,41 @@ func ScanForSecrets(diff string) []SecretMatch {
 	if diff == "" {
 		return nil
 	}
-	lineToPatterns := map[int]map[string]struct{}{}
-	for i, line := range strings.Split(diff, "\n") {
+	return scanLines(diff, func(line string) (string, bool) {
 		if !strings.HasPrefix(line, "+") || strings.HasPrefix(line, "+++") {
+			return "", false
+		}
+		return strings.TrimPrefix(line, "+"), true
+	})
+}
+
+// ScanText runs the same credential patterns against arbitrary text
+// (no diff prefixes). Used to scan rules content like COMMITBRIEF.md
+// and the output template before they get embedded into the system
+// prompt and shipped to the provider. UC-05 in PATCH_ROADMAP. Empty
+// input returns nil so callers can rely on len(out)==0 as the "all
+// clear" signal.
+func ScanText(content string) []SecretMatch {
+	if content == "" {
+		return nil
+	}
+	return scanLines(content, func(line string) (string, bool) {
+		return line, true
+	})
+}
+
+// scanLines is the shared engine behind ScanForSecrets and ScanText.
+// pickBody returns the substring to match against (or "", false to
+// skip the line entirely). Line numbers are 1-based and reflect the
+// caller's input string verbatim — skipped lines still count toward
+// the index so reported numbers line up with the source.
+func scanLines(content string, pickBody func(string) (string, bool)) []SecretMatch {
+	lineToPatterns := map[int]map[string]struct{}{}
+	for i, line := range strings.Split(content, "\n") {
+		body, ok := pickBody(line)
+		if !ok {
 			continue
 		}
-		body := strings.TrimPrefix(line, "+")
 		for _, p := range secretPatterns {
 			if p.regex.MatchString(body) {
 				if lineToPatterns[i+1] == nil {

@@ -472,17 +472,23 @@ func TestSecretScannerAllowSecretsBypasses(t *testing.T) {
 	}
 }
 
-func TestSecretScannerYesBypassesWithInfoLine(t *testing.T) {
-	// --yes bypasses interactivity (existing semantic for the .commitbrief
-	// pre-send guard) AND for the secret scanner. The user sees the
-	// warning + bypass notice so they know what was skipped.
+func TestSecretScannerYesDoesNotBypass(t *testing.T) {
+	// UC-01 regression guard. Prior to v0.9.1 --yes silently bypassed
+	// the secret scanner; that was a footgun — users wire --yes into
+	// CI to skip the pre-send guard prompt, and we don't want that to
+	// also nuke the credential scanner. Now only --allow-secrets
+	// bypasses, and the legacy "bypassed by --yes" info line is gone.
 	e := newCLIEnv(t)
 	stageSecretIntoRepo(t, e.repoRoot, "leak.txt", fakeAWSAccessKey()+"\n")
-	if err := e.run("--staged", "--no-cache", "--yes"); err != nil {
-		t.Fatalf("--yes should bypass scanner; got error: %v\nstderr:\n%s", err, e.errOut.String())
+	err := e.run("--staged", "--no-cache", "--yes")
+	if err == nil {
+		t.Fatalf("--yes must not bypass secret scanner; expected error, got success\nstderr:\n%s", e.errOut.String())
 	}
-	if !strings.Contains(e.errOut.String(), "Secret scanner bypassed") {
-		t.Errorf("--yes should emit the bypass info line; got stderr:\n%s", e.errOut.String())
+	if strings.Contains(e.errOut.String(), "Secret scanner bypassed") {
+		t.Errorf("legacy --yes bypass info line should be gone; got stderr:\n%s", e.errOut.String())
+	}
+	if !strings.Contains(e.errOut.String(), "Possible secrets detected") {
+		t.Errorf("scanner warning should still surface; got stderr:\n%s", e.errOut.String())
 	}
 }
 

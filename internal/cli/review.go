@@ -119,11 +119,27 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	}
 
 	// Pre-send secret scan (ADR-0007 follow-up, v0.8.0). Looks for
-	// credential-shaped patterns in the *added* diff lines before any
-	// LLM call. Off by setting guard.secret_scan=false in config; user-
-	// bypassable per-invocation via --allow-secrets or --yes.
+	// credential-shaped patterns in the *added* diff lines AND in any
+	// user-authored rules content (COMMITBRIEF.md / output template)
+	// before any LLM call. Off by setting guard.secret_scan=false in
+	// config; user-bypassable per-invocation via --allow-secrets only.
+	// --yes deliberately does NOT bypass — users wire --yes into CI
+	// to skip the guard prompt and we don't want that to also silently
+	// nuke the secret scanner.
+	//
+	// UC-05: rules content joins the system prompt verbatim, so any
+	// credential pasted into a user-overridden rules file would leak
+	// to the provider just as surely as one pasted into a diff. The
+	// embedded defaults are presumed-clean and skipped.
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
-		matches := guard.ScanForSecrets(diffText)
+		var matches []guard.SecretMatch
+		matches = append(matches, guard.ScanForSecrets(diffText)...)
+		if loaded.Source != rules.SourceDefault {
+			matches = append(matches, guard.ScanText(loaded.Content)...)
+		}
+		if outputLoaded.Source != rules.SourceDefault {
+			matches = append(matches, guard.ScanText(outputLoaded.Content)...)
+		}
 		if len(matches) > 0 {
 			if abort := handleSecretMatches(cmd, app, matches); abort {
 				return errors.New(app.Catalog.T("guard.secrets.aborted_user"))
@@ -225,10 +241,11 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 
 	// Cost preflight (11.5.6): we're past the cache lookup and about to
 	// spend real tokens. If the estimated cost exceeds the configured
-	// threshold, prompt the user (TTY) or abort (non-TTY). --yes and
-	// --no-cost-check both bypass with an info notice. Pause the
-	// progress animation around the prompt so the user sees a clean
-	// y/N question instead of a flickering tree underneath.
+	// threshold, prompt the user (TTY) or abort (non-TTY). The only
+	// bypass is --no-cost-check (or raising cost.warn_threshold_usd in
+	// config); --yes deliberately does NOT bypass — see the rationale
+	// on handleCostPreflight. Pause the progress animation around the
+	// prompt so the user sees a clean y/N question.
 	if !global.noCostCheck {
 		estUsage := provider.Usage{
 			InputTokens:  p.EstimatedTokens(),
@@ -531,9 +548,11 @@ func openOutput(cmd *cobra.Command) (io.Writer, func(), error) {
 // configured threshold and asks the user to confirm. Returns true when
 // the caller should abort the review. Below-threshold and disabled-
 // (threshold <= 0) cases short-circuit silently — preflight should be
-// invisible until it actually has something to say. --yes bypasses
-// the prompt but still emits a one-line "bypassed by --yes" notice so
-// the user knows a charge was about to surface.
+// invisible until it actually has something to say. The only opt-out
+// is --no-cost-check (or raising cost.warn_threshold_usd in config);
+// --yes deliberately does NOT bypass this, because users routinely set
+// --yes in CI to skip the guard prompt and we don't want that to also
+// silently approve unbounded spend.
 func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64) bool {
 	threshold := app.Config.Cost.WarnThresholdUSD
 	if threshold <= 0 || estCost <= threshold {
@@ -541,11 +560,6 @@ func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64) b
 	}
 
 	w := cmd.ErrOrStderr()
-	if global.yes {
-		_, _ = fmt.Fprintln(w, app.Catalog.T("cost.bypassed_yes", estCost))
-		return false
-	}
-
 	_, _ = fmt.Fprintln(w, app.Catalog.T("cost.estimate", estCost, threshold))
 	if !ui.IsStdinTTY(os.Stdin) {
 		_, _ = fmt.Fprintln(w, app.Catalog.T("cost.aborted_non_interactive"))
@@ -594,10 +608,6 @@ func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.Se
 	}
 	_, _ = fmt.Fprintln(w)
 
-	if global.yes {
-		_, _ = fmt.Fprintln(w, app.Catalog.T("guard.secrets.bypassed_yes"))
-		return false
-	}
 	if !ui.IsStdinTTY(os.Stdin) {
 		_, _ = fmt.Fprintln(w, app.Catalog.T("guard.secrets.aborted_non_interactive"))
 		return true
