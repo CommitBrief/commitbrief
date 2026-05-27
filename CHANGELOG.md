@@ -46,6 +46,17 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   store entirely (no Get, no Put, no orphan directory). `ttl_days`
   passes through to `cache.Options.TTL` for normal expiry math. (UC-02)
 
+### Fixed
+- **`install-hook --hook=pre-push` now ships a real pre-push body.**
+  Previously every hook variant got the same `commitbrief --staged`
+  invocation, which silently no-op'd at push time (the index is
+  typically clean when you push). The new pre-push script parses
+  git's per-ref stdin protocol and runs `commitbrief diff
+  <remote-sha>..<local-sha> --fail-on=critical --quiet --no-cost-check`
+  for each ref being pushed, skipping deletions and reviewing the
+  tip commit for brand-new branches. The push is blocked on the
+  first critical finding. (UC-04)
+
 ### Removed
 - **`cache.max_size_mb` config field.** Defined in the struct and
   surfaced via `config get/set`, but no code ever read the value —

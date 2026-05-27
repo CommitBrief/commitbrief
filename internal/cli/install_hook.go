@@ -31,13 +31,18 @@ func newInstallHookCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install-hook",
 		Short: "Install (or uninstall) a git hook that runs commitbrief on commit",
-		Long: `Drops a small shell script at .git/hooks/<name> that runs:
+		Long: `Drops a small shell script at .git/hooks/<name>.
+
+For pre-commit (default) and commit-msg the body runs:
 
     commitbrief --staged --fail-on=critical --quiet --no-cost-check
 
 so every commit either passes review or is blocked by a critical-
-severity finding. Default hook is pre-commit; --hook chooses
-commit-msg or pre-push.
+severity finding.
+
+For pre-push the body parses git's per-ref stdin protocol and runs
+'commitbrief diff <remote>..<local>' for each ref being pushed,
+exiting non-zero on the first critical finding to block the push.
 
 Existing hook files are refused unless --yes is passed; with --yes
 the previous content is backed up to <name>.bak.<timestamp>.
@@ -79,9 +84,60 @@ func isSupportedHook(name string) bool {
 
 // hookScript returns the shell content written to .git/hooks/<name>.
 // The marker comment is the load-bearing part — uninstall relies on
-// matching it verbatim. The exec'd command line mirrors the README
-// "install-hook" example so users tweaking flags can find the source.
-func hookScript() string {
+// matching it verbatim across every hook variant.
+//
+// pre-commit / commit-msg share the same body: review the staged tree
+// before the commit is finalised, fail the commit on a critical-or-
+// worse finding. pre-push is different: git invokes it with the
+// remote + URL as positional args and feeds a "<local-ref> <local-sha>
+// <remote-ref> <remote-sha>" line per ref on stdin (see githooks(5)).
+// We loop over those refs and review the actual range being pushed via
+// `commitbrief diff`, so the developer is screened on *what they're
+// shipping*, not the current index. Branch deletions (local-sha is
+// all zeros) are skipped because there is no diff to review.
+//
+// UC-04 in PATCH_ROADMAP: prior to v0.9.1 every hook variant got the
+// same `--staged` body, which silently no-op'd at push time when the
+// index was already clean and meant pre-push never actually screened
+// outgoing commits.
+func hookScript(name string) string {
+	if name == "pre-push" {
+		// $z40 is the 40-zero hex string git uses to mean "no such ref"
+		// (deletion on the local side; new branch on the remote side).
+		// Quoting matters: each var must be quoted so an empty value
+		// doesn't merge fields. `read` exits non-zero on EOF, which is
+		// the normal end-of-stream signal — `|| break` lets us drain the
+		// loop cleanly without -e tripping.
+		return fmt.Sprintf(`#!/usr/bin/env sh
+# %s — do not edit.
+# Re-run 'commitbrief install-hook --hook=pre-push' to regenerate, or pass --uninstall to remove.
+#
+# Pre-push contract (githooks(5)): one line per ref on stdin, format
+# "<local-ref> <local-sha> <remote-ref> <remote-sha>". A 40-zero sha
+# on the local side means the branch is being deleted (nothing to
+# review); a 40-zero sha on the remote side means the branch is new
+# (review the tip commit). Otherwise review the inclusive range
+# remote-sha..local-sha.
+set -eu
+
+z40="0000000000000000000000000000000000000000"
+while read -r local_ref local_sha remote_ref remote_sha || [ -n "${local_ref-}" ]; do
+    if [ "${local_sha}" = "${z40}" ]; then
+        continue
+    fi
+    if [ "${remote_sha}" = "${z40}" ]; then
+        range="${local_sha}"
+    else
+        range="${remote_sha}..${local_sha}"
+    fi
+    if ! commitbrief diff "${range}" --fail-on=critical --quiet --no-cost-check; then
+        exit 1
+    fi
+done
+
+exit 0
+`, generatedHookMarker)
+	}
 	return fmt.Sprintf(`#!/usr/bin/env sh
 # %s — do not edit.
 # Re-run 'commitbrief install-hook' to regenerate, or pass --uninstall to remove.
@@ -112,7 +168,7 @@ func runInstallHook(cmd *cobra.Command, app *appContext, hookPath string) error 
 	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
 		return fmt.Errorf("install-hook: mkdir hooks dir: %w", err)
 	}
-	if err := os.WriteFile(hookPath, []byte(hookScript()), 0o755); err != nil {
+	if err := os.WriteFile(hookPath, []byte(hookScript(filepath.Base(hookPath))), 0o755); err != nil {
 		return fmt.Errorf("install-hook: write %s: %w", hookPath, err)
 	}
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), app.Catalog.T("install_hook.success", hookPath))
