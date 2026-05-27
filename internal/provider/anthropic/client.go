@@ -96,15 +96,6 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 	}, nil
 }
 
-func (c *Client) ReviewStream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
-	params := c.buildParams(req)
-	stream := c.sdk.Messages.NewStreaming(ctx, params)
-	if stream == nil {
-		return nil, errors.New("anthropic: nil stream returned")
-	}
-	return adaptStream(ctx, stream), nil
-}
-
 func (c *Client) TestConnection(ctx context.Context) error {
 	params := sdk.MessageNewParams{
 		Model:     sdk.Model(c.DefaultModel()),

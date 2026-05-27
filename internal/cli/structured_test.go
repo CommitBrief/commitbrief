@@ -146,9 +146,6 @@ func (s *switchingMock) ContextWindow(string) int             { return 100_000 }
 func (s *switchingMock) EstimateTokens(t string) int          { return (len(t) + 3) / 4 }
 func (s *switchingMock) Pricing(string) provider.Pricing      { return provider.Pricing{} }
 func (s *switchingMock) TestConnection(context.Context) error { return nil }
-func (s *switchingMock) ReviewStream(context.Context, provider.Request) (<-chan provider.Event, error) {
-	return nil, errors.New("not used")
-}
 
 func (s *switchingMock) Review(_ context.Context, _ provider.Request) (provider.Response, error) {
 	defer func() { s.calls++ }()

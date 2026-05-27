@@ -4,7 +4,6 @@ package compress
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,9 +28,6 @@ func (f *fakeProvider) ContextWindow(string) int             { return 100_000 }
 func (f *fakeProvider) EstimateTokens(s string) int          { return len(s) / 4 }
 func (f *fakeProvider) Pricing(string) provider.Pricing      { return provider.Pricing{} }
 func (f *fakeProvider) TestConnection(context.Context) error { return nil }
-func (f *fakeProvider) ReviewStream(context.Context, provider.Request) (<-chan provider.Event, error) {
-	return nil, errors.New("not used")
-}
 func (f *fakeProvider) Review(_ context.Context, req provider.Request) (provider.Response, error) {
 	f.gotReq = req
 	if f.err != nil {

@@ -24,10 +24,6 @@ func (s *stubProvider) TestConnection(context.Context) error { return nil }
 func (s *stubProvider) Review(context.Context, Request) (Response, error) {
 	return Response{}, nil
 }
-func (s *stubProvider) ReviewStream(context.Context, Request) (<-chan Event, error) {
-	return nil, nil
-}
-
 func TestRegisterAndNew(t *testing.T) {
 	resetForTest()
 	Register("stub", func(_ config.ProviderConfig) (Provider, error) {
@@ -159,20 +155,6 @@ func TestPricingCostCachedExceedsInputClamped(t *testing.T) {
 	want := float64(100) * 0.30 / 1_000_000
 	if math.Abs(got-want) > 1e-9 {
 		t.Errorf("clamped Cost = %f, want %f", got, want)
-	}
-}
-
-func TestEventTypeString(t *testing.T) {
-	cases := map[EventType]string{
-		EventDelta: "delta",
-		EventUsage: "usage",
-		EventDone:  "done",
-		EventError: "error",
-	}
-	for typ, want := range cases {
-		if got := typ.String(); got != want {
-			t.Errorf("EventType(%d).String() = %q, want %q", typ, got, want)
-		}
 	}
 }
 

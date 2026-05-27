@@ -85,19 +85,6 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 	}, nil
 }
 
-func (c *Client) ReviewStream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
-	params := c.buildParams(req)
-	// include_usage on streaming so the final chunk carries token counts
-	params.StreamOptions = sdk.ChatCompletionStreamOptionsParam{
-		IncludeUsage: sdk.Bool(true),
-	}
-	stream := c.sdk.Chat.Completions.NewStreaming(ctx, params)
-	if stream == nil {
-		return nil, errors.New("openai: nil stream returned")
-	}
-	return adaptStream(ctx, stream), nil
-}
-
 func (c *Client) TestConnection(ctx context.Context) error {
 	params := sdk.ChatCompletionNewParams{
 		Model:               shared.ChatModel(c.DefaultModel()),

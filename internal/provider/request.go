@@ -32,33 +32,3 @@ type Usage struct {
 	CachedInputTokens int
 }
 
-type EventType int
-
-const (
-	EventDelta EventType = iota
-	EventUsage
-	EventDone
-	EventError
-)
-
-func (e EventType) String() string {
-	switch e {
-	case EventDelta:
-		return "delta"
-	case EventUsage:
-		return "usage"
-	case EventDone:
-		return "done"
-	case EventError:
-		return "error"
-	default:
-		return "unknown"
-	}
-}
-
-type Event struct {
-	Type  EventType
-	Delta string
-	Usage Usage
-	Err   error
-}

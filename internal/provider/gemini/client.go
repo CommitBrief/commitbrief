@@ -93,16 +93,6 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 	}, nil
 }
 
-func (c *Client) ReviewStream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
-	model := req.Model
-	if model == "" {
-		model = c.DefaultModel()
-	}
-	contents, cfg := c.buildParams(req)
-	iter := c.sdk.Models.GenerateContentStream(ctx, model, contents, cfg)
-	return adaptStream(ctx, iter), nil
-}
-
 func (c *Client) TestConnection(ctx context.Context) error {
 	contents := []*sdk.Content{
 		{Role: sdk.RoleUser, Parts: []*sdk.Part{sdk.NewPartFromText(testPingPrompt)}},

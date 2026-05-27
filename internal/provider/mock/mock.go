@@ -31,7 +31,6 @@ type Provider struct {
 	PricingValue     provider.Pricing
 
 	ResponseContent string
-	ChunkCount      int
 	Latency         time.Duration
 
 	InputTokens  int
@@ -39,14 +38,11 @@ type Provider struct {
 	CachedInput  int
 
 	// Error injection
-	ReviewErr      error
-	StreamErr      error
-	StreamErrAfter int // 0: synchronous (returned from ReviewStream); >0: emit EventError after N delta events
-	TestConnErr    error
+	ReviewErr   error
+	TestConnErr error
 
 	// Call telemetry
 	ReviewCalls int
-	StreamCalls int
 	TestCalls   int
 	LastRequest provider.Request
 }
@@ -57,7 +53,6 @@ func New() *Provider {
 		DefaultModelName: "mock-model",
 		Window:           100_000,
 		ResponseContent:  DefaultResponseContent,
-		ChunkCount:       3,
 		InputTokens:      100,
 		OutputTokens:     50,
 	}
@@ -136,56 +131,6 @@ func (m *Provider) Review(ctx context.Context, req provider.Request) (provider.R
 	return provider.Response{Content: content, Model: model, Usage: usage}, nil
 }
 
-func (m *Provider) ReviewStream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
-	m.mu.Lock()
-	m.StreamCalls++
-	m.LastRequest = req
-	streamErr := m.StreamErr
-	streamErrAfter := m.StreamErrAfter
-	content := m.ResponseContent
-	chunks := m.ChunkCount
-	usage := m.usage()
-	latency := m.Latency
-	m.mu.Unlock()
-
-	if streamErr != nil && streamErrAfter == 0 {
-		return nil, streamErr
-	}
-	if chunks <= 0 {
-		chunks = 1
-	}
-
-	deltas := splitChunks(content, chunks)
-	out := make(chan provider.Event, len(deltas)+2)
-
-	go func() {
-		defer close(out)
-		for i, d := range deltas {
-			if latency > 0 {
-				select {
-				case <-time.After(latency):
-				case <-ctx.Done():
-					out <- provider.Event{Type: provider.EventError, Err: ctx.Err()}
-					return
-				}
-			}
-			if streamErr != nil && streamErrAfter > 0 && i >= streamErrAfter {
-				out <- provider.Event{Type: provider.EventError, Err: streamErr}
-				return
-			}
-			select {
-			case out <- provider.Event{Type: provider.EventDelta, Delta: d}:
-			case <-ctx.Done():
-				out <- provider.Event{Type: provider.EventError, Err: ctx.Err()}
-				return
-			}
-		}
-		out <- provider.Event{Type: provider.EventUsage, Usage: usage}
-		out <- provider.Event{Type: provider.EventDone}
-	}()
-	return out, nil
-}
-
 func (m *Provider) usage() provider.Usage {
 	return provider.Usage{
 		InputTokens:       m.InputTokens,
@@ -203,27 +148,3 @@ func Register() {
 	})
 }
 
-func splitChunks(s string, n int) []string {
-	if n <= 1 {
-		return []string{s}
-	}
-	if len(s) == 0 {
-		return []string{""}
-	}
-	if n > len(s) {
-		n = len(s)
-	}
-	out := make([]string, 0, n)
-	base := len(s) / n
-	rem := len(s) % n
-	pos := 0
-	for i := 0; i < n; i++ {
-		size := base
-		if i < rem {
-			size++
-		}
-		out = append(out, s[pos:pos+size])
-		pos += size
-	}
-	return out
-}

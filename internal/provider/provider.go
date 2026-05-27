@@ -17,7 +17,5 @@ type Provider interface {
 
 	Review(ctx context.Context, req Request) (Response, error)
 
-	ReviewStream(ctx context.Context, req Request) (<-chan Event, error)
-
 	TestConnection(ctx context.Context) error
 }

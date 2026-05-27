@@ -117,6 +117,25 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   semantics, which they already know if they're typing `git diff`
   syntax.
 
+- **`Provider.ReviewStream` removed from the provider interface.**
+  Every provider's `stream.go` (`internal/provider/{anthropic,openai,
+  gemini,ollama}/stream.go`), `internal/provider/mock/mock.go`'s
+  stream branch, the `Event` / `EventType` / `EventDelta` / `EventUsage`
+  / `EventDone` / `EventError` types in `internal/provider/request.go`,
+  and the `internal/ui/stream.go` consumer are gone. ADR-0014 took
+  the review path off streaming in v0.6.0; the plumbing has been dead
+  since then. BREAKING for third-party packages that imported the
+  Provider interface (none known outside this repo). Re-introducing
+  streaming for a future "thinking / trace" mode would mean writing
+  a fresh adapter against each provider's SDK — the SDK methods
+  themselves are still available. See ADR-0009's updated
+  Supersession note. -3 stream.go files (~250 LoC), 11 streaming
+  tests, 5 helper SSE-fixture servers, ~80 LoC of mock streaming
+  state.
+
+- **`internal/ui/stream.go`** (`Drain` channel consumer) — was the
+  CLI-side counterpart to `ReviewStream`. Removed with it.
+
 ### Changed
 - **Tightened snippet contract** in the system prompt so findings
   stop showing irrelevant or invented code excerpts. The contract

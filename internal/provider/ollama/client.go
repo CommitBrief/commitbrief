@@ -91,20 +91,6 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 	}, nil
 }
 
-func (c *Client) ReviewStream(ctx context.Context, req provider.Request) (<-chan provider.Event, error) {
-	body := c.buildBody(req, true)
-	resp, err := c.postJSON(ctx, chatPath, body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		err := mapHTTPError(resp)
-		_ = resp.Body.Close()
-		return nil, err
-	}
-	return adaptStream(ctx, resp.Body), nil
-}
-
 func (c *Client) TestConnection(ctx context.Context) error {
 	// /api/tags is the cheapest known-supported endpoint: it does not need
 	// a loaded model and lets us detect Ollama servers without spending

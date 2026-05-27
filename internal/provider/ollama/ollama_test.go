@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
@@ -217,56 +216,5 @@ func TestTestConnectionUnreachable(t *testing.T) {
 	p, _ := New(config.ProviderConfig{BaseURL: srv.URL})
 	if err := p.TestConnection(context.Background()); err == nil {
 		t.Error("expected error against closed server")
-	}
-}
-
-func TestStreamingAssemblesContent(t *testing.T) {
-	chunks := []string{
-		`{"model":"m","message":{"role":"assistant","content":"hello "},"done":false}`,
-		`{"model":"m","message":{"role":"assistant","content":"world"},"done":false}`,
-		`{"model":"m","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":7,"eval_count":2}`,
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		for _, c := range chunks {
-			_, _ = fmt.Fprintln(w, c)
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
-		}
-	}))
-	defer srv.Close()
-
-	p, _ := New(config.ProviderConfig{BaseURL: srv.URL})
-	ch, err := p.ReviewStream(context.Background(), provider.Request{
-		UserPrompt: "x",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var content strings.Builder
-	var finalUsage provider.Usage
-	var sawDone bool
-	for ev := range ch {
-		switch ev.Type {
-		case provider.EventDelta:
-			content.WriteString(ev.Delta)
-		case provider.EventUsage:
-			finalUsage = ev.Usage
-		case provider.EventDone:
-			sawDone = true
-		case provider.EventError:
-			t.Fatalf("unexpected error event: %v", ev.Err)
-		}
-	}
-	if content.String() != "hello world" {
-		t.Errorf("assembled = %q, want %q", content.String(), "hello world")
-	}
-	if !sawDone {
-		t.Error("expected EventDone")
-	}
-	if finalUsage.InputTokens != 7 || finalUsage.OutputTokens != 2 {
-		t.Errorf("final usage wrong: %+v", finalUsage)
 	}
 }

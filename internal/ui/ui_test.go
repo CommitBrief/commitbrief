@@ -4,14 +4,9 @@ package ui
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"io"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/CommitBrief/commitbrief/internal/provider"
 )
 
 func TestParseColorMode(t *testing.T) {
@@ -105,72 +100,6 @@ func TestAskYesNoAnswers(t *testing.T) {
 				t.Errorf("answer %q → %v, want %v", ans, got, want)
 			}
 		})
-	}
-}
-
-func TestDrainBasic(t *testing.T) {
-	ch := make(chan provider.Event, 4)
-	ch <- provider.Event{Type: provider.EventDelta, Delta: "hello "}
-	ch <- provider.Event{Type: provider.EventDelta, Delta: "world"}
-	ch <- provider.Event{Type: provider.EventUsage, Usage: provider.Usage{InputTokens: 5, OutputTokens: 2}}
-	ch <- provider.Event{Type: provider.EventDone}
-	close(ch)
-
-	var w bytes.Buffer
-	res := Drain(context.Background(), ch, &w)
-	if res.Err != nil {
-		t.Fatalf("unexpected err: %v", res.Err)
-	}
-	if res.Content != "hello world" {
-		t.Errorf("Content = %q", res.Content)
-	}
-	if res.Usage.InputTokens != 5 {
-		t.Errorf("Usage = %+v", res.Usage)
-	}
-	if w.String() != "hello world" {
-		t.Errorf("writer = %q", w.String())
-	}
-}
-
-func TestDrainStopsOnError(t *testing.T) {
-	ch := make(chan provider.Event, 3)
-	ch <- provider.Event{Type: provider.EventDelta, Delta: "first "}
-	ch <- provider.Event{Type: provider.EventError, Err: errors.New("boom")}
-	ch <- provider.Event{Type: provider.EventDelta, Delta: "ignored"}
-	close(ch)
-
-	res := Drain(context.Background(), ch, io.Discard)
-	if res.Err == nil {
-		t.Fatal("expected err")
-	}
-	if !strings.Contains(res.Err.Error(), "boom") {
-		t.Errorf("err = %v", res.Err)
-	}
-	if res.Content != "first " {
-		t.Errorf("Content after error = %q, want only pre-error content", res.Content)
-	}
-}
-
-func TestDrainContextCancellation(t *testing.T) {
-	ch := make(chan provider.Event)
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		cancel()
-	}()
-	res := Drain(ctx, ch, io.Discard)
-	if !errors.Is(res.Err, context.Canceled) {
-		t.Errorf("err = %v, want context.Canceled", res.Err)
-	}
-}
-
-func TestDrainNilWriterStillBuffers(t *testing.T) {
-	ch := make(chan provider.Event, 1)
-	ch <- provider.Event{Type: provider.EventDelta, Delta: "x"}
-	close(ch)
-	res := Drain(context.Background(), ch, nil)
-	if res.Content != "x" {
-		t.Error("nil writer should still buffer content")
 	}
 }
 
