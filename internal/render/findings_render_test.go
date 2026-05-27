@@ -287,6 +287,93 @@ func TestRenderDiffPreservesLineCount(t *testing.T) {
 	}
 }
 
+func TestRenderDiffWrapsLongLinesWithSignAlignment(t *testing.T) {
+	// A diff line longer than `width - signWidth` must wrap into
+	// multiple rows where the *continuation* rows keep the sign
+	// column aligned (blank pad of signWidth on the strip bg) so
+	// the card body stays a clean rectangle. Without this, lipgloss
+	// Width() wraps to column 0 and the strip visually breaks.
+	longRemoved := strings.Repeat("x", 120) + " end"
+	longAdded := strings.Repeat("y", 120) + " end"
+	in := "- " + longRemoved + "\n+ " + longAdded
+	got := renderDiffFromSnippet(in, 80)
+
+	// 2 wrapped logical lines, each producing >= 2 visual rows.
+	plainLines := strings.Split(stripANSI(got), "\n")
+	if len(plainLines) < 4 {
+		t.Fatalf("expected at least 4 visual rows after wrap, got %d:\n%s",
+			len(plainLines), strings.Join(plainLines, "\n"))
+	}
+
+	// First wrapped row of `-` carries the sign; the next row must
+	// start with the same column of blank pad (signWidth = 4 in our
+	// renderer: " -  " / " +  "), NOT with the raw text at column 0.
+	signWidth := 4
+	pad := strings.Repeat(" ", signWidth)
+	// Find the row that starts with " -  " then verify the next row
+	// also begins with `signWidth` spaces (alignment).
+	var firstMinusIdx int = -1
+	for i, l := range plainLines {
+		if strings.HasPrefix(l, " -  ") {
+			firstMinusIdx = i
+			break
+		}
+	}
+	if firstMinusIdx < 0 {
+		t.Fatalf("could not find ` -  ` prefixed first row:\n%s",
+			strings.Join(plainLines, "\n"))
+	}
+	if firstMinusIdx+1 >= len(plainLines) {
+		t.Fatalf("no continuation row after `-` wrap")
+	}
+	cont := plainLines[firstMinusIdx+1]
+	if !strings.HasPrefix(cont, pad) {
+		t.Errorf("continuation row of `-` lost sign-column alignment\n"+
+			"want prefix %q (%d blanks), got %q",
+			pad, signWidth, cont)
+	}
+	// Continuation must NOT itself begin with " -  " (else we'd be
+	// re-emitting the sign and breaking the visual sign-once rule).
+	if strings.HasPrefix(cont, " -  ") {
+		t.Errorf("continuation row should not re-emit the sign, got %q", cont)
+	}
+
+	// Same alignment check on the `+` block.
+	var firstPlusIdx int = -1
+	for i, l := range plainLines {
+		if strings.HasPrefix(l, " +  ") {
+			firstPlusIdx = i
+			break
+		}
+	}
+	if firstPlusIdx < 0 {
+		t.Fatalf("could not find ` +  ` prefixed first row:\n%s",
+			strings.Join(plainLines, "\n"))
+	}
+	if firstPlusIdx+1 >= len(plainLines) {
+		t.Fatalf("no continuation row after `+` wrap")
+	}
+	contPlus := plainLines[firstPlusIdx+1]
+	if !strings.HasPrefix(contPlus, pad) {
+		t.Errorf("continuation row of `+` lost sign-column alignment\n"+
+			"want prefix %q (%d blanks), got %q",
+			pad, signWidth, contPlus)
+	}
+
+	// And the strip background must extend onto continuation rows so
+	// the wrap doesn't leave half the card "blank" at terminal bg.
+	addBg := hexToTrueColor("#111C1C")
+	delBg := hexToTrueColor("#22141A")
+	// Continuation text from the `-` wrap is the tail of longRemoved
+	// (a stretch of 'x' chars near the end).
+	if !ansiLineHasCode(got, "48;2;"+delBg, "xxxx end") {
+		t.Errorf("continuation row of `-` lost delBg strip;\n%q", got)
+	}
+	if !ansiLineHasCode(got, "48;2;"+addBg, "yyyy end") {
+		t.Errorf("continuation row of `+` lost addBg strip;\n%q", got)
+	}
+}
+
 func TestParseSnippetToDiffLinesStripsPrefix(t *testing.T) {
 	// The parser strips the "- "/"+ "/"  " diff prefix so the rendered
 	// text doesn't double the sign char. Regression guard against

@@ -388,39 +388,97 @@ func cardsFindingPanel(f Finding) string {
 // char in a faint signFg, body in fg+bg pair); context lines pass
 // through with codeFg on default bg.
 //
-// Width is fixed at the caller's `width` parameter — long source
-// lines wrap via lipgloss `Width()` into multiple strip rows rather
-// than extending the panel past the terminal edge. Truncation was
-// considered but rejected: code reviewers want to see the whole
-// line, even if the wrap break lands mid-statement.
+// Lines longer than `width - signWidth` are wrapped *manually* into
+// multiple rows. Each row keeps its sign column aligned: the first
+// row carries the actual " - "/" + " sign in cardSignFg, while
+// continuation rows get a blank-bg pad of equal width. Naive
+// lipgloss `Width()` wrapping would leave the continuation row
+// hugging column 0 with no bg fill in the sign column — visually
+// broken in a multi-row diff.
 func renderDiff(lines []diffLine, width int) string {
 	var out []string
 	for _, l := range lines {
-		var bg, fg lipgloss.Color
-		switch l.kind {
-		case '-':
-			bg, fg = cardDelBg, cardDelFg
-		case '+':
-			bg, fg = cardAddBg, cardAddFg
-		default:
-			fg = cardCodeFg
-		}
-
-		sign := fmt.Sprintf(" %c  ", l.kind)
-
-		if l.kind == '-' || l.kind == '+' {
-			signStyle := lipgloss.NewStyle().Foreground(cardSignFg).Background(bg)
-			textStyle := lipgloss.NewStyle().
-				Foreground(fg).
-				Background(bg).
-				Width(width - lipgloss.Width(sign))
-			out = append(out, signStyle.Render(sign)+textStyle.Render(l.text))
-		} else {
-			style := lipgloss.NewStyle().Foreground(fg).Width(width)
-			out = append(out, style.Render(sign+l.text))
-		}
+		out = append(out, renderDiffRow(l.kind, l.text, width))
 	}
 	return strings.Join(out, "\n")
+}
+
+// renderDiffRow handles one logical diff line, returning one or more
+// rendered rows joined by "\n". Long source text is chunked into
+// width-sized pieces so the wrap break never lands inside an ANSI
+// escape sequence, and so we control the per-row prefix exactly.
+func renderDiffRow(kind byte, text string, width int) string {
+	sign := fmt.Sprintf(" %c  ", kind)
+	signWidth := lipgloss.Width(sign)
+	bodyWidth := width - signWidth
+	if bodyWidth <= 0 {
+		bodyWidth = width
+	}
+	chunks := chunkRunes(text, bodyWidth)
+
+	switch kind {
+	case '-', '+':
+		var bg, fg lipgloss.Color
+		if kind == '-' {
+			bg, fg = cardDelBg, cardDelFg
+		} else {
+			bg, fg = cardAddBg, cardAddFg
+		}
+		signStyle := lipgloss.NewStyle().Foreground(cardSignFg).Background(bg)
+		signPad := lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", signWidth))
+		textStyle := lipgloss.NewStyle().Foreground(fg).Background(bg).Width(bodyWidth)
+
+		rendered := make([]string, 0, len(chunks))
+		for i, c := range chunks {
+			prefix := signPad
+			if i == 0 {
+				prefix = signStyle.Render(sign)
+			}
+			rendered = append(rendered, prefix+textStyle.Render(c))
+		}
+		return strings.Join(rendered, "\n")
+
+	default:
+		// Context: codeFg on default bg, no strip. The sign column on
+		// continuation rows is plain spaces — context wrap is rare
+		// since LLM-emitted snippets keep context lines short.
+		pad := strings.Repeat(" ", signWidth)
+		style := lipgloss.NewStyle().Foreground(cardCodeFg).Width(width)
+		rendered := make([]string, 0, len(chunks))
+		for i, c := range chunks {
+			if i == 0 {
+				rendered = append(rendered, style.Render(sign+c))
+			} else {
+				rendered = append(rendered, style.Render(pad+c))
+			}
+		}
+		return strings.Join(rendered, "\n")
+	}
+}
+
+// chunkRunes splits a string into rune-aligned chunks of at most
+// `width` visual columns each. Char-based (no word boundary
+// awareness) — for code review wrapping, breaking mid-token is
+// acceptable since wrap is exceptional and the reader can scan the
+// continuation. width <= 0 returns the input as a single chunk to
+// avoid an infinite loop.
+func chunkRunes(s string, width int) []string {
+	if width <= 0 || s == "" {
+		return []string{s}
+	}
+	runes := []rune(s)
+	if len(runes) <= width {
+		return []string{s}
+	}
+	out := make([]string, 0, (len(runes)+width-1)/width)
+	for len(runes) > width {
+		out = append(out, string(runes[:width]))
+		runes = runes[width:]
+	}
+	if len(runes) > 0 {
+		out = append(out, string(runes))
+	}
+	return out
 }
 
 // cardsEmptyPanel is the success view for a review that produced zero

@@ -41,6 +41,15 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   secguard `contentWidth + 24` heuristic dropped — it made each card
   a different size based on its content, which broke alignment in
   multi-finding views.
+
+  **Long diff/snippet lines now wrap with sign-column alignment
+  preserved.** Continuation rows of `-`/`+` lines no longer hug
+  column 0 — they get a blank-bg pad equal to the sign-column width
+  (`" -  " / " +  "` → 4 cols), and the strip background extends onto
+  the wrapped row. Without this the card body lost its rectangular
+  shape on wide source lines (long SQL, full URLs, multi-arg calls).
+  Context lines wrap with matching whitespace indent. New
+  `TestRenderDiffWrapsLongLinesWithSignAlignment` pins this.
   - **Border now blends with the panel background** via
     `BorderBackground(bg)`. The rounded corners (`╭ ╮ ╰ ╯`) previously
     sat on the terminal-default colour, which read as a dark gap
