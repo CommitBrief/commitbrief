@@ -79,10 +79,14 @@ func TestBuildEmptyDiff(t *testing.T) {
 func TestEstimatedTokensReasonable(t *testing.T) {
 	p := Build(rules.Default(), lang.Resolution{Code: "en", Name: "English"}, "small diff")
 	got := p.EstimatedTokens()
-	// default.md + severity rubric + JSON contract + guard ≈ 700-1200 tokens.
-	// We don't pin an exact number — just assert order of magnitude.
-	if got < 500 || got > 2000 {
-		t.Errorf("EstimatedTokens = %d, expected ~700-1200", got)
+	// default.md (expanded in v0.9.0 with the optimization +
+	// adversarial-security depth) + severity rubric + JSON contract
+	// (now with `suggestion`) + lang directive + guard ≈ 2500–3000
+	// tokens. We don't pin an exact number — just assert order of
+	// magnitude. Floor catches accidental empty-prompt regressions;
+	// ceiling catches accidental prompt-bloat regressions.
+	if got < 1500 || got > 4000 {
+		t.Errorf("EstimatedTokens = %d, expected ~2500-3000", got)
 	}
 }
 
