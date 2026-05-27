@@ -1345,6 +1345,37 @@ func TestDryRunLangFlagOverride(t *testing.T) {
 	}
 }
 
+// ---------- --cli flag (CLI-backed providers) ----------
+
+func TestCLIFlagMapsToCliSuffixProvider(t *testing.T) {
+	// --cli claude is shorthand for --provider claude-cli. dry-run is
+	// the cheapest way to inspect what provider got resolved without
+	// actually invoking any CLI subprocess.
+	e := newCLIEnv(t)
+	if err := e.run("dry-run", "--staged", "--cli", "claude"); err != nil {
+		t.Fatalf("dry-run --cli claude: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Provider:      claude-cli") {
+		t.Errorf("--cli claude should resolve to provider=claude-cli; got:\n%s",
+			truncate(out, 600))
+	}
+}
+
+func TestCLIFlagAndProviderFlagAreMutex(t *testing.T) {
+	// cobra MarkFlagsMutuallyExclusive should reject both flags at
+	// once. Two ways to pick a provider in the same invocation is
+	// a config mistake; loudly fail.
+	e := newCLIEnv(t)
+	err := e.run("dry-run", "--staged", "--cli", "claude", "--provider", "anthropic")
+	if err == nil {
+		t.Fatal("expected error for --cli + --provider together; got nil")
+	}
+	if !strings.Contains(err.Error(), "none of the others can be") {
+		t.Errorf("expected cobra mutex-group error; got: %v", err)
+	}
+}
+
 func TestReviewMutuallyExclusiveScopes(t *testing.T) {
 	e := newCLIEnv(t)
 	err := e.run("--staged", "--unstaged")

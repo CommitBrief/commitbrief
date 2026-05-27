@@ -11,6 +11,46 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **CLI-tool-backed providers — `claude-cli`, `gemini-cli`** (experimental).
+  Drive the user's locally-installed Claude Code (`claude`) or Gemini
+  CLI (`gemini`) as the review backend via subprocess, instead of an
+  HTTPS API call. Two ways to select:
+
+  ```
+  commitbrief --cli claude --staged           # shorthand
+  commitbrief --provider claude-cli --staged  # explicit (also visible in `providers list`)
+  ```
+
+  No API key needed when the host CLI is already authenticated. Cost
+  is whatever the user's CLI subscription bills (Claude Pro, Gemini
+  Advanced, etc.); per-token cost reporting is unavailable through
+  subprocess so the verbose footer omits it.
+
+  Implementation: new `provider.PlainTextEmitter` marker interface
+  on the provider type; review.go branches on it to swap the prompt
+  (`prompt.BuildPlainText` with a fixed plain-text response-format
+  contract instead of the JSON contract), skip retry-once and the
+  cards renderer entirely, and stream the host CLI's already-
+  formatted output verbatim to stdout. New cache format marker
+  `cache.FormatPlainText` so cached entries replay through the same
+  verbatim-emit path with no `review.degraded` warning. Shared
+  backend at `internal/provider/clireview/` (12 unit tests against
+  fake shell scripts on POSIX); concrete adapters at
+  `internal/provider/claude-cli/` and `internal/provider/gemini-cli/`.
+  The `-cli` directory suffix is the deliberate developer-side
+  signal that these go through a local subprocess, not the
+  `internal/provider/{anthropic,gemini}/` HTTPS API packages — easy
+  to confuse without it.
+
+  Limits: agentic host CLIs don't expose native structured-output
+  enforcement, so format adherence relies on prompt instructions.
+  `--fail-on` is a no-op in CLI mode (no Findings struct to inspect);
+  `--json` / `--markdown` are ignored (stdout is the CLI's plain
+  text); `--copy` copies the verbatim output. Mutually exclusive
+  with `--provider` at the cobra layer. Cache key includes the host
+  CLI's reported version so upgrades cleanly invalidate prior
+  entries.
+
 - **Progress animation during the review pipeline** — four-stage tree
   with breathing-dot animation on the active stage and palette-aligned
   terminal states for completed/failed stages. Stages:

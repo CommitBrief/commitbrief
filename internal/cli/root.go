@@ -31,6 +31,7 @@ type globalFlags struct {
 	provider     string
 	model        string
 	color        string
+	cli          string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
 	files        []string // global --file (repeatable); path filter applied post-parse
 	dirs         []string // global --dir (repeatable); prefix filter applied post-parse
 	genMan       string   // hidden: --gen-man <dir> writes man pages and exits
@@ -90,6 +91,8 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
 	flags.StringSliceVarP(&global.files, "file", "f", nil, "review only these files (repeatable); combines with the active scope flag")
 	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories (repeatable); combines with the active scope flag")
+	flags.StringVar(&global.cli, "cli", "", "use a locally-installed CLI tool (claude|gemini) as the review backend; shorthand for --provider <name>-cli")
+	cmd.MarkFlagsMutuallyExclusive("provider", "cli")
 
 	// Hidden: drives scripts/manpage.sh; not part of the user-visible surface.
 	flags.StringVar(&global.genMan, "gen-man", "", "generate man pages into <dir> and exit (hidden)")

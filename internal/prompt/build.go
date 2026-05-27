@@ -30,6 +30,19 @@ func Build(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText string) P
 	}
 }
 
+// BuildPlainText is the prompt variant for CLI-backed providers
+// (claude-cli, gemini-cli). Same project rules + severity rubric, but
+// swaps the JSON-contract response format for a fixed plain-text
+// layout. Used by review.go when the active provider satisfies
+// provider.PlainTextEmitter.
+func BuildPlainText(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText string) Prompt {
+	system, userTpl := rules.BuildPlainText(rulesLoaded, langRes)
+	return Prompt{
+		System: system,
+		User:   fmt.Sprintf(userTpl, diffText),
+	}
+}
+
 // EstimatedTokens uses the chars/4 heuristic shared with internal/diff.
 // Provider-side token counts override this; the value is intended for
 // pre-flight checks and dry-run reporting.

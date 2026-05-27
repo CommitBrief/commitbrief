@@ -57,6 +57,11 @@ type Tokens struct {
 const (
 	FormatJSON             = "json"
 	FormatMarkdownFallback = "markdown-fallback"
+	// FormatPlainText is the marker for cache entries written by
+	// PlainTextEmitter providers (CLI-based). The Content is the
+	// host CLI's already-formatted output — no JSON parse, no
+	// retry-once, no degrade warning. Renderer emits Content verbatim.
+	FormatPlainText = "plain-text"
 )
 
 type Cache struct {

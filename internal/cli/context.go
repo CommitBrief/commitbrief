@@ -63,7 +63,13 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 	}
 	config.ApplyEnv(cfg)
 
-	// Apply CLI overrides
+	// Apply CLI overrides. --cli <name> is a shorthand that resolves
+	// to the "<name>-cli" provider (claude → claude-cli, gemini →
+	// gemini-cli). cobra has already enforced mutual exclusion with
+	// --provider so at most one of the two is set.
+	if global.cli != "" {
+		cfg.Provider = global.cli + "-cli"
+	}
 	if global.provider != "" {
 		cfg.Provider = global.provider
 	}

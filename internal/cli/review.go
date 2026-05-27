@@ -126,13 +126,25 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	prog.Resume()
 
 	prog.Start(app.Catalog.T("progress.preparing"))
-	p := prompt.Build(loaded, app.Lang, parsed.String())
 
 	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
 	if err != nil {
 		prog.Fail(err)
 		return err
 	}
+	// PlainTextEmitter providers (claude-cli / gemini-cli) get the
+	// plain-text response-format contract instead of the JSON one —
+	// the host CLI's agentic system prompt makes structured-output
+	// guarantees unreliable. See ADR-0009 supersession note and the
+	// clireview package.
+	_, plainText := prov.(provider.PlainTextEmitter)
+	var p prompt.Prompt
+	if plainText {
+		p = prompt.BuildPlainText(loaded, app.Lang, parsed.String())
+	} else {
+		p = prompt.Build(loaded, app.Lang, parsed.String())
+	}
+
 	model := app.Config.Providers[app.Config.Provider].Model
 	if model == "" {
 		model = prov.DefaultModel()
@@ -180,13 +192,21 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				RulesLoaded:  loaded.Source != rules.SourceDefault,
 			}
 			// Parse Findings unless the entry was written in markdown-fallback
-			// mode — in that case the original write already emitted the
-			// stderr warning and we honour it silently on replay.
+			// or plain-text mode — in those cases the cached Content is
+			// already in its final renderable shape and there is no
+			// findings array to recover.
 			var findings []render.Finding
-			if entry.Result.Format != cache.FormatMarkdownFallback {
+			switch entry.Result.Format {
+			case cache.FormatJSON, "":
 				findings, _ = render.ParseFindings(entry.Result.Content)
 			}
-			if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
+			if entry.Result.Format == cache.FormatPlainText {
+				// CLI-emitted output: stream the cached body verbatim to
+				// stdout instead of going through the cards renderer.
+				if err := emitPlainText(cmd, entry.Result.Content); err != nil {
+					return err
+				}
+			} else if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
 				return err
 			}
 			handleCopyFlag(cmd, app, findings)
@@ -217,22 +237,41 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 
 	prog.Start(app.Catalog.T("progress.thinking"))
 	start := time.Now()
-	content, usage, format, err := tryStructuredReview(ctx, prov, provider.Request{
+	req := provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,
 		UserPrompt:   p.User,
 		Lang:         app.Lang.Code,
-	}, func() {
-		// First attempt produced unparseable JSON; ADR-0014 §4 retry
-		// fires next. Mark the current "Thinking..." as Soft (neutral)
-		// and start a fresh "Retrying..." stage so the user sees we
-		// noticed the first attempt was iffy.
-		prog.Soft()
-		prog.Start(app.Catalog.T("progress.retrying"))
-	})
-	if err != nil {
-		prog.Fail(err)
-		return fmt.Errorf("provider %s: %w", prov.Name(), err)
+	}
+	var (
+		content string
+		usage   provider.Usage
+		format  string
+	)
+	if plainText {
+		// CLI-backed providers: single-shot call, no JSON parsing, no
+		// retry-once. The host CLI returns the formatted plain-text
+		// review which we stream straight to stdout after Clear.
+		resp, callErr := prov.Review(ctx, req)
+		if callErr != nil {
+			prog.Fail(callErr)
+			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+		}
+		content, usage, format = resp.Content, resp.Usage, cache.FormatPlainText
+	} else {
+		var callErr error
+		content, usage, format, callErr = tryStructuredReview(ctx, prov, req, func() {
+			// First attempt produced unparseable JSON; ADR-0014 §4
+			// retry fires next. Mark the current "Thinking..." as
+			// Soft (neutral) and start a fresh "Retrying..." stage so
+			// the user sees we noticed the first attempt was iffy.
+			prog.Soft()
+			prog.Start(app.Catalog.T("progress.retrying"))
+		})
+		if callErr != nil {
+			prog.Fail(callErr)
+			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+		}
 	}
 	prog.Finish()
 	// Cards / JSON / Markdown render takes over the screen below —
@@ -243,10 +282,14 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 
 	// Parse + warn happen here on a fresh call (the cache-hit path above
 	// honours the cached Format and skips this warning to avoid repeats).
+	// FormatPlainText is a deliberate non-JSON path (CLI providers); no
+	// warning. FormatMarkdownFallback is a degradation (API provider
+	// produced unparseable JSON despite the retry) and DOES warn.
 	var findings []render.Finding
-	if format == cache.FormatJSON {
+	switch format {
+	case cache.FormatJSON:
 		findings, _ = render.ParseFindings(content)
-	} else {
+	case cache.FormatMarkdownFallback:
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
 	}
 
@@ -285,11 +328,33 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			},
 		})
 	}
-	if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
+	if format == cache.FormatPlainText {
+		if err := emitPlainText(cmd, content); err != nil {
+			return err
+		}
+	} else if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
 		return err
 	}
 	handleCopyFlag(cmd, app, findings)
 	return applyFailOn(cmd, app, findings)
+}
+
+// emitPlainText streams a CLI-provider's already-formatted output to
+// stdout verbatim. We don't run it through the cards renderer or
+// glamour — the host CLI's output is the final form the user wants
+// to see, and double-rendering would just re-flow the formatting we
+// asked the model to produce.
+func emitPlainText(cmd *cobra.Command, content string) error {
+	w := cmd.OutOrStdout()
+	if _, err := fmt.Fprint(w, content); err != nil {
+		return fmt.Errorf("emit plain-text: %w", err)
+	}
+	// Ensure a trailing newline so the shell prompt lands on a fresh
+	// line. CLIs sometimes omit it; defensive but cheap.
+	if len(content) == 0 || content[len(content)-1] != '\n' {
+		_, _ = fmt.Fprintln(w)
+	}
+	return nil
 }
 
 // handleCopyFlag pushes a plain-text summary of findings onto the
