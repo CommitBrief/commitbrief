@@ -41,3 +41,4 @@ Thumbs.db
 # CommitBrief runtime artifacts when dogfooding the tool inside its own repo
 # (.commitbrief/config.yml is per-user; cache/ is local-only)
 /.commitbrief/
+reviews/
