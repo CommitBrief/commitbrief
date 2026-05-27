@@ -558,10 +558,7 @@ func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64) b
 		return true
 	}
 	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
-	if ui.AcceptsYes(answer, app.Catalog) {
-		return false
-	}
-	return true
+	return !ui.AcceptsYes(answer, app.Catalog)
 }
 
 // estimateOutputTokens is a conservative-on-the-high-side guess for
@@ -612,8 +609,5 @@ func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.Se
 		return true
 	}
 	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
-	if ui.AcceptsYes(answer, app.Catalog) {
-		return false
-	}
-	return true
+	return !ui.AcceptsYes(answer, app.Catalog)
 }
