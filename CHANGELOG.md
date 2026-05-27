@@ -10,6 +10,49 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **Diff aggregate caching.** `Diff.AddedLines()` / `DeletedLines()`
+  switched from O(N) live traversal to O(1) reads of fields populated
+  once during `Parse` / `Filter` / `KeepPaths`. The review pipeline
+  was calling each method 2–3× per run (info line, render meta,
+  cache-hit + fresh branch); on large diffs the redundant walks
+  showed up in profiles. New `countLineKinds` helper does both
+  totals in a single pass and feeds the memo. Per-call cost is now
+  zero; total construction cost is unchanged (we'd walk the tree
+  anyway during Parse).
+
+- **Hoisted `Diff.String()` to a local variable** in `runReview` and
+  `dryRun`. The string was being recomputed 3× (secret scan, prompt
+  builder, cache key) — each call rebuilt the whole diff text from
+  the file / hunk / line tree. On a 5 MB diff that's 15 MB of
+  throwaway allocations per review. Now built once, passed by value
+  to the consumers. No API change.
+
+- **Pre-split path parts on `FileDiff`.** Added `FileDiff.PathParts`
+  and `OldPathParts` populated once during `parseDiffHeader`. The
+  ignore matcher previously called `strings.Split(path, "/")` on
+  every Match call, which fired per-file × per-filter-layer (built-in
+  ignore + repo `.commitbriefignore` = 2 layers). New
+  `Matcher.MatchParts(parts []string)` takes the pre-split slice
+  directly; `diff.shouldExclude` uses it. On a 500-file diff,
+  ~1000 redundant slice allocations gone.
+
+- **Shared token-estimate heuristic.** Created `internal/tokens`
+  with a single `Estimate(s string) int` function (chars/4 round-up).
+  Replaces 6 inline `(len(s) + 3) / 4` copies in
+  `internal/diff/tokens.go`, `internal/compress/compress.go`,
+  `internal/provider/{anthropic,openai,gemini,ollama,mock,clireview}/`.
+  Cache keys / cost preflight / context-window gate now share one
+  source of truth — drift between providers can no longer give the
+  same string different "sizes". Leaf package with zero deps; no
+  import-cycle risk.
+
+  Sourced from a Gemini-authored optimization review (see
+  `commitbrief/reviews/optimization.md` — maintainer-private). Two
+  Gemini findings deferred to v1.x: the template-parse-per-render
+  finding (not actually hot — once per CLI run) and the rest of the
+  filter-layer optimization (only 1–2× per review, low ROI vs effort).
+
 ### Added
 - **Per-finding `suggestion` field — required actionable remediation.**
   Every finding now carries a 2–3 sentence concrete fix recommendation

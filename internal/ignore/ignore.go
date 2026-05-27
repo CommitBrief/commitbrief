@@ -38,6 +38,17 @@ func (m *Matcher) Match(path string) bool {
 	return m.backend.Match(strings.Split(p, "/"), false)
 }
 
+// MatchParts is the same logical predicate as Match but accepts an
+// already-split `[]string` path. Use this when the caller already
+// has the parts (e.g. diff.Filter has FileDiff.PathParts populated
+// at parse time) to skip the per-call strings.Split allocation.
+func (m *Matcher) MatchParts(parts []string) bool {
+	if m == nil || len(m.patterns) == 0 || len(parts) == 0 {
+		return false
+	}
+	return m.backend.Match(parts, false)
+}
+
 func (m *Matcher) Len() int {
 	if m == nil {
 		return 0

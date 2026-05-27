@@ -12,6 +12,7 @@ import (
 
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/rules"
+	"github.com/CommitBrief/commitbrief/internal/tokens"
 )
 
 type Level int
@@ -115,8 +116,8 @@ func Run(ctx context.Context, p provider.Provider, req Request) (Result, error) 
 		CompressedContent: compressed,
 		OriginalChars:     len(req.Original),
 		CompressedChars:   len(compressed),
-		OriginalTokens:    estimateTokens(req.Original),
-		CompressedTokens:  estimateTokens(compressed),
+		OriginalTokens:    tokens.Estimate(req.Original),
+		CompressedTokens:  tokens.Estimate(compressed),
 		Usage:             resp.Usage,
 	}
 	if result.CompressedChars >= result.OriginalChars {
@@ -202,13 +203,4 @@ func Apply(repoRoot string, r Result, backupDir, timestamp string) (rulesPath, b
 		return "", "", err
 	}
 	return rulesPath, backupPath, nil
-}
-
-// estimateTokens is the chars/4 heuristic shared with internal/diff. Kept
-// inline so compress doesn't drag an import cycle through diff.
-func estimateTokens(s string) int {
-	if s == "" {
-		return 0
-	}
-	return (len(s) + 3) / 4
 }

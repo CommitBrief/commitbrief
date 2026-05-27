@@ -2,16 +2,14 @@
 
 package diff
 
-// EstimateTokens returns a rough token count from byte length using the
-// chars/4 heuristic. Anthropic and OpenAI tokenizers vary, but chars/4 is a
-// stable upper-bound estimate for English + code in v1; per-provider exact
-// counts can replace this once the provider modules ship.
-func EstimateTokens(s string) int {
-	if len(s) == 0 {
-		return 0
-	}
-	return (len(s) + 3) / 4
-}
+import "github.com/CommitBrief/commitbrief/internal/tokens"
+
+// EstimateTokens returns a rough token count from byte length using
+// the chars/4 heuristic. Backed by the shared internal/tokens helper
+// so providers, compress, and the diff layer never drift apart.
+// Provider-side exact tokenizers can replace this when they're
+// cheap to call from outside the provider's process.
+func EstimateTokens(s string) int { return tokens.Estimate(s) }
 
 func (d Diff) EstimateTokens() int {
 	n := 0

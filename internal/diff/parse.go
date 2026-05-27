@@ -39,6 +39,14 @@ func Parse(input git.Diff) (Diff, error) {
 	flushFile := func() {
 		flushHunk()
 		if cur != nil {
+			// Pre-split Path / OldPath once so the ignore matcher and
+			// any later consumer don't re-split per call.
+			if cur.Path != "" {
+				cur.PathParts = strings.Split(cur.Path, "/")
+			}
+			if cur.OldPath != "" {
+				cur.OldPathParts = strings.Split(cur.OldPath, "/")
+			}
 			out.Files = append(out.Files, *cur)
 			cur = nil
 		}
@@ -127,6 +135,7 @@ func Parse(input git.Diff) (Diff, error) {
 		return out, fmt.Errorf("diff: scan: %w", err)
 	}
 	flushFile()
+	out.addedLines, out.deletedLines = countLineKinds(out.Files)
 	return out, nil
 }
 

@@ -20,15 +20,17 @@ func Filter(d Diff, m *ignore.Matcher) Diff {
 		}
 		out.Files = append(out.Files, f)
 	}
+	out.addedLines, out.deletedLines = countLineKinds(out.Files)
 	return out
 }
 
 func shouldExclude(f FileDiff, m *ignore.Matcher) bool {
-	if f.Path != "" && m.Match(f.Path) {
+	// PathParts / OldPathParts are pre-split at parse time so this
+	// hot path (every file × every filter layer) avoids re-splitting.
+	if len(f.PathParts) > 0 && m.MatchParts(f.PathParts) {
 		return true
 	}
-	// For renames/deletes the post-change path may be empty; fall back to OldPath.
-	if f.OldPath != "" && m.Match(f.OldPath) {
+	if len(f.OldPathParts) > 0 && m.MatchParts(f.OldPathParts) {
 		return true
 	}
 	return false
@@ -70,6 +72,7 @@ func KeepPaths(d Diff, files, dirs []string) Diff {
 			out.Files = append(out.Files, f)
 		}
 	}
+	out.addedLines, out.deletedLines = countLineKinds(out.Files)
 	return out
 }
 

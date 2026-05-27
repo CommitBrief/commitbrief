@@ -9,6 +9,7 @@ import (
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/provider"
+	"github.com/CommitBrief/commitbrief/internal/tokens"
 )
 
 const defaultName = "mock"
@@ -79,12 +80,7 @@ func (m *Provider) ContextWindow(string) int {
 	return m.Window
 }
 
-func (m *Provider) EstimateTokens(s string) int {
-	if s == "" {
-		return 0
-	}
-	return (len(s) + 3) / 4
-}
+func (m *Provider) EstimateTokens(s string) int { return tokens.Estimate(s) }
 
 func (m *Provider) Pricing(string) provider.Pricing {
 	return m.PricingValue

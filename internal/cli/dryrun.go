@@ -61,10 +61,14 @@ func newDryRunCmd() *cobra.Command {
 					return errors.New(app.Catalog.T("output.template.invalid", outputLoaded.Path, vErr.Error()))
 				}
 			}
-			p := prompt.Build(loaded, app.Lang, parsed.String())
+			// Hoist the diff text once; prompt build + cache key both
+			// need it and Diff.String() rewalks the file tree on
+			// every call.
+			diffText := parsed.String()
+			p := prompt.Build(loaded, app.Lang, diffText)
 
 			cacheKey := cache.Compute(cache.ComputeArgs{
-				Diff:         parsed.String(),
+				Diff:         diffText,
 				SystemPrompt: p.System,
 				Provider:     app.Config.Provider,
 				Model:        app.Config.Providers[app.Config.Provider].Model,

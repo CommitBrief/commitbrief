@@ -109,6 +109,50 @@ func TestKeepPaths_OldPathConsidered(t *testing.T) {
 	}
 }
 
+func TestKeepPaths_RecomputesLineAggregates(t *testing.T) {
+	// AddedLines/DeletedLines are memoized at construction. After a
+	// filter narrows the file set, the aggregates must reflect the
+	// SURVIVING files only — not the original whole-tree counts.
+	// Regression guard against forgetting to call countLineKinds in
+	// new filter helpers.
+	in := Diff{
+		Files: []FileDiff{
+			{
+				Path:      "keep.go",
+				PathParts: []string{"keep.go"},
+				Hunks: []Hunk{{Lines: []HunkLine{
+					{Kind: LineAdd, Text: "a"},
+					{Kind: LineAdd, Text: "b"},
+					{Kind: LineDel, Text: "x"},
+				}}},
+			},
+			{
+				Path:      "drop.go",
+				PathParts: []string{"drop.go"},
+				Hunks: []Hunk{{Lines: []HunkLine{
+					{Kind: LineAdd, Text: "drop"},
+					{Kind: LineDel, Text: "drop"},
+					{Kind: LineDel, Text: "drop"},
+				}}},
+			},
+		},
+	}
+	// Pre-populate memo to mimic Parse output.
+	in.addedLines, in.deletedLines = countLineKinds(in.Files)
+	if in.AddedLines() != 3 || in.DeletedLines() != 3 {
+		t.Fatalf("test setup: AddedLines=%d DeletedLines=%d, want 3/3",
+			in.AddedLines(), in.DeletedLines())
+	}
+
+	out := KeepPaths(in, []string{"keep.go"}, nil)
+	if out.AddedLines() != 2 {
+		t.Errorf("post-filter AddedLines = %d, want 2 (subset)", out.AddedLines())
+	}
+	if out.DeletedLines() != 1 {
+		t.Errorf("post-filter DeletedLines = %d, want 1 (subset)", out.DeletedLines())
+	}
+}
+
 func TestKeepPaths_PreservesOriginAndArgs(t *testing.T) {
 	// Origin/Args metadata is preserved across the filter so downstream
 	// consumers (cache key, dry-run formatter, render meta) keep the

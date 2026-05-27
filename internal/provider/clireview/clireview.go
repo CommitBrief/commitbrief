@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/provider"
+	"github.com/CommitBrief/commitbrief/internal/tokens"
 )
 
 // Spec describes one CLI backend. Each concrete provider package
@@ -103,15 +104,11 @@ func (b *Backend) DefaultModel() string {
 // doesn't read "0".
 func (b *Backend) ContextWindow(string) int { return 200_000 }
 
-// EstimateTokens uses the same len/4 approximation as the rest of
-// the providers; CLI tools usually don't expose tokenizers we can
-// call from outside their process.
-func (b *Backend) EstimateTokens(s string) int {
-	if s == "" {
-		return 0
-	}
-	return (len(s) + 3) / 4
-}
+// EstimateTokens uses the shared chars/4 heuristic. CLI tools
+// usually don't expose tokenizers we can call from outside their
+// process, so the approximation has to do for the cost preflight
+// and context-window gate.
+func (b *Backend) EstimateTokens(s string) int { return tokens.Estimate(s) }
 
 // Pricing is zero for CLI providers — the user pays through their
 // host-CLI subscription (Claude Pro, Gemini Advanced, ChatGPT Plus,

@@ -99,6 +99,12 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	prog.Info(app.Catalog.T("progress.diff_stats",
 		parsed.FileCount(), parsed.AddedLines(), parsed.DeletedLines()))
 
+	// Hoist the diff text once. The downstream pipeline asks for it
+	// 3+ times (secret scan, prompt builder, cache key) and each
+	// Diff.String() call walks the file/hunk/line tree afresh. On
+	// large diffs the repeat allocations are real GC pressure.
+	diffText := parsed.String()
+
 	// Guard + secret scan can prompt interactively. Pause the animation
 	// so the prompt has a clean canvas; Resume redraws the tree below
 	// the prompt afterwards. Both are typically silent (no-op) on a
@@ -116,7 +122,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// LLM call. Off by setting guard.secret_scan=false in config; user-
 	// bypassable per-invocation via --allow-secrets or --yes.
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
-		matches := guard.ScanForSecrets(parsed.String())
+		matches := guard.ScanForSecrets(diffText)
 		if len(matches) > 0 {
 			if abort := handleSecretMatches(cmd, app, matches); abort {
 				return errors.New(app.Catalog.T("guard.secrets.aborted_user"))
@@ -140,9 +146,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	_, plainText := prov.(provider.PlainTextEmitter)
 	var p prompt.Prompt
 	if plainText {
-		p = prompt.BuildPlainText(loaded, app.Lang, parsed.String())
+		p = prompt.BuildPlainText(loaded, app.Lang, diffText)
 	} else {
-		p = prompt.Build(loaded, app.Lang, parsed.String())
+		p = prompt.Build(loaded, app.Lang, diffText)
 	}
 
 	model := app.Config.Providers[app.Config.Provider].Model
@@ -151,7 +157,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	}
 
 	cacheKey := cache.Compute(cache.ComputeArgs{
-		Diff:         parsed.String(),
+		Diff:         diffText,
 		SystemPrompt: p.System,
 		Provider:     prov.Name(),
 		Model:        model,

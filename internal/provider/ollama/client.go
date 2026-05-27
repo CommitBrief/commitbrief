@@ -14,6 +14,7 @@ import (
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/provider"
+	"github.com/CommitBrief/commitbrief/internal/tokens"
 )
 
 const (
@@ -58,12 +59,7 @@ func (c *Client) ContextWindow(model string) int {
 	return contextWindowFor(model)
 }
 
-func (c *Client) EstimateTokens(s string) int {
-	if s == "" {
-		return 0
-	}
-	return (len(s) + 3) / 4
-}
+func (c *Client) EstimateTokens(s string) int { return tokens.Estimate(s) }
 
 func (c *Client) Pricing(model string) provider.Pricing { return pricingFor(model) }
 
