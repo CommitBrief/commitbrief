@@ -158,5 +158,5 @@ func Print(w io.Writer, version string) {
 	lines[4] += gap + tagline
 	lines[5] += gap + links
 
-	fmt.Fprint(w, "\n"+strings.Join(lines, "\n")+"\n\n\n")
+	_, _ = fmt.Fprint(w, "\n"+strings.Join(lines, "\n")+"\n\n\n")
 }
