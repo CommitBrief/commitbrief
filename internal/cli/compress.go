@@ -111,7 +111,10 @@ func newCompressCmd() *cobra.Command {
 					os.Stdin,
 					cmd.OutOrStderr(),
 					app.Catalog.T("compress.replace_prompt"),
-					ui.AskOptions{NonInteractive: !ui.IsStdinTTY(os.Stdin)},
+					ui.AskOptions{
+						NonInteractive: !ui.IsStdinTTY(os.Stdin),
+						Catalog:        app.Catalog,
+					},
 				)
 				if err != nil {
 					return err

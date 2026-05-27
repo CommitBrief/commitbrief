@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 )
 
 func diffWith(paths ...string) diff.Diff {
@@ -48,6 +49,42 @@ func TestTriggerOnLocalConfig(t *testing.T) {
 	}
 	if !strings.Contains(out, "non-interactive") {
 		t.Errorf("non-interactive abort message missing; got:\n%s", out)
+	}
+}
+
+func TestTriggerOnLocalConfigEmitsTurkishWhenCatalogPassed(t *testing.T) {
+	// UC-15 regression guard. With the TR catalog wired through
+	// Options.Catalog the warning header, file lines, detail text
+	// and non-interactive abort message must all come from
+	// messages.tr.yml. A bytes.Buffer is non-TTY so we don't need
+	// to mock stdin — the non-interactive path covers the prompt
+	// suffix indirectly via the abort line.
+	cat, err := i18n.Load("tr")
+	if err != nil {
+		t.Fatalf("load tr catalog: %v", err)
+	}
+	d := diffWith("internal/auth/login.go", ".commitbrief/config.yml")
+	var w bytes.Buffer
+	res, _ := CheckDiffForLocalConfig(d, Options{
+		NonInteractive: true,
+		Writer:         &w,
+		Catalog:        cat,
+	})
+	if res != Abort {
+		t.Errorf("Result = %v, want Abort", res)
+	}
+	out := w.String()
+	// TR header
+	if !strings.Contains(out, "Bu review .commitbrief/ altında") {
+		t.Errorf("missing TR warning header; got:\n%s", out)
+	}
+	// TR detail
+	if !strings.Contains(out, "kullanıcıya özeldir") {
+		t.Errorf("missing TR warning detail; got:\n%s", out)
+	}
+	// TR non-interactive abort
+	if !strings.Contains(out, "etkileşimsiz") {
+		t.Errorf("missing TR non-interactive abort; got:\n%s", out)
 	}
 }
 

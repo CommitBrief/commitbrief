@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
 type Result int
@@ -35,6 +37,13 @@ type Options struct {
 	NonInteractive bool
 	Writer         io.Writer
 	Reader         io.Reader
+
+	// Catalog plumbs i18n into the .commitbrief/* write-guard so the
+	// user-visible warning, file lines, prompt, and abort messages
+	// honour the active locale. Nil → English defaults (legacy
+	// behaviour). Every CLI caller should pass app.Catalog so
+	// Turkish users actually see Turkish here (UC-15).
+	Catalog *i18n.Catalog
 }
 
 // PathPrefix is the trigger condition: any diff file whose path starts with
@@ -56,14 +65,17 @@ func CheckDiffForLocalConfig(d diff.Diff, opts Options) (Result, error) {
 	if w == nil {
 		w = os.Stderr
 	}
-	writeWarning(w, triggers)
+	writeWarning(w, triggers, opts.Catalog)
 
 	if opts.NonInteractive {
-		_, _ = fmt.Fprintln(w, "Aborting (non-interactive mode); pass --yes to override.")
+		_, _ = fmt.Fprintln(w, tr(opts.Catalog, "guard.non_interactive",
+			"Aborting (non-interactive mode); pass --yes to override."))
 		return Abort, nil
 	}
 
-	_, _ = fmt.Fprint(w, "   Continue? [y/N]: ")
+	prompt := tr(opts.Catalog, "guard.prompt", "   Continue?")
+	suffix := ui.PromptSuffix(opts.Catalog)
+	_, _ = fmt.Fprintf(w, "%s %s: ", prompt, suffix)
 
 	r := opts.Reader
 	if r == nil {
@@ -73,10 +85,24 @@ func CheckDiffForLocalConfig(d diff.Diff, opts Options) (Result, error) {
 	if err != nil {
 		return Abort, fmt.Errorf("guard: read input: %w", err)
 	}
-	if isYes(answer) {
+	if ui.AcceptsYes(answer, opts.Catalog) {
 		return Continue, nil
 	}
 	return Abort, nil
+}
+
+// tr is a tiny wrapper that lets us pass a nil catalog without
+// guarding every call site. nil catalog → fallback string, exposing
+// the same English UX the CLI used to produce hardcoded.
+func tr(c *i18n.Catalog, key, fallback string) string {
+	if c == nil {
+		return fallback
+	}
+	v := c.T(key)
+	if v == "" || v == key {
+		return fallback
+	}
+	return v
 }
 
 func Triggers(d diff.Diff) []string {
@@ -109,14 +135,17 @@ func isUnderLocalDir(path string) bool {
 	return strings.HasPrefix(path, PathPrefix)
 }
 
-func writeWarning(w io.Writer, triggers []string) {
-	_, _ = fmt.Fprintln(w, "⚠  This review includes changes under .commitbrief/:")
+func writeWarning(w io.Writer, triggers []string, catalog *i18n.Catalog) {
+	_, _ = fmt.Fprintln(w, tr(catalog, "guard.warning_header",
+		"⚠  This review includes changes under .commitbrief/:"))
 	for _, p := range triggers {
-		_, _ = fmt.Fprintf(w, "   M %s\n", p)
+		_, _ = fmt.Fprintln(w, fmt.Sprintf(
+			tr(catalog, "guard.warning_file", "   M %s"), p))
 	}
 	_, _ = fmt.Fprintln(w)
-	_, _ = fmt.Fprintln(w, "   These files are usually user-specific. Committing them may break")
-	_, _ = fmt.Fprintln(w, "   other developers' configurations or leak API keys.")
+	_, _ = fmt.Fprintln(w, tr(catalog, "guard.warning_detail",
+		"   These files are usually user-specific. Committing them may break\n"+
+			"   other developers' configurations or leak API keys."))
 	_, _ = fmt.Fprintln(w)
 }
 
@@ -129,13 +158,4 @@ func readAnswer(r io.Reader) (string, error) {
 		return "", nil
 	}
 	return strings.TrimSpace(strings.ToLower(scanner.Text())), nil
-}
-
-func isYes(answer string) bool {
-	switch answer {
-	case "y", "yes":
-		return true
-	default:
-		return false
-	}
 }

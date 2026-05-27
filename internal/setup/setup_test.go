@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/CommitBrief/commitbrief/internal/i18n"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
@@ -313,5 +315,56 @@ func TestOllamaModelsBadJSON(t *testing.T) {
 
 	if _, err := OllamaModels(context.Background(), srv.URL); err == nil {
 		t.Error("expected error on malformed body")
+	}
+}
+
+func TestTrFallsBackToProvidedDefault(t *testing.T) {
+	// UC-16 helper. nil catalog → English fallback so the wizard
+	// stays usable in library/test contexts. Non-nil catalog with a
+	// missing key also returns the fallback rather than echoing the
+	// key back (which would be ugly UX).
+	if got := tr(nil, "any.key", "default"); got != "default" {
+		t.Errorf("nil catalog → %q, want default", got)
+	}
+	en, _ := i18n.Load("en")
+	if got := tr(en, "no.such.key.xyzzy", "fallback"); got != "fallback" {
+		t.Errorf("missing key → %q, want fallback", got)
+	}
+}
+
+func TestTrResolvesTurkishCatalogForSetupKeys(t *testing.T) {
+	// Pin the exact wizard strings we now wire from the catalog so a
+	// future setup-prompt rewrite doesn't silently break TR users.
+	cat, err := i18n.Load("tr")
+	if err != nil {
+		t.Fatalf("load tr catalog: %v", err)
+	}
+	cases := map[string]string{
+		"setup.provider.prompt":       "Hangi sağlayıcıyı yapılandırmak istersiniz?",
+		"setup.api_key.prompt":        "API anahtarınızı girin:",
+		"setup.base_url.prompt":       "Ollama temel URL'si:",
+		"setup.model.prompt":          "Bir model seçin:",
+		"setup.model.discover_failed": "Model adı (Ollama'dan keşfedilemedi):",
+		"setup.api_key.empty":         "API anahtarı boş olamaz.",
+	}
+	for key, want := range cases {
+		got := tr(cat, key, "FALLBACK")
+		if got != want {
+			t.Errorf("tr catalog key %q = %q, want %q", key, got, want)
+		}
+	}
+}
+
+func TestNotEmptyForUsesCatalog(t *testing.T) {
+	// Validator closure must emit the catalog's empty-input message.
+	cat, _ := i18n.Load("tr")
+	validator := notEmptyFor(cat)
+	if err := validator(""); err == nil {
+		t.Fatal("expected error on empty input")
+	} else if !strings.Contains(err.Error(), "boş olamaz") {
+		t.Errorf("error did not include TR message; got %q", err.Error())
+	}
+	if err := validator("filled"); err != nil {
+		t.Errorf("non-empty input should not error; got %v", err)
 	}
 }

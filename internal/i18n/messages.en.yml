@@ -3,7 +3,9 @@ setup.provider.prompt: "Which provider would you like to configure?"
 setup.provider.help: "Pick the LLM provider you have an API key for."
 setup.api_key.prompt: "Enter your API key:"
 setup.api_key.empty: "API key cannot be empty."
+setup.base_url.prompt: "Ollama base URL:"
 setup.model.prompt: "Pick a model:"
+setup.model.discover_failed: "Model name (could not discover from Ollama):"
 setup.test.success: "Connection test successful."
 setup.test.failed: "Connection test failed: %s"
 setup.scope.global: "Saving to user config (~/.commitbrief/config.yml)."
@@ -15,9 +17,12 @@ cli.error.no_api_key: "API key for provider %q is not set."
 cli.error.unknown_provider: "Unknown provider: %s"
 cli.error.unsupported_lang: "Unsupported language: %s"
 
-guard.prompt: "Diff includes changes under .commitbrief/. Continue? [y/N]"
+guard.warning_header: "⚠  This review includes changes under .commitbrief/:"
+guard.warning_file: "   M %s"
+guard.warning_detail: "   These files are usually user-specific. Committing them may break\n   other developers' configurations or leak API keys."
+guard.prompt: "   Continue?"
 guard.aborted: "Aborted by user."
-guard.non_interactive: "Aborted (non-interactive mode); pass --yes to override."
+guard.non_interactive: "Aborting (non-interactive mode); pass --yes to override."
 guard.secrets.detected: "⚠  Possible secrets detected in diff (%d line(s)):"
 guard.secrets.line: "   line %d: %s"
 guard.secrets.prompt: "   Send to LLM anyway? [y/N]: "
@@ -67,6 +72,13 @@ rules.output.using_default: "ℹ Using built-in output format. Create ~/.commitb
 
 common.cancelled: "Cancelled."
 common.error_prefix: "Error:"
+# yes/no vocabulary. Catalog-driven so non-English locales can map their
+# native accept-affirmative onto y/yes (Turkish: e/evet, etc.). The
+# default EN forms remain accepted everywhere — typing "y" in a Turkish
+# session also works.
+common.yes_short: "y"
+common.yes_long: "yes"
+common.prompt_yn: "[y/N]"
 
 init.exists: "%s already exists; re-run with --yes to overwrite"
 init.wrote: "Wrote %s"

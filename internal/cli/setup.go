@@ -22,7 +22,7 @@ func newSetupCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			opts := setup.RunOptions{Local: local}
+			opts := setup.RunOptions{Local: local, Catalog: ctx.Catalog}
 			if local {
 				opts.RepoRoot = ctx.RepoRoot
 			}

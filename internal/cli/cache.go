@@ -62,7 +62,10 @@ func newCacheClearCmd() *cobra.Command {
 					os.Stdin,
 					cmd.OutOrStderr(),
 					app.Catalog.T("cache.clear.confirm"),
-					ui.AskOptions{NonInteractive: !ui.IsStdinTTY(os.Stdin)},
+					ui.AskOptions{
+						NonInteractive: !ui.IsStdinTTY(os.Stdin),
+						Catalog:        app.Catalog,
+					},
 				)
 				if err != nil {
 					return err

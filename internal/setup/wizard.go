@@ -9,7 +9,23 @@ import (
 	"github.com/charmbracelet/huh"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 )
+
+// tr returns the catalog string for key, falling back to fallback
+// when the catalog is nil or the key is missing/empty. Used to keep
+// the wizard usable in test/library contexts without a catalog while
+// still pulling localised text in normal CLI runs.
+func tr(c *i18n.Catalog, key, fallback string) string {
+	if c == nil {
+		return fallback
+	}
+	v := c.T(key)
+	if v == "" || v == key {
+		return fallback
+	}
+	return v
+}
 
 type ProviderSpec struct {
 	Name       string
@@ -76,6 +92,14 @@ type RunOptions struct {
 
 	// Specs overrides DefaultSpecs (test injection).
 	Specs []ProviderSpec
+
+	// Catalog drives prompt titles, validation messages, and the
+	// connection-test result lines into the active locale. When nil,
+	// English defaults are used so package consumers without a catalog
+	// in hand (tests, library users) still get a functional wizard.
+	// The CLI layer always passes app.Catalog; see UC-16 in
+	// PATCH_ROADMAP.
+	Catalog *i18n.Catalog
 }
 
 // Apply produces a Config from collected choices, layered on top of the
@@ -144,7 +168,7 @@ func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	}
 
 	var choices Choices
-	if err := selectProvider(ctx, specs, &choices); err != nil {
+	if err := selectProvider(ctx, specs, &choices, opts.Catalog); err != nil {
 		return nil, err
 	}
 	spec := findSpecIn(specs, choices.Provider)
@@ -153,17 +177,17 @@ func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	}
 
 	if spec.NeedsKey {
-		if err := promptAPIKey(ctx, spec, &choices); err != nil {
+		if err := promptAPIKey(ctx, spec, &choices, opts.Catalog); err != nil {
 			return nil, err
 		}
 	}
 	if spec.NeedsURL {
 		choices.BaseURL = OllamaDefaultBaseURL
-		if err := promptBaseURL(ctx, &choices); err != nil {
+		if err := promptBaseURL(ctx, &choices, opts.Catalog); err != nil {
 			return nil, err
 		}
 	}
-	if err := selectModel(ctx, spec, &choices); err != nil {
+	if err := selectModel(ctx, spec, &choices, opts.Catalog); err != nil {
 		return nil, err
 	}
 
@@ -201,42 +225,43 @@ func targetConfigPath(opts RunOptions) (string, error) {
 	return GlobalConfigPath()
 }
 
-func selectProvider(ctx context.Context, specs []ProviderSpec, choices *Choices) error {
+func selectProvider(ctx context.Context, specs []ProviderSpec, choices *Choices, cat *i18n.Catalog) error {
 	options := make([]huh.Option[string], 0, len(specs))
 	for _, s := range specs {
 		options = append(options, huh.NewOption(s.Label, s.Name))
 	}
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().
-			Title("Which provider would you like to configure?").
+			Title(tr(cat, "setup.provider.prompt", "Which provider would you like to configure?")).
+			Description(tr(cat, "setup.provider.help", "Pick the LLM provider you have an API key for.")).
 			Options(options...).
 			Value(&choices.Provider),
 	))
 	return form.RunWithContext(ctx)
 }
 
-func promptAPIKey(ctx context.Context, spec *ProviderSpec, choices *Choices) error {
+func promptAPIKey(ctx context.Context, spec *ProviderSpec, choices *Choices, cat *i18n.Catalog) error {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().
-			Title("Enter your API key").
+			Title(tr(cat, "setup.api_key.prompt", "Enter your API key:")).
 			Description(spec.APIKeyHelp).
 			EchoMode(huh.EchoModePassword).
-			Validate(notEmpty).
+			Validate(notEmptyFor(cat)).
 			Value(&choices.APIKey),
 	))
 	return form.RunWithContext(ctx)
 }
 
-func promptBaseURL(ctx context.Context, choices *Choices) error {
+func promptBaseURL(ctx context.Context, choices *Choices, cat *i18n.Catalog) error {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().
-			Title("Ollama base URL").
+			Title(tr(cat, "setup.base_url.prompt", "Ollama base URL:")).
 			Value(&choices.BaseURL),
 	))
 	return form.RunWithContext(ctx)
 }
 
-func selectModel(ctx context.Context, spec *ProviderSpec, choices *Choices) error {
+func selectModel(ctx context.Context, spec *ProviderSpec, choices *Choices, cat *i18n.Catalog) error {
 	models := spec.Models
 	if spec.NeedsURL {
 		discovered, err := OllamaModels(ctx, choices.BaseURL)
@@ -245,8 +270,8 @@ func selectModel(ctx context.Context, spec *ProviderSpec, choices *Choices) erro
 			// transient Ollama outage or first-run empty model list.
 			return huh.NewForm(huh.NewGroup(
 				huh.NewInput().
-					Title("Model name (could not discover from Ollama)").
-					Validate(notEmpty).
+					Title(tr(cat, "setup.model.discover_failed", "Model name (could not discover from Ollama):")).
+					Validate(notEmptyFor(cat)).
 					Value(&choices.Model),
 			)).RunWithContext(ctx)
 		}
@@ -258,18 +283,24 @@ func selectModel(ctx context.Context, spec *ProviderSpec, choices *Choices) erro
 	}
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().
-			Title("Pick a model").
+			Title(tr(cat, "setup.model.prompt", "Pick a model:")).
 			Options(options...).
 			Value(&choices.Model),
 	))
 	return form.RunWithContext(ctx)
 }
 
-func notEmpty(s string) error {
-	if s == "" {
-		return fmt.Errorf("value cannot be empty")
+// notEmptyFor builds a validator closure that emits a localised error
+// when the user submits an empty value. We need a closure because
+// huh.Validate accepts `func(string) error`, not a method-style
+// callback.
+func notEmptyFor(cat *i18n.Catalog) func(string) error {
+	return func(s string) error {
+		if s == "" {
+			return fmt.Errorf("%s", tr(cat, "setup.api_key.empty", "value cannot be empty"))
+		}
+		return nil
 	}
-	return nil
 }
 
 func findSpecIn(specs []ProviderSpec, name string) *ProviderSpec {

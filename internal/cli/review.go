@@ -113,6 +113,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	if res, _ := guard.CheckDiffForLocalConfig(parsed, guard.Options{
 		AssumeYes:      global.yes,
 		NonInteractive: !ui.IsStdinTTY(os.Stdin),
+		Catalog:        app.Catalog,
 	}); res == guard.Abort {
 		return errors.New("aborted by pre-send guard")
 	}
@@ -557,7 +558,7 @@ func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64) b
 		return true
 	}
 	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
-	if answer == "y" || answer == "yes" {
+	if ui.AcceptsYes(answer, app.Catalog) {
 		return false
 	}
 	return true
@@ -611,7 +612,7 @@ func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.Se
 		return true
 	}
 	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
-	if answer == "y" || answer == "yes" {
+	if ui.AcceptsYes(answer, app.Catalog) {
 		return false
 	}
 	return true
