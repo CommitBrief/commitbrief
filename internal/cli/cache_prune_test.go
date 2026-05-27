@@ -28,15 +28,15 @@ func TestParseAgeDuration(t *testing.T) {
 		// Bad inputs — explicit rejection is the whole point of this
 		// parser. Each case represents a typo we'd rather catch than
 		// silently re-interpret.
-		{"7", 0, true},          // missing unit
-		{"d", 0, true},          // missing count
-		{"", 0, true},           // empty
-		{"7h", 0, true},         // unit not in d/w/m/y set
-		{"7.5d", 0, true},       // decimal not supported (we keep parser stupid)
-		{"-7d", 0, true},        // negatives don't make sense for "older than"
-		{"1y2m", 0, true},       // we only accept a single count+unit pair
-		{"  7d  ", 0, true},     // whitespace not tolerated
-		{"forever", 0, true},    // arbitrary string
+		{"7", 0, true},       // missing unit
+		{"d", 0, true},       // missing count
+		{"", 0, true},        // empty
+		{"7h", 0, true},      // unit not in d/w/m/y set
+		{"7.5d", 0, true},    // decimal not supported (we keep parser stupid)
+		{"-7d", 0, true},     // negatives don't make sense for "older than"
+		{"1y2m", 0, true},    // we only accept a single count+unit pair
+		{"  7d  ", 0, true},  // whitespace not tolerated
+		{"forever", 0, true}, // arbitrary string
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

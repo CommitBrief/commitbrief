@@ -31,4 +31,3 @@ type Usage struct {
 	// Zero if unknown or unsupported.
 	CachedInputTokens int
 }
-

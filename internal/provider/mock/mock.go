@@ -147,4 +147,3 @@ func Register() {
 		return New(), nil
 	})
 }
-
