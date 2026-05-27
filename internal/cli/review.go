@@ -5,6 +5,8 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -343,10 +345,19 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	}
 
 	if !global.noCache && cacheStore != nil {
+		// UC-26: persist real SHA-256 hashes of the diff text and the
+		// system prompt so the cache entry's KeyMeta is actually
+		// debuggable (matches what docs/03-configuration.md advertises).
+		// Pre-v1.0 this stored the first 16 hex chars of the composite
+		// cache key for DiffHash and an empty string for
+		// SystemPromptHash — neither was the value the field name
+		// promised.
+		diffSum := sha256.Sum256([]byte(diffText))
+		promptSum := sha256.Sum256([]byte(p.System))
 		_ = cacheStore.Put(cacheKey, cache.Entry{
 			Key: cache.KeyMeta{
-				DiffHash:         "sha256:" + cacheKey[:16],
-				SystemPromptHash: "",
+				DiffHash:         "sha256:" + hex.EncodeToString(diffSum[:]),
+				SystemPromptHash: "sha256:" + hex.EncodeToString(promptSum[:]),
 				Provider:         prov.Name(),
 				Model:            respModel,
 				Lang:             app.Lang.Code,

@@ -11,6 +11,67 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Changed
+- **CLAUDE.md documents the `make check` post-development gate.** New
+  hard rule: any Go change under `commitbrief/` must pass
+  `cd commitbrief && make check` — gofmt drift + `go vet` +
+  `golangci-lint` + `go test` + `release-check` + `i18n-check` — before
+  being declared push-ready. Catches the lint regressions that used
+  to surface only after CI ran.
+
+- **`Diff.IsMerge` field and `cli.warn.merge_commit` catalog key
+  removed.** The merge-commit warning was retired with the
+  `--commit` / `--branch` / `--pull-request` scope flags in v0.9.0
+  (`commitbrief diff <merge-sha>` now gives first-parent semantics
+  with no special warning, matching git itself). The struct field +
+  per-backend computation were dead code; both backends drop the
+  `rev-list --parents` / `commit.NumParents()` probe. CLAUDE.md's
+  CLI-scopes note updated to reflect the post-v0.9.0 surface. (UC-20)
+
+### Added
+- **New `make check` target.** Runs every guard CI runs, in CI order,
+  bailing on the first failure. Single entry-point for "is this
+  push-ready?" — see CLAUDE.md hard rules.
+
+- **`COMMITBRIEF_CONFIG` environment variable documented.** Setting
+  it to an absolute path replaces the default
+  `~/.commitbrief/config.yml` lookup — useful for ephemeral CI
+  environments and reproducible tests. The variable has been live
+  for ages; only the README was missing the entry. (UC-12)
+
+### Fixed
+- **`KeyMeta.DiffHash` and `KeyMeta.SystemPromptHash` now carry real
+  SHA-256 digests.** Pre-v1.0.0-rc.1 the diff hash stored the first
+  16 hex chars of the composite cache key (NOT a diff hash) and the
+  system-prompt hash was always empty. Both fields now match what
+  `docs/03-configuration.md` advertises — full
+  `sha256:<64-hex>` digests over their respective inputs. Useful
+  when debugging cache-key drift. (UC-26)
+
+- **Generated git hooks embed the absolute path to commitbrief.**
+  macOS GUI git clients (Tower, GitHub Desktop, Fork, JetBrains IDEs,
+  …) run hooks with a stripped `$PATH` that typically omits
+  `/opt/homebrew/bin`, so `exec commitbrief --staged …` silently
+  failed to launch. `install-hook` now resolves the running binary
+  via `os.Executable` + `filepath.EvalSymlinks` and embeds the
+  result as a single-quoted token. Survives `brew upgrade` (which
+  swaps the keg symlink target). (UC-27)
+
+## [0.9.3] - 2026-05-27
+
+### Added
+- **CLI splash logo on every run.** A 16×16 half-block rendering of
+  the CommitBrief mark (the same gradient + arrow as the favicon
+  and web logo), shown alongside the wordmark, tagline, and OSC 8
+  hyperlinks to Home / Docs / GitHub / Sponsor / Author. Printed to
+  stderr only — `commitbrief --json | jq` and `--markdown > file`
+  stay uncorrupted — and gated on a TTY-capable stderr so redirected
+  CI logs don't fill with raw 24-bit color escapes. The wordmark
+  line embeds the resolved build version (`version.Version`), so it
+  always matches the running binary.
+
+## [0.9.2] - 2026-05-27
+
+### Changed
 - **CLI providers respect `--output`.** The plain-text emit path used
   by `--cli claude` / `--cli gemini` now routes through the same
   `openOutput` helper the structured renderers use, so `--cli claude
@@ -34,16 +95,6 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   Backend. (UC-23)
 
 ### Added
-- **CLI splash logo on every run.** A 16×16 half-block rendering of
-  the CommitBrief mark (the same gradient + arrow as the favicon
-  and web logo), shown alongside the wordmark, tagline, and OSC 8
-  hyperlinks to Home / Docs / GitHub / Sponsor / Author. Printed to
-  stderr only — `commitbrief --json | jq` and `--markdown > file`
-  stay uncorrupted — and gated on a TTY-capable stderr so redirected
-  CI logs don't fill with raw 24-bit color escapes. The wordmark
-  line embeds the resolved build version (`version.Version`), so it
-  always matches the running binary.
-
 - **`--cli` is mutually exclusive with `--json` and `--markdown`.**
   CLI-provider output is pre-formatted plain text; combining it with
   a structured renderer either re-flows the formatting we just paid

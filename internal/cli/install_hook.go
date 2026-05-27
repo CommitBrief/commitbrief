@@ -82,9 +82,45 @@ func isSupportedHook(name string) bool {
 	return false
 }
 
+// resolveBinaryPath returns the absolute path of the running
+// commitbrief binary so the generated hook can invoke it without
+// relying on $PATH lookup. UC-27 in PATCH_ROADMAP: macOS GUI git
+// clients (Tower, GitHub Desktop, Fork, JetBrains IDEs, …) execute
+// hooks with a stripped-down environment that usually omits
+// Homebrew's /opt/homebrew/bin from PATH, so a bare `exec commitbrief`
+// would silently fail to launch. os.Executable resolves the current
+// process's path via /proc/self/exe (Linux), _NSGetExecutablePath
+// (macOS), or QueryFullProcessImageNameW (Windows); EvalSymlinks
+// then follows any chain so the embedded path survives `brew
+// upgrade` (which swaps the keg symlink target). Falls back to the
+// bare binary name when both lookups fail — better to have a
+// $PATH-dependent hook than no hook at all.
+func resolveBinaryPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "commitbrief"
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		return resolved
+	}
+	return exe
+}
+
+// shellQuote single-quotes path for embedding inside a POSIX shell
+// script. Apostrophes in the source path are split-and-rejoined per
+// the standard `'\”` idiom. Defensive: the typical Homebrew/Scoop
+// install path never contains an apostrophe, but a user-built dev
+// binary under `~/My's Stuff/commitbrief` shouldn't break the hook.
+func shellQuote(path string) string {
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+}
+
 // hookScript returns the shell content written to .git/hooks/<name>.
 // The marker comment is the load-bearing part — uninstall relies on
-// matching it verbatim across every hook variant.
+// matching it verbatim across every hook variant. The first argument
+// is the absolute path to the commitbrief binary (resolved via
+// resolveBinaryPath); it is embedded into the script so GUI git
+// clients with a minimal $PATH still find the binary (UC-27).
 //
 // pre-commit / commit-msg share the same body: review the staged tree
 // before the commit is finalised, fail the commit on a critical-or-
@@ -100,7 +136,8 @@ func isSupportedHook(name string) bool {
 // same `--staged` body, which silently no-op'd at push time when the
 // index was already clean and meant pre-push never actually screened
 // outgoing commits.
-func hookScript(name string) string {
+func hookScript(name, binaryPath string) string {
+	quoted := shellQuote(binaryPath)
 	if name == "pre-push" {
 		// $z40 is the 40-zero hex string git uses to mean "no such ref"
 		// (deletion on the local side; new branch on the remote side).
@@ -120,6 +157,8 @@ func hookScript(name string) string {
 # remote-sha..local-sha.
 set -eu
 
+CB=%s
+
 z40="0000000000000000000000000000000000000000"
 while read -r local_ref local_sha remote_ref remote_sha || [ -n "${local_ref-}" ]; do
     if [ "${local_sha}" = "${z40}" ]; then
@@ -130,19 +169,19 @@ while read -r local_ref local_sha remote_ref remote_sha || [ -n "${local_ref-}" 
     else
         range="${remote_sha}..${local_sha}"
     fi
-    if ! commitbrief diff "${range}" --fail-on=critical --quiet --no-cost-check; then
+    if ! "$CB" diff "${range}" --fail-on=critical --quiet --no-cost-check; then
         exit 1
     fi
 done
 
 exit 0
-`, generatedHookMarker)
+`, generatedHookMarker, quoted)
 	}
 	return fmt.Sprintf(`#!/usr/bin/env sh
 # %s — do not edit.
 # Re-run 'commitbrief install-hook' to regenerate, or pass --uninstall to remove.
-exec commitbrief --staged --fail-on=critical --quiet --no-cost-check
-`, generatedHookMarker)
+exec %s --staged --fail-on=critical --quiet --no-cost-check
+`, generatedHookMarker, quoted)
 }
 
 // runInstallHook writes the hook file with 0755 mode. If a hook
@@ -168,7 +207,7 @@ func runInstallHook(cmd *cobra.Command, app *appContext, hookPath string) error 
 	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
 		return fmt.Errorf("install-hook: mkdir hooks dir: %w", err)
 	}
-	if err := os.WriteFile(hookPath, []byte(hookScript(filepath.Base(hookPath))), 0o755); err != nil {
+	if err := os.WriteFile(hookPath, []byte(hookScript(filepath.Base(hookPath), resolveBinaryPath())), 0o755); err != nil {
 		return fmt.Errorf("install-hook: write %s: %w", hookPath, err)
 	}
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), app.Catalog.T("install_hook.success", hookPath))

@@ -181,9 +181,19 @@ Two-tier YAML config with field-level merge:
 - **Repo:** `./.commitbrief/config.yml` — overrides for this repo
   (gitignored by default; run `commitbrief setup --local` to write it)
 
-Plus environment variables for credentials (`ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `GEMINI_API_KEY`) and CLI flags for one-off overrides
-(`--provider gemini --model gemini-2.5-flash`).
+Plus environment variables for credentials and runtime tweaks, and
+CLI flags for one-off overrides (`--provider gemini --model
+gemini-2.5-flash`).
+
+| Variable | Effect |
+|---|---|
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | Provider credentials. Overrides the matching `providers.<name>.api_key` in config. |
+| `OLLAMA_HOST` | Sets `providers.ollama.base_url` when not set in config. |
+| `COMMITBRIEF_PROVIDER` | Selects the active provider (same as `--provider` / `config.provider`). |
+| `COMMITBRIEF_MODEL` | Overrides the active provider's model. |
+| `COMMITBRIEF_CONFIG` | Absolute path to the user-level config file; replaces the default `~/.commitbrief/config.yml` lookup. Useful for tests and ephemeral CI environments. |
+| `COMMITBRIEF_NO_COLOR`, `NO_COLOR` | Force ANSI color off (overrides `--color always`). |
+| `LANG` | When `output.lang` is unset, the first two letters of `LANG` (e.g. `tr_TR.UTF-8` → `tr`) seed the active locale. Coerced to `en` if not in the supported set (`en`, `tr`). |
 
 ```yaml
 # ~/.commitbrief/config.yml
