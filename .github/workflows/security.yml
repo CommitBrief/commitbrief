@@ -1,0 +1,45 @@
+name: Security
+
+# Static security scan. Runs gosec against every push to main plus
+# scheduled weekly so out-of-tree CVE rule additions show up without
+# waiting for a code change. Informational only — the job is allowed to
+# pass even if findings appear, because gosec.org's rule set evolves
+# and we don't want a new lint check to gate releases. CodeQL covers
+# the supply-chain side via a separate workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 04:17 UTC — off-peak, avoids the every-runner 00:00 stampede.
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  gosec:
+    name: gosec scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      # We install gosec directly rather than using the official
+      # securego/gosec action because we want the exact same wrapper
+      # (scripts/security-scan.sh) CI and local devs run, so a finding
+      # surfaces identically in both contexts.
+      - name: Install gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Run security scan
+        run: bash scripts/security-scan.sh

@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: help build test test-live bench lint fmt tidy clean check release-check license-check i18n-check manpage smoke
+.PHONY: help build test test-live bench lint fmt tidy clean check release-check license-check i18n-check security-check manpage smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -57,6 +57,9 @@ license-check: ## Audit dependency licenses for GPL-3.0 compatibility
 i18n-check: ## Flag i18n catalog keys with no Go source reference (UC-25)
 	bash scripts/i18n-deadkey-check.sh
 
+security-check: ## Run gosec with the documented exclusion set
+	bash scripts/security-scan.sh
+
 check: ## Run every guard CI runs (fmt-drift, vet, lint, test, release-check, i18n-check)
 	@echo "==> gofmt drift"
 	@drift=$$(gofmt -l -s . | grep -v '^vendor/' || true); \
@@ -73,6 +76,12 @@ check: ## Run every guard CI runs (fmt-drift, vet, lint, test, release-check, i1
 	@$(MAKE) -s release-check
 	@echo "==> i18n-check"
 	@$(MAKE) -s i18n-check
+	@echo "==> security-check (gosec)"
+	@if command -v gosec >/dev/null 2>&1; then \
+		$(MAKE) -s security-check; \
+	else \
+		echo "gosec not installed locally; skipping. brew install gosec to enable."; \
+	fi
 	@echo "==> all checks passed"
 
 manpage: ## Regenerate man/commitbrief.1

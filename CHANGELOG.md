@@ -32,6 +32,24 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   bailing on the first failure. Single entry-point for "is this
   push-ready?" — see CLAUDE.md hard rules.
 
+- **gosec security scan + `make security-check`.** Static security
+  analysis runs on every push to main and on a weekly schedule
+  (`.github/workflows/security.yml`). Local devs get the same wrapper
+  via `scripts/security-scan.sh` so a finding surfaces identically
+  in both contexts. The exclusion set (G304/G306/G301/G204/G101/G122)
+  is documented inline with one-paragraph rationale per rule —
+  reviewed once during the v1.0.0-rc.1 audit, revisit if the
+  codebase grows new privilege boundaries. Real high-confidence
+  findings (G115 etc.) stay enabled and fail the scan.
+
+- **`claude-cli` and `gemini-cli` providers promoted to stable.**
+  README now documents both alongside the four API providers; the
+  v0.9.0 "experimental" disclaimer is gone. The plain-text emit
+  pipeline (UC-07, UC-22, UC-23, UC-24 in v0.9.2) closed the last
+  reliability gaps — `--output` routes correctly, the host CLI's
+  version is memoised + bounded, and the prompt transport for
+  claude-cli switched to stdin so ARG_MAX is no longer a ceiling.
+
 - **`COMMITBRIEF_CONFIG` environment variable documented.** Setting
   it to an absolute path replaces the default
   `~/.commitbrief/config.yml` lookup — useful for ephemeral CI
@@ -39,6 +57,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   for ages; only the README was missing the entry. (UC-12)
 
 ### Fixed
+- **Gemini provider hardens int→int32 conversion for max-output
+  tokens.** `req.MaxTokens` (plain int) used to be cast directly to
+  the SDK's int32 parameter; a value above `math.MaxInt32` would
+  silently wrap to negative. Now bounded to `[1, math.MaxInt32]`
+  with the default falling back to 4096. Found via gosec G115 during
+  the v1.0.0-rc.1 security audit.
+
 - **`KeyMeta.DiffHash` and `KeyMeta.SystemPromptHash` now carry real
   SHA-256 digests.** Pre-v1.0.0-rc.1 the diff hash stored the first
   16 hex chars of the composite cache key (NOT a diff hash) and the

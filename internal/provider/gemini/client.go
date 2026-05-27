@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 
@@ -103,9 +104,14 @@ func (c *Client) TestConnection(ctx context.Context) error {
 }
 
 func (c *Client) buildParams(req provider.Request) ([]*sdk.Content, *sdk.GenerateContentConfig) {
-	maxTokens := int32(req.MaxTokens)
-	if maxTokens <= 0 {
-		maxTokens = defaultMaxTokens
+	// The Gemini SDK takes int32 for max-output-tokens, but
+	// provider.Request.MaxTokens is plain int. A negative or > math.MaxInt32
+	// value would either underflow (negative → meaningless) or wrap around
+	// (huge → silently negative). Defense in depth: bound to int32 explicitly
+	// rather than letting the cast wrap.
+	var maxTokens int32 = defaultMaxTokens
+	if req.MaxTokens > 0 && req.MaxTokens <= math.MaxInt32 {
+		maxTokens = int32(req.MaxTokens)
 	}
 	contents := []*sdk.Content{
 		{Role: sdk.RoleUser, Parts: []*sdk.Part{sdk.NewPartFromText(req.UserPrompt)}},

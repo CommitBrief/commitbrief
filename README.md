@@ -164,12 +164,25 @@ Global flags include `--json`, `--markdown`, `--output <file>`, `--copy`,
 
 ## Providers and pricing
 
+Four API providers + two CLI-tool-backed providers ship in the box:
+
 | Provider | Models | Notes |
 |----------|--------|-------|
 | **Anthropic** | Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 | Ephemeral prompt caching (5 m TTL) cuts repeated input cost ~10×. |
 | **OpenAI** | GPT-4o, GPT-4o-mini | Automatic prompt caching at ≥1024-token prefixes. |
 | **Google Gemini** | Gemini 2.5 Pro (2 M context!), 2.5 Flash, 1.5 Flash | Largest free-tier context windows. |
 | **Ollama** | Whatever you've `ollama pull`'d | Local-only, no API key, no per-token cost. |
+| **`claude-cli`** | Whatever your local Claude Code uses | Subprocess of `claude -p -` — no API key on our side; reuses your Claude Code subscription. `commitbrief --cli claude --staged`. |
+| **`gemini-cli`** | Whatever your local Gemini CLI uses | Subprocess of `gemini -p` — no API key on our side; reuses your Gemini CLI auth. `commitbrief --cli gemini --staged`. |
+
+CLI-backed providers emit pre-formatted plain text — they bypass the
+structured-findings JSON path, the per-finding cards renderer, and the
+`--fail-on` severity gate (the host CLI's response shape isn't our
+contract to enforce). Output streams verbatim to stdout, so
+`commitbrief --cli claude --output review.md` writes the file just
+like the API providers do; `--json` / `--markdown` are rejected
+upfront. Useful when you've already paid for a Claude or Gemini CLI
+subscription and don't want to manage a second API key.
 
 Adding a provider is one new package under `internal/provider/<name>/`.
 
