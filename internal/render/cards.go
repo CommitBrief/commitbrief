@@ -106,28 +106,23 @@ func cardsCompactBody(findings []Finding) string {
 	return sb.String()
 }
 
-// cardsCompactLine formats one finding as a single line:
+// cardsCompactLine formats one finding as a single line. Uses the
+// severity theme's label + accent color so compact mode reads as a
+// flat version of the full panel (same icon glyph, same color cue).
+// Description and snippet are intentionally omitted — that's the
+// trade for the density.
 //
-//	‼ CRITICAL • internal/auth/session.go:142 — SQL fragment built from request input
-//
-// Icon + badge share the severity color; the rest stays muted so the
-// severity remains the eye's anchor. Description and snippet are
-// intentionally omitted — that's the trade for the density.
+//	⊘ CRITICAL · internal/auth/session.go:142 — SQL fragment built from request input
 func cardsCompactLine(f Finding) string {
-	color, ok := severityColors[f.Severity]
+	theme, ok := severityThemes[f.Severity]
 	if !ok {
-		color = severityColors[SeverityInfo]
+		theme = severityThemes[SeverityInfo]
 	}
-	icon := severityIcon[f.Severity]
-	if icon == "" {
-		icon = severityIcon[SeverityInfo]
-	}
-	badge := lipgloss.NewStyle().Foreground(color).Bold(true).Render(icon + " " + strings.ToUpper(string(f.Severity)))
-	sep := styleMuted.Render(" • ")
-	location := styleMuted.Render(fmt.Sprintf("%s:%d", f.File, f.Line))
-	dash := styleMuted.Render(" — ")
-	title := f.Title
-	return badge + sep + location + dash + title
+	badge := lipgloss.NewStyle().Foreground(theme.accent).Bold(true).Render(theme.label)
+	sep := lipgloss.NewStyle().Foreground(cardMuted).Render(" · ")
+	location := lipgloss.NewStyle().Foreground(cardMuted).Render(fmt.Sprintf("%s:%d", f.File, f.Line))
+	dash := lipgloss.NewStyle().Foreground(cardMuted).Render(" — ")
+	return badge + sep + location + dash + f.Title
 }
 
 var (
@@ -138,69 +133,42 @@ var (
 	styleBullet = lipgloss.NewStyle().Foreground(lipgloss.Color("238")) // very dim
 )
 
-// severityColors maps each severity level to its lipgloss border color,
-// per ADR-0014 §1. Keep these in sync with the rubric in
-// internal/rules/prompt.go — they're the visual half of the contract.
-var severityColors = map[Severity]lipgloss.Color{
-	SeverityCritical: lipgloss.Color("196"), // red
-	SeverityHigh:     lipgloss.Color("208"), // orange
-	SeverityMedium:   lipgloss.Color("220"), // yellow
-	SeverityLow:      lipgloss.Color("33"),  // soft blue
-	SeverityInfo:     lipgloss.Color("244"), // dim grey
+// severityTheme bundles the four colors + label that uniquely identify
+// a severity in the card layout. Sourced verbatim from the maintainer's
+// secguard prototype; hex values, label strings, and prefix icons are
+// load-bearing — change them and the entire visual identity shifts.
+type severityTheme struct {
+	panelBg lipgloss.Color // panel arka planı (cards body bg)
+	border  lipgloss.Color // ╭ ╮ ╰ ╯ ─ │ characters' foreground
+	accent  lipgloss.Color // severity chip metin rengi
+	label   string         // severity chip metni (icon + uppercase name)
 }
 
-// severityBG is a subtly-tinted shade of the border color used as the
-// panel background. Adaptive so dark-terminal users see a darker tint
-// and light-terminal users a paler one; either way the card reads as a
-// distinct block without overpowering the surrounding terminal.
-var severityBG = map[Severity]lipgloss.AdaptiveColor{
-	SeverityCritical: {Dark: "52", Light: "224"},  // dark red / light pink
-	SeverityHigh:     {Dark: "94", Light: "223"},  // brown / peach
-	SeverityMedium:   {Dark: "100", Light: "229"}, // dark olive / cream
-	SeverityLow:      {Dark: "17", Light: "153"},  // dark blue / light blue
-	SeverityInfo:     {Dark: "237", Light: "252"}, // dark grey / light grey
+var severityThemes = map[Severity]severityTheme{
+	SeverityCritical: {panelBg: "#1A1116", border: "#602B38", accent: "#ff6b8a", label: "⊘ CRITICAL"},
+	SeverityHigh:     {panelBg: "#1A1511", border: "#603F2B", accent: "#ffa86b", label: "⚠ HIGH"},
+	SeverityMedium:   {panelBg: "#1A1A11", border: "#5A5A2B", accent: "#f0d050", label: "● MEDIUM"},
+	SeverityLow:      {panelBg: "#11161A", border: "#2B4760", accent: "#6bb8ff", label: "○ LOW"},
+	SeverityInfo:     {panelBg: "#11181A", border: "#2B5560", accent: "#6be0e0", label: "ℹ INFO"},
 }
 
-// cardText is the high-contrast foreground used for panel body text
-// (title, description, file:line, default context, snippet "context"
-// rows that lack a diff prefix). Pure white on dark terminals, near-
-// black on light. The severity badge keeps its own color so urgency
-// is still the eye's anchor.
-var cardText = lipgloss.AdaptiveColor{Dark: "255", Light: "232"}
-
-// snippetAddedBG / snippetRemovedBG are the full-width strip colors
-// used behind diff lines. Pairs with cardText foreground (white-ish on
-// dark, near-black on light) for high contrast on both themes. Picked
-// to be darker / less saturated than the severity-tinted panel bg so
-// the strips read as "different from the surrounding panel" rather
-// than "almost the same color as the panel".
+// Shared palette colors used across all severity themes. Same source
+// as severityThemes — hex codes verbatim from the secguard reference.
 var (
-	snippetAddedBG   = lipgloss.AdaptiveColor{Dark: "22", Light: "151"} // green
-	snippetRemovedBG = lipgloss.AdaptiveColor{Dark: "52", Light: "217"} // red
+	cardMuted  = lipgloss.Color("#9CA3AF") // file path, description, low-emphasis text
+	cardWhite  = lipgloss.Color("#F3F4F6") // title (high-contrast on dark panels)
+	cardDelBg  = lipgloss.Color("#22141A") // removed-line strip background
+	cardDelFg  = lipgloss.Color("#ff6b8a") // removed-line text
+	cardAddBg  = lipgloss.Color("#111C1C") // added-line strip background
+	cardAddFg  = lipgloss.Color("#22d3a0") // added-line text
+	cardSignFg = lipgloss.Color("#3a3f4f") // " - "/" + " sign chars (faint, on diff strip bg)
+	cardCodeFg = lipgloss.Color("#E5E7EB") // context line text (no strip, default bg)
 )
 
-// panelHorizPadding and panelVertPadding control the breathing room
-// between the rounded border and the panel contents. The inner content
-// width — used to size full-width snippet strips so their backgrounds
-// extend edge-to-edge of the content area — derives from these plus
-// terminalWordWrap (the outer panel width including borders).
-const (
-	panelHorizPadding = 2
-	panelVertPadding  = 1
-	panelInnerWidth   = terminalWordWrap - 2 - panelHorizPadding*2 // -2 borders, -2*padding
-)
-
-// severityIcon prefixes the badge with a glyph that visually anchors
-// the severity. Glyphs are text-variant Unicode (no emoji VS-16
-// selector) so lipgloss foreground colors apply — emoji would lock to
-// their built-in palette and ignore the severity color.
-var severityIcon = map[Severity]string{
-	SeverityCritical: "‼", // double exclamation
-	SeverityHigh:     "⚠", // warning triangle
-	SeverityMedium:   "▲", // up-pointing triangle
-	SeverityLow:      "●", // bullet/circle
-	SeverityInfo:     "ⓘ", // circled info
-}
+// clearEOL resets ANSI state and erases to end of line. Appended after
+// every panel row so colored backgrounds don't bleed past the card's
+// right border when the terminal line is wider than the rendered card.
+const clearEOL = "\x1b[0m\x1b[49m\x1b[K"
 
 // cardsHeader: "commitbrief vX.Y.Z · provider: name/model · cache: hit"
 // Each segment is colored independently; bullets stay quiet.
@@ -272,120 +240,218 @@ func cardsFooter(m Meta, findings []Finding) string {
 	return strings.Join(segments, bullet)
 }
 
-// cardsFindingPanel renders one Finding as a rounded-border panel. The
-// border color and a subtly-tinted background both come from the
-// severity, with an icon glyph anchoring the badge. Layout:
-//
-//	‼ CRITICAL • file:line
-//	title
-//
-//	description
-//
-//	```language
-//	snippet
-//	```  (only if snippet non-empty)
-func cardsFindingPanel(f Finding) string {
-	color, ok := severityColors[f.Severity]
-	if !ok {
-		color = severityColors[SeverityInfo]
-	}
-	bg, ok := severityBG[f.Severity]
-	if !ok {
-		bg = severityBG[SeverityInfo]
-	}
-	icon := severityIcon[f.Severity]
-	if icon == "" {
-		icon = severityIcon[SeverityInfo]
-	}
-
-	panel := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(color).
-		BorderBackground(bg). // border characters' bg matches the panel so the rounded corners blend into the card instead of sitting on a terminal-default dark gap
-		Background(bg).
-		Padding(panelVertPadding, panelHorizPadding).
-		Width(terminalWordWrap)
-
-	// All inline segments share the panel's tinted background so the
-	// card reads as a single block; lipgloss otherwise leaks the default
-	// terminal background between pre-rendered runs.
-	onBg := lipgloss.NewStyle().Background(bg)
-	textOnBg := onBg.Foreground(cardText)
-
-	badge := onBg.Foreground(color).Bold(true).Render(icon + " " + strings.ToUpper(string(f.Severity)))
-	sep := textOnBg.Render(" • ")
-	location := textOnBg.Render(fmt.Sprintf("%s:%d", f.File, f.Line))
-	title := textOnBg.Bold(true).Render(f.Title)
-
-	header := badge + sep + location + "\n" + title
-
-	body := textOnBg.Render(f.Description)
-	if f.Snippet != "" {
-		fence := "```"
-		body += "\n\n" + textOnBg.Render(fence+f.Language) + "\n" + colorizeSnippet(f.Snippet, onBg) + "\n" + textOnBg.Render(fence)
-	}
-
-	return panel.Render(header + "\n\n" + body)
+// diffLine is one row of a code excerpt to be diff-rendered. kind is
+// '-' for removed, '+' for added, ' ' for context.
+type diffLine struct {
+	kind byte
+	text string
 }
 
-// colorizeSnippet walks each line of the snippet and applies diff
-// semantics:
-//   - "+" lines  → full-width green strip (whole row painted green,
-//     cardText foreground) so removals stand out edge-to-edge of the
-//     content area, GitHub-style;
-//   - "-" lines  → full-width red strip;
-//   - other lines → cardText on the panel's tinted bg (panel-flush
-//     "context" rows).
-//
-// The Width(panelInnerWidth) on the +/- styles is what makes the
-// background extend past the actual text — without it the bg only
-// covers the line's characters and the strip "ends" mid-row. The
-// outer panel pads its content with panelHorizPadding spaces on each
-// side, so the strips visually align with the content area's edges.
-func colorizeSnippet(snippet string, onBg lipgloss.Style) string {
-	addedStyle := lipgloss.NewStyle().
-		Background(snippetAddedBG).
-		Foreground(cardText).
-		Width(panelInnerWidth)
-	removedStyle := lipgloss.NewStyle().
-		Background(snippetRemovedBG).
-		Foreground(cardText).
-		Width(panelInnerWidth)
-	contextStyle := onBg.Foreground(cardText)
-
-	lines := strings.Split(snippet, "\n")
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		switch {
-		case strings.HasPrefix(line, "+"):
-			out = append(out, addedStyle.Render(line))
-		case strings.HasPrefix(line, "-"):
-			out = append(out, removedStyle.Render(line))
+// parseSnippetToDiffLines turns the LLM-emitted snippet string (per
+// ADR-0014 §1: lines prefixed with "-", "+", or "  ") into structured
+// diffLine values. Empty lines are skipped — they have no diff
+// semantics and rendering them as a blank "context" row collapses
+// height predictably anyway.
+func parseSnippetToDiffLines(snippet string) []diffLine {
+	if snippet == "" {
+		return nil
+	}
+	var out []diffLine
+	for _, line := range strings.Split(snippet, "\n") {
+		if line == "" {
+			continue
+		}
+		switch line[0] {
+		case '+', '-':
+			out = append(out, diffLine{kind: line[0], text: strings.TrimPrefix(line[1:], " ")})
 		default:
-			out = append(out, contextStyle.Render(line))
+			// Unified-diff context lines use "  text" (sign-space sign-
+			// space). Strip up to two leading spaces so the rendered
+			// body lines up with the +/- variants, then let any deeper
+			// indentation in the source code pass through verbatim.
+			text := line
+			switch {
+			case strings.HasPrefix(text, "  "):
+				text = text[2:]
+			case strings.HasPrefix(text, " "):
+				text = text[1:]
+			}
+			out = append(out, diffLine{kind: ' ', text: text})
+		}
+	}
+	return out
+}
+
+// cardsFindingPanel renders one Finding as a self-contained card using
+// the secguard palette + layout. Ported verbatim from the maintainer's
+// reference design — hex codes, label strings, and the contentWidth+24
+// sizing heuristic are load-bearing visual identity, do not retune
+// without explicit intent.
+//
+// Layout (vertical):
+//
+//	╭────────────────────────────╮
+//	│                            │
+//	│ ⊘ CRITICAL  · path:line    │
+//	│                            │
+//	│ Title (white, bold)        │
+//	│ Description (muted)        │
+//	│                            │
+//	│  -  removed line           │  (red strip)
+//	│  +  added line             │  (green strip)
+//	│  -  context line           │  (no strip)
+//	│                            │
+//	╰────────────────────────────╯
+func cardsFindingPanel(f Finding) string {
+	theme, ok := severityThemes[f.Severity]
+	if !ok {
+		theme = severityThemes[SeverityInfo]
+	}
+
+	chip := lipgloss.NewStyle().
+		Foreground(theme.accent).
+		Background(theme.panelBg).
+		Bold(true).
+		Render(theme.label)
+
+	pathStr := fmt.Sprintf("%s:%d", f.File, f.Line)
+	path := lipgloss.NewStyle().
+		Foreground(cardMuted).
+		Background(theme.panelBg).
+		Render("· " + pathStr)
+
+	gap := lipgloss.NewStyle().Background(theme.panelBg).Render("  ")
+	header := lipgloss.JoinHorizontal(lipgloss.Top, chip, gap, path)
+
+	title := lipgloss.NewStyle().
+		Foreground(cardWhite).
+		Background(theme.panelBg).
+		Bold(true).
+		Render(f.Title)
+
+	desc := lipgloss.NewStyle().
+		Foreground(cardMuted).
+		Background(theme.panelBg).
+		Render(f.Description)
+
+	diff := parseSnippetToDiffLines(f.Snippet)
+
+	contentWidth := lipgloss.Width(header)
+	for _, w := range []int{lipgloss.Width(title), lipgloss.Width(desc)} {
+		if w > contentWidth {
+			contentWidth = w
+		}
+	}
+	for _, l := range diff {
+		if w := lipgloss.Width(l.text) + 4; w > contentWidth {
+			contentWidth = w
+		}
+	}
+	contentWidth += 24
+
+	fill := lipgloss.NewStyle().Background(theme.panelBg).Width(contentWidth)
+	header = fill.Render(header)
+	title = fill.Render(title)
+	desc = fill.Render(desc)
+	blank := fill.Render("")
+
+	parts := []string{blank, header, blank, title, desc, blank}
+	if len(diff) > 0 {
+		parts = append(parts, renderDiff(diff, contentWidth), blank)
+	}
+	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
+
+	borderStyle := lipgloss.NewStyle().Foreground(theme.border).Background(theme.panelBg)
+	padStyle := lipgloss.NewStyle().Background(theme.panelBg)
+
+	dashes := borderStyle.Render(strings.Repeat("─", contentWidth+2))
+	top := borderStyle.Render("╭") + dashes + borderStyle.Render("╮")
+	bot := borderStyle.Render("╰") + dashes + borderStyle.Render("╯")
+
+	left := borderStyle.Render("│") + padStyle.Render(" ")
+	right := padStyle.Render(" ") + borderStyle.Render("│")
+
+	var rows []string
+	rows = append(rows, top)
+	for _, line := range strings.Split(body, "\n") {
+		rows = append(rows, left+line+right)
+	}
+	rows = append(rows, bot)
+	return strings.Join(rows, clearEOL+"\n") + clearEOL
+}
+
+// renderDiff turns the parsed diff lines into a styled multi-line
+// string. Added/removed lines get a 100%-width colored strip (sign
+// char in a faint signFg, body in fg+bg pair); context lines pass
+// through with codeFg on default bg so they read as "this is around
+// the change, not part of it".
+func renderDiff(lines []diffLine, minWidth int) string {
+	width := minWidth
+	for _, l := range lines {
+		if n := lipgloss.Width(l.text) + 4; n > width {
+			width = n
+		}
+	}
+
+	var out []string
+	for _, l := range lines {
+		var bg, fg lipgloss.Color
+		switch l.kind {
+		case '-':
+			bg, fg = cardDelBg, cardDelFg
+		case '+':
+			bg, fg = cardAddBg, cardAddFg
+		default:
+			fg = cardCodeFg
+		}
+
+		sign := fmt.Sprintf(" %c  ", l.kind)
+
+		if l.kind == '-' || l.kind == '+' {
+			signStyle := lipgloss.NewStyle().Foreground(cardSignFg).Background(bg)
+			textStyle := lipgloss.NewStyle().
+				Foreground(fg).
+				Background(bg).
+				Width(width - lipgloss.Width(sign))
+			out = append(out, signStyle.Render(sign)+textStyle.Render(l.text))
+		} else {
+			style := lipgloss.NewStyle().Foreground(fg)
+			out = append(out, style.Render(sign+l.text))
 		}
 	}
 	return strings.Join(out, "\n")
 }
 
 // cardsEmptyPanel is the success view for a review that produced zero
-// findings. Per ADR-0014 §3 it is a single short panel with a green
-// checkmark and the canonical message kept in sync with the default
-// OUTPUT.md template. Uses the same rounded look + border-bg blend +
-// breathing-room padding as finding panels for visual consistency.
+// findings. Reuses the info-severity theme so the empty case visually
+// matches the rest of the card family.
 func cardsEmptyPanel() string {
-	color := severityColors[SeverityInfo]
-	bg := severityBG[SeverityInfo]
-	panel := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(color).
-		BorderBackground(bg).
-		Background(bg).
-		Padding(panelVertPadding, panelHorizPadding)
-	onBg := lipgloss.NewStyle().Background(bg)
-	check := onBg.Foreground(lipgloss.Color("42")).Bold(true).Render("✓ ")
-	msg := onBg.Foreground(cardText).Render("No findings. Looks good.")
-	return panel.Render(check + msg)
+	theme := severityThemes[SeverityInfo]
+	msg := "✓ No findings. Looks good."
+	body := lipgloss.NewStyle().
+		Foreground(cardWhite).
+		Background(theme.panelBg).
+		Bold(true).
+		Padding(1, 2).
+		Render(msg)
+
+	contentWidth := lipgloss.Width(body) - 2 // account for our manual side padding below
+
+	borderStyle := lipgloss.NewStyle().Foreground(theme.border).Background(theme.panelBg)
+	padStyle := lipgloss.NewStyle().Background(theme.panelBg)
+	dashes := borderStyle.Render(strings.Repeat("─", contentWidth+2))
+	top := borderStyle.Render("╭") + dashes + borderStyle.Render("╮")
+	bot := borderStyle.Render("╰") + dashes + borderStyle.Render("╯")
+	left := borderStyle.Render("│") + padStyle.Render(" ")
+	right := padStyle.Render(" ") + borderStyle.Render("│")
+
+	var rows []string
+	rows = append(rows, top)
+	for _, line := range strings.Split(body, "\n") {
+		rows = append(rows, left+line+right)
+	}
+	rows = append(rows, bot)
+	return strings.Join(rows, clearEOL+"\n") + clearEOL
 }
 
 func plural(n int, word string) string {

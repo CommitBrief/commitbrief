@@ -11,9 +11,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Changed
-- **Finding card visual polish (round 2).** Five fixes to the panel
-  layout that landed in v0.6.0 (Cards Stage B) + v0.7.0 (icons / bg
-  tints):
+- **Finding card design** ported verbatim from the maintainer's
+  `./secguard/main.go` reference. Replaces the v0.8.0 visual layer
+  end-to-end (hex codes, labels, layout, sizing heuristic). Each
+  severity now ships its own dark theme — panel bg, border, accent
+  color, chip label — sourced as-is:
+  - `⊘ CRITICAL` on `#1A1116` / border `#602B38` / chip `#ff6b8a`
+  - `⚠ HIGH` on `#1A1511` / border `#603F2B` / chip `#ffa86b`
+  - `● MEDIUM` on `#1A1A11` / border `#5A5A2B` / chip `#f0d050`
+  - `○ LOW` on `#11161A` / border `#2B4760` / chip `#6bb8ff`
+  - `ℹ INFO` on `#11181A` / border `#2B5560` / chip `#6be0e0`
+
+  Diff lines render as full-row strips: removed `#22141A` bg /
+  `#ff6b8a` text, added `#111C1C` bg / `#22d3a0` text, context
+  `#E5E7EB` on default bg. A faint `#3a3f4f` sign color de-emphasises
+  the `-`/`+` char so the body reads as the signal.
+
+  Borders are drawn manually (`╭ ╮ ╰ ╯ ─ │` painted on the panel bg)
+  with a `\x1b[0m\x1b[49m\x1b[K` terminator on every row so colored
+  backgrounds don't bleed past the card's right edge in wide
+  terminals. Each card auto-sizes to its widest content row + 24-char
+  breathing-room padding rather than sharing a fixed outer width.
   - **Border now blends with the panel background** via
     `BorderBackground(bg)`. The rounded corners (`╭ ╮ ╰ ╯`) previously
     sat on the terminal-default colour, which read as a dark gap
@@ -33,6 +51,12 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   - **Rounded corners now pop visually** — same `RoundedBorder()` as
     before, but with the border-bg fix above the curves are no longer
     swallowed by surrounding terminal black.
+  - **Code-fence noise removed.** Snippet rendering no longer wraps the
+    excerpt in literal `` ```<language> `` ... `` ``` `` lines, which
+    used to leak through as raw text in card output. The diff-coloured
+    strips already mark the region as code; glamour markdown parsing
+    isn't an option there since it would override the strip backgrounds.
+    `TestCardsSnippetOmitsCodeFences` regression guard added.
 
 ## [0.8.0] - 2026-05-26
 

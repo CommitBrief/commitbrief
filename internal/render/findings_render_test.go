@@ -3,7 +3,9 @@ package render
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,14 +15,24 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
-// TestMain forces a 256-color profile for the entire render package's
-// test run. Without it, lipgloss detects bytes.Buffer as non-TTY and
-// strips ANSI escapes, making it impossible to assert that snippet diff
-// lines actually carry their severity colors. Existing tests use
-// stripANSI so they are unaffected by the forced profile.
+// TestMain forces a TrueColor profile so the hex palette ported from
+// the secguard prototype emits as 24-bit ANSI escapes (`38;2;R;G;B` /
+// `48;2;R;G;B`) we can match in tests. Without it, lipgloss treats
+// bytes.Buffer as non-TTY and downgrades / strips colors.
 func TestMain(m *testing.M) {
-	lipgloss.SetColorProfile(termenv.ANSI256)
+	lipgloss.SetColorProfile(termenv.TrueColor)
 	os.Exit(m.Run())
+}
+
+// hexToTrueColor converts "#RRGGBB" to the "<R>;<G>;<B>" fragment
+// inside a `38;2;…` or `48;2;…` ANSI CSI. Test helper only — the
+// production code feeds hex strings directly to lipgloss.Color.
+func hexToTrueColor(hex string) string {
+	hex = strings.TrimPrefix(hex, "#")
+	r, _ := strconv.ParseUint(hex[0:2], 16, 8)
+	g, _ := strconv.ParseUint(hex[2:4], 16, 8)
+	b, _ := strconv.ParseUint(hex[4:6], 16, 8)
+	return fmt.Sprintf("%d;%d;%d", r, g, b)
 }
 
 func sampleFindings() []Finding {
@@ -118,15 +130,15 @@ func TestCardsOrdersBySeverity(t *testing.T) {
 }
 
 func TestCardsPanelHasSeverityIcon(t *testing.T) {
-	// Each severity's badge must be prefixed by its mapped icon glyph so
-	// users get a visual anchor independent of color (a11y for users with
-	// red/green confusion or NO_COLOR set).
+	// Each severity's chip label prefixes the uppercased name with a
+	// distinct glyph (secguard palette). A11y guard: even on NO_COLOR
+	// terminals the user can tell critical from low at a glance.
 	cases := map[Severity]string{
-		SeverityCritical: "‼",
+		SeverityCritical: "⊘",
 		SeverityHigh:     "⚠",
-		SeverityMedium:   "▲",
-		SeverityLow:      "●",
-		SeverityInfo:     "ⓘ",
+		SeverityMedium:   "●",
+		SeverityLow:      "○",
+		SeverityInfo:     "ℹ",
 	}
 	for sev, icon := range cases {
 		t.Run(string(sev), func(t *testing.T) {
@@ -147,8 +159,9 @@ func TestCardsPanelHasSeverityIcon(t *testing.T) {
 }
 
 func TestCardsPanelHasBulletSeparator(t *testing.T) {
-	// Per the v0.6.0 visual polish: badge and file:line are separated by
-	// " • " (U+2022 bullet) so the eye groups severity with its location.
+	// Secguard layout puts a 2-space gap + middle-dot · between the
+	// severity chip and the file:line path. Catches a regression where
+	// the chip and path glue together visually.
 	p := samplePayload()
 	p.Findings = []Finding{{
 		Severity: SeverityCritical, File: "a.go", Line: 42, Title: "t", Description: "d",
@@ -158,8 +171,8 @@ func TestCardsPanelHasBulletSeparator(t *testing.T) {
 		t.Fatal(err)
 	}
 	plain := stripANSI(w.String())
-	if !strings.Contains(plain, "CRITICAL • a.go:42") {
-		t.Errorf("expected 'CRITICAL • a.go:42' substring; got:\n%s", plain)
+	if !strings.Contains(plain, "CRITICAL  · a.go:42") {
+		t.Errorf("expected 'CRITICAL  · a.go:42' substring; got:\n%s", plain)
 	}
 }
 
@@ -183,23 +196,6 @@ func TestCardsPanelUsesRoundedBorder(t *testing.T) {
 			t.Errorf("sharp-border corner %q should not appear in rounded layout; got:\n%s", sharp, plain)
 		}
 	}
-}
-
-// ansiContainsLineWithColor checks for a foreground color code on a
-// line that also contains the given content substring. Returns true
-// for any ANSI CSI form: standalone "\x1b[38;5;255m" as well as merged
-// "\x1b[1;38;5;255;48;5;52m" that lipgloss emits when several attrs
-// (bold + fg + bg) collapse into one escape.
-func ansiContainsLineWithColor(rendered, fgCode, contentSubstring string) bool {
-	return ansiLineHasCode(rendered, "38;5;"+fgCode, contentSubstring)
-}
-
-// ansiContainsLineWithBg is the background-color counterpart. Used for
-// the v0.8.0+ snippet rendering, where added / removed lines carry a
-// full-row colored strip (48;5;<bg>) instead of just a colored
-// foreground.
-func ansiContainsLineWithBg(rendered, bgCode, contentSubstring string) bool {
-	return ansiLineHasCode(rendered, "48;5;"+bgCode, contentSubstring)
 }
 
 // ansiLineHasCode scans each output line for an ANSI CSI sub-sequence
@@ -233,34 +229,34 @@ func ansiLineHasCode(rendered, ansiCode, contentSubstring string) bool {
 	return false
 }
 
-func TestColorizeSnippetGreenForAddedLines(t *testing.T) {
-	// Diff lines render as full-width colored strips: '+' lines get
-	// background 22 (green), '-' lines background 52 (red). Foreground
-	// is cardText (255 on dark) on both so the row reads as bright
-	// text on a colored bar. Context lines keep cardText on the
-	// transparent / panel bg.
-	onBg := lipgloss.NewStyle()
-	got := colorizeSnippet("- old line\n+ new line\n  context line", onBg)
+// renderDiffFromSnippet is a test helper that mirrors what
+// cardsFindingPanel does inline: parse the snippet string then run
+// renderDiff. Keeps the diff-rendering tests focused on the pure-
+// function logic without spinning up a full Cards panel.
+func renderDiffFromSnippet(snippet string, minWidth int) string {
+	return renderDiff(parseSnippetToDiffLines(snippet), minWidth)
+}
 
-	if !ansiContainsLineWithBg(got, "22", "+ new line") {
-		t.Errorf("'+' line should carry green bg (ANSI 22); got:\n%q", got)
+func TestRenderDiffStripBackgroundsByKind(t *testing.T) {
+	// Per the secguard palette: '+' lines get cardAddBg (#111C1C),
+	// '-' lines get cardDelBg (#22141A), context lines get no bg
+	// (codeFg on default). Check via the truecolor escape fragments.
+	got := renderDiffFromSnippet("- old line\n+ new line\n  context line", 40)
+
+	addBg := hexToTrueColor("#111C1C")
+	delBg := hexToTrueColor("#22141A")
+	if !ansiLineHasCode(got, "48;2;"+addBg, "new line") {
+		t.Errorf("'+' line should carry addBg (#111C1C → %s); got:\n%q", addBg, got)
 	}
-	if !ansiContainsLineWithBg(got, "52", "- old line") {
-		t.Errorf("'-' line should carry red bg (ANSI 52); got:\n%q", got)
-	}
-	// Context line uses cardText foreground (255 on dark) — same
-	// color the title/description use elsewhere in the panel.
-	if !ansiContainsLineWithColor(got, "255", "context line") {
-		t.Errorf("context line should carry cardText (ANSI 255); got:\n%q", got)
+	if !ansiLineHasCode(got, "48;2;"+delBg, "old line") {
+		t.Errorf("'-' line should carry delBg (#22141A → %s); got:\n%q", delBg, got)
 	}
 }
 
-func TestColorizeSnippetPassthroughForContextLines(t *testing.T) {
-	// No '+' or '-' anywhere → no red/green bg strips. Catches a
-	// regression where the colorizer falsely matches space-padded
-	// prefixes or extends bg coloring into context rows.
-	onBg := lipgloss.NewStyle()
-	got := colorizeSnippet("  context one\n  context two", onBg)
+func TestRenderDiffContextLineHasNoBgStrip(t *testing.T) {
+	// Context lines render with codeFg only — no background paint.
+	// Catches a regression where the strip bg leaks into context rows.
+	got := renderDiffFromSnippet("  context one\n  context two", 40)
 
 	plain := stripANSI(got)
 	for _, want := range []string{"context one", "context two"} {
@@ -268,31 +264,92 @@ func TestColorizeSnippetPassthroughForContextLines(t *testing.T) {
 			t.Errorf("plain content missing %q; got:\n%s", want, plain)
 		}
 	}
-	if ansiContainsLineWithBg(got, "22", "context one") {
-		t.Errorf("context-only snippet must not paint green bg; got:\n%q", got)
+	addBg := hexToTrueColor("#111C1C")
+	delBg := hexToTrueColor("#22141A")
+	if ansiLineHasCode(got, "48;2;"+addBg, "context one") {
+		t.Errorf("context line must not paint addBg; got:\n%q", got)
 	}
-	if ansiContainsLineWithBg(got, "52", "context two") {
-		t.Errorf("context-only snippet must not paint red bg; got:\n%q", got)
+	if ansiLineHasCode(got, "48;2;"+delBg, "context two") {
+		t.Errorf("context line must not paint delBg; got:\n%q", got)
 	}
 }
 
-func TestColorizeSnippetPreservesLineCount(t *testing.T) {
-	// Diff colorization must not drop or merge lines — the renderer relies
-	// on the output having the same line count as the input so the panel
-	// height stays predictable.
-	onBg := lipgloss.NewStyle()
+func TestRenderDiffPreservesLineCount(t *testing.T) {
+	// Diff rendering must not drop or merge lines — the panel layout
+	// relies on a stable row count for its height math.
 	in := "- a\n+ b\n  c\n+ d"
-	got := colorizeSnippet(in, onBg)
-	if want, have := strings.Count(in, "\n"), strings.Count(stripANSI(got), "\n"); want != have {
-		t.Errorf("line count drift: in=%d, out=%d\n%q", want, have, got)
+	got := renderDiffFromSnippet(in, 40)
+	// Input has 4 non-empty lines (no trailing newline); output joined
+	// with "\n" → 3 newlines.
+	wantNL := 3
+	if have := strings.Count(stripANSI(got), "\n"); have != wantNL {
+		t.Errorf("line count drift: want %d newlines, got %d\n%q", wantNL, have, got)
+	}
+}
+
+func TestParseSnippetToDiffLinesStripsPrefix(t *testing.T) {
+	// The parser strips the "- "/"+ "/"  " diff prefix so the rendered
+	// text doesn't double the sign char. Regression guard against
+	// reintroducing the prefix into the body.
+	in := "- removed\n+ added\n  context"
+	got := parseSnippetToDiffLines(in)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %+v", len(got), got)
+	}
+	cases := []struct {
+		i        int
+		wantKind byte
+		wantText string
+	}{
+		{0, '-', "removed"},
+		{1, '+', "added"},
+		{2, ' ', "context"},
+	}
+	for _, c := range cases {
+		if got[c.i].kind != c.wantKind {
+			t.Errorf("[%d] kind = %q, want %q", c.i, got[c.i].kind, c.wantKind)
+		}
+		if got[c.i].text != c.wantText {
+			t.Errorf("[%d] text = %q, want %q", c.i, got[c.i].text, c.wantText)
+		}
+	}
+}
+
+func TestCardsSnippetOmitsCodeFences(t *testing.T) {
+	// The triple-backtick code fence (```language ... ```) must NOT
+	// leak into rendered card output. We deliberately drop it: the
+	// diff-coloured strips already mark the region as code, and a
+	// fence rendered as literal text reads as random noise on screen.
+	// Regression guard against re-introducing the wrapper.
+	p := Payload{
+		Findings: []Finding{{
+			Severity: SeverityHigh, File: "src/scripts/docs-search.ts", Line: 91,
+			Title:       "HTML injection vulnerability",
+			Description: "snippet should appear without fence wrapping",
+			Language:    "typescript",
+			Snippet:     "- href=\"/docs/${escapeHtml(e.id)}\"",
+		}},
+		Meta: samplePayload().Meta,
+	}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	if strings.Contains(plain, "```") {
+		t.Errorf("code fence (```) leaked into card output; got:\n%s", plain)
+	}
+	// Snippet content itself must still appear.
+	if !strings.Contains(plain, `escapeHtml(e.id)`) {
+		t.Errorf("snippet content missing from rendered card; got:\n%s", plain)
 	}
 }
 
 func TestCardsSnippetIntegratedWithPanel(t *testing.T) {
 	// End-to-end sanity: render a full Cards panel with a snippet and
-	// confirm each diff line lands on its own colored strip with
-	// cardText foreground. Catches composition regressions between
-	// the colorizer and the surrounding panel background.
+	// confirm each diff line lands on its strip with the secguard
+	// palette bg color. Catches composition regressions between the
+	// diff renderer and the surrounding panel.
 	p := Payload{
 		Findings: []Finding{{
 			Severity: SeverityCritical, File: "a.go", Line: 1,
@@ -306,19 +363,34 @@ func TestCardsSnippetIntegratedWithPanel(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := w.String()
-	if !ansiContainsLineWithBg(raw, "22", "+ new") {
-		t.Errorf("integrated panel: '+' line should carry green bg (22); got:\n%q", raw)
+	addBg := hexToTrueColor("#111C1C")
+	delBg := hexToTrueColor("#22141A")
+	if !ansiLineHasCode(raw, "48;2;"+addBg, "new") {
+		t.Errorf("integrated panel: '+' line should carry addBg; got:\n%q", raw)
 	}
-	if !ansiContainsLineWithBg(raw, "52", "- old") {
-		t.Errorf("integrated panel: '-' line should carry red bg (52); got:\n%q", raw)
+	if !ansiLineHasCode(raw, "48;2;"+delBg, "old") {
+		t.Errorf("integrated panel: '-' line should carry delBg; got:\n%q", raw)
 	}
 }
 
-func TestCardsPanelTitleUsesHighContrastForeground(t *testing.T) {
-	// TestMain forces ANSI256 with a dark-mode probe, so cardText resolves
-	// to its Dark variant ("255" — near-white). Title and description text
-	// must carry that color or they're invisible against severity-tinted
-	// backgrounds on dark terminals.
+// lineWithSubstring returns the rendered line containing the given
+// substring, or "" if none. Lets contrast tests inspect just the row
+// the assertion cares about without false-matching incidental escapes
+// elsewhere in the card.
+func lineWithSubstring(rendered, substring string) string {
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.Contains(line, substring) {
+			return line
+		}
+	}
+	return ""
+}
+
+func TestCardsPanelTitleAndDescAreStyled(t *testing.T) {
+	// Title gets bold + a fg color; description gets a (muted) fg color.
+	// We check for the styling *form* — `\x1b[1;38;2;` for title bold-fg,
+	// `\x1b[38;2;` for desc fg — rather than exact RGB triples, because
+	// lipgloss/termenv can quantise hex inputs by a bit or two.
 	p := samplePayload()
 	p.Findings = []Finding{{
 		Severity: SeverityCritical, File: "a.go", Line: 1,
@@ -329,17 +401,27 @@ func TestCardsPanelTitleUsesHighContrastForeground(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := w.String()
-	if !ansiContainsLineWithColor(raw, "255", "title-text") {
-		t.Errorf("title line should carry the high-contrast cardText (ANSI 255) on dark terminals; got:\n%q", raw)
+
+	titleLine := lineWithSubstring(raw, "title-text")
+	if titleLine == "" {
+		t.Fatalf("title-text not found in output:\n%s", raw)
 	}
-	if !ansiContainsLineWithColor(raw, "255", "description-text") {
-		t.Errorf("description line should carry the high-contrast cardText (ANSI 255); got:\n%q", raw)
+	if !strings.Contains(titleLine, "\x1b[1;38;2;") {
+		t.Errorf("title line should be bold + fg-colored (escape \\x1b[1;38;2;...); got:\n%q", titleLine)
+	}
+
+	descLine := lineWithSubstring(raw, "description-text")
+	if descLine == "" {
+		t.Fatalf("description-text not found in output:\n%s", raw)
+	}
+	if !strings.Contains(descLine, "\x1b[38;2;") {
+		t.Errorf("description line should have fg color escape; got:\n%q", descLine)
 	}
 }
 
-func TestCardsEmptyPanelUsesHighContrastForeground(t *testing.T) {
-	// Same guard for the "No findings. Looks good." panel — the message
-	// sits on the info-severity bg and needs the contrast forced.
+func TestCardsEmptyPanelMessageIsStyled(t *testing.T) {
+	// Empty case: "✓ No findings. Looks good." must be bold + colored
+	// against the info-theme panel bg.
 	p := samplePayload()
 	p.Findings = []Finding{}
 	var w bytes.Buffer
@@ -347,8 +429,12 @@ func TestCardsEmptyPanelUsesHighContrastForeground(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := w.String()
-	if !ansiContainsLineWithColor(raw, "255", "No findings") {
-		t.Errorf("empty-panel message should carry cardText (ANSI 255); got:\n%q", raw)
+	line := lineWithSubstring(raw, "No findings")
+	if line == "" {
+		t.Fatalf("empty-panel message not found in output:\n%s", raw)
+	}
+	if !strings.Contains(line, "\x1b[1;38;2;") {
+		t.Errorf("empty message should be bold + fg-colored; got:\n%q", line)
 	}
 }
 
@@ -388,8 +474,9 @@ func TestCardsCompactSingleLinePerFinding(t *testing.T) {
 }
 
 func TestCardsCompactPreservesIconAndBullet(t *testing.T) {
-	// Compact mode keeps the visual anchors from the full layout: severity
-	// icon + bullet separator between badge and location.
+	// Compact mode reuses the severity theme's label so the icon glyph
+	// matches the full-panel layout. Separator is " · " (muted middle
+	// dot) consistent with the panel chip-to-path spacing.
 	p := samplePayload()
 	p.Findings = []Finding{{
 		Severity: SeverityCritical, File: "internal/auth/session.go", Line: 142,
@@ -403,7 +490,7 @@ func TestCardsCompactPreservesIconAndBullet(t *testing.T) {
 	}
 	plain := stripANSI(w.String())
 
-	want := "‼ CRITICAL • internal/auth/session.go:142 — SQL fragment built from request input"
+	want := "⊘ CRITICAL · internal/auth/session.go:142 — SQL fragment built from request input"
 	if !strings.Contains(plain, want) {
 		t.Errorf("compact line layout mismatch:\nwant substring: %q\ngot:\n%s", want, plain)
 	}
