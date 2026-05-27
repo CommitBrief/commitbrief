@@ -643,6 +643,76 @@ func TestFailOnRendersBeforeExiting(t *testing.T) {
 
 // ---------- end --fail-on ----------
 
+// ---------- --copy (clipboard) ----------
+
+func TestCopyFlagEmitsOSC52OnStderrAndHint(t *testing.T) {
+	// --copy should:
+	//   1. emit an OSC 52 escape on stderr (so piped stdout — --json /
+	//      --markdown / -o file — stays clean),
+	//   2. surface a short "N findings copied to clipboard (...) — paste
+	//      anywhere" hint also on stderr (info-level, respects --quiet).
+	// We don't assert on native pbcopy/xclip success here because that's
+	// environment-dependent; either OSC 52 or native alone is enough for
+	// the user to get value, so the hint just has to exist.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--no-cost-check", "--copy"); err != nil {
+		t.Fatalf("--copy review run: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	stderr := e.errOut.String()
+	if !strings.Contains(stderr, "\x1b]52;c;") {
+		t.Errorf("stderr should carry OSC 52 introducer; got:\n%s", truncate(stderr, 600))
+	}
+	if !strings.Contains(stderr, "\x07") {
+		t.Errorf("stderr OSC 52 should be BEL-terminated; got:\n%s", truncate(stderr, 600))
+	}
+	if !strings.Contains(stderr, "copied to clipboard") {
+		t.Errorf("stderr should include the clipboard hint; got:\n%s", truncate(stderr, 600))
+	}
+	// Stdout (the actual review output) must NOT carry the OSC 52 escape
+	// — that's the whole point of routing it through stderr instead of
+	// fmt.Printf. Regression guard against accidentally restoring the
+	// secguard-prototype path that wrote to stdout.
+	if strings.Contains(e.out.String(), "\x1b]52;c;") {
+		t.Errorf("stdout leaked OSC 52 escape — should be stderr-only:\n%s",
+			truncate(e.out.String(), 400))
+	}
+}
+
+func TestCopyFlagOffEmitsNoOSC52(t *testing.T) {
+	// Default (no --copy) must not touch the clipboard at all — that
+	// would be surprising side-effect behaviour for casual review runs.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--no-cost-check"); err != nil {
+		t.Fatalf("plain review run: %v", err)
+	}
+	if strings.Contains(e.errOut.String(), "\x1b]52;c;") {
+		t.Errorf("non-copy run leaked OSC 52 escape:\n%s", truncate(e.errOut.String(), 400))
+	}
+	if strings.Contains(e.errOut.String(), "copied to clipboard") {
+		t.Errorf("non-copy run should not emit clipboard hint:\n%s", truncate(e.errOut.String(), 400))
+	}
+}
+
+func TestCopyFlagWithQuietSuppressesHint(t *testing.T) {
+	// --quiet silences infof — the hint should disappear, but the OSC 52
+	// escape still belongs on stderr because that's a side-channel for
+	// the terminal, not an info message. Matches how --quiet treats
+	// other side-effects (e.g. `cache hit` marker stays).
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--no-cost-check", "--copy", "--quiet"); err != nil {
+		t.Fatalf("--copy --quiet: %v", err)
+	}
+	stderr := e.errOut.String()
+	if !strings.Contains(stderr, "\x1b]52;c;") {
+		t.Errorf("--quiet should keep the OSC 52 escape; got:\n%s", truncate(stderr, 400))
+	}
+	if strings.Contains(stderr, "copied to clipboard") {
+		t.Errorf("--quiet should suppress the human hint; got:\n%s", truncate(stderr, 400))
+	}
+}
+
+// ---------- end --copy ----------
+
 // ---------- install-hook (11.5.8) ----------
 
 func TestInstallHookCreatesFileWithCorrectPerms(t *testing.T) {

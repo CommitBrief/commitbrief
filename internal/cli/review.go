@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/CommitBrief/commitbrief/internal/cache"
+	"github.com/CommitBrief/commitbrief/internal/clipboard"
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/guard"
@@ -169,6 +170,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 			if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
 				return err
 			}
+			handleCopyFlag(cmd, app, findings)
 			return applyFailOn(cmd, app, findings)
 		}
 	}
@@ -247,7 +249,47 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags) error {
 	if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
 		return err
 	}
+	handleCopyFlag(cmd, app, findings)
 	return applyFailOn(cmd, app, findings)
+}
+
+// handleCopyFlag pushes a plain-text summary of findings onto the
+// system clipboard when --copy is set. Silently no-ops when the flag
+// is off, there are no findings to copy, or both transports fail
+// (e.g. headless Linux without wl-clipboard / xclip / xsel installed
+// AND a terminal that ignores OSC 52). Errors here never fail the
+// review — clipboard is a convenience, not a hard requirement.
+//
+// The OSC 52 escape is written to stderr so it never leaks into a
+// piped stdout (`commitbrief --json --copy | jq` stays clean). The
+// hint line goes through the same stderr stream and honours
+// --quiet via infof.
+func handleCopyFlag(cmd *cobra.Command, app *appContext, findings []render.Finding) {
+	if !global.copy {
+		return
+	}
+	w := cmd.ErrOrStderr()
+	hint := func(key string, args ...any) {
+		if global.quiet {
+			return
+		}
+		_, _ = fmt.Fprintln(w, app.Catalog.T(key, args...))
+	}
+	if len(findings) == 0 {
+		hint("clipboard.empty")
+		return
+	}
+	payload := render.BuildCopyPayload(findings)
+	// OSC 52 escape always goes through w (cmd.ErrOrStderr), even under
+	// --quiet — it's a terminal side-channel, not an info message, and
+	// suppressing it would silently break the headline feature.
+	result := clipboard.Copy(w, payload)
+	label := result.MethodLabel()
+	if label == "" {
+		hint("clipboard.failed")
+		return
+	}
+	hint("clipboard.copied", len(findings), label)
 }
 
 // tryStructuredReview runs Review and, on parse failure, retries once.

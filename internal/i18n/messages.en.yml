@@ -52,6 +52,10 @@ cache.clear.confirm: "Remove all cached entries?"
 cache.clear.aborted: "Aborted; cache left untouched."
 cache.clear.success: "Removed %d cached entr(y/ies), freed %s."
 
+clipboard.copied: "%d findings copied to clipboard (%s) — paste anywhere"
+clipboard.empty: "Nothing to copy: review found 0 findings."
+clipboard.failed: "Could not copy to clipboard (no OSC-52-capable terminal and no native tool found)."
+
 rules.using_default: "ℹ Using built-in review rules. Run 'commitbrief init' to customize."
 rules.output.using_default: "ℹ Using built-in output format. Create ~/.commitbrief/OUTPUT.md or <repo>/.commitbrief/OUTPUT.md to customize."
 

@@ -10,7 +10,41 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **Severity chip glyphs swapped to emoji** for stronger visual cues
+  across both the card panel header and the `--compact` line layout
+  (and `--copy` clipboard payload, since it mirrors the chip label):
+  - `⊘ CRITICAL` → `💥 CRITICAL`
+  - `⚠ HIGH` → `🚨 HIGH`
+  - `● MEDIUM` → `⚡ MEDIUM`
+  - `○ LOW` → `📌 LOW`
+  - `ℹ INFO` → `💡 INFO`
+
+  Emoji are 2 cells wide (vs the 1-cell line-drawing glyphs they
+  replace) but the fixed-width panel fill via lipgloss `Width()`
+  absorbs the difference — corners still close cleanly. Tested with
+  the long-line wrap regression to confirm the sign-column
+  alignment in diff strips is unaffected.
+
 ### Added
+- **`--copy` flag** — pushes a plain-text summary of the review
+  findings onto the system clipboard via two complementary transports:
+  OSC 52 escape (works over SSH; honored by iTerm2, kitty, WezTerm,
+  Alacritty, Ghostty, recent xterm, tmux with `allow-passthrough`)
+  *and* native shellout (pbcopy / wl-copy / xclip / xsel / clip.exe
+  for terminals that ignore OSC 52, like macOS Terminal.app or Warp).
+  Payload format ported verbatim from the maintainer's secguard
+  prototype: `[<severity-label>] <path>:<line>\n<title>\n\n<description>`
+  per finding, joined with `\n---\n\n`. Diff snippet deliberately
+  omitted — chat clients mangle multi-line code blocks. OSC 52
+  escape routes through stderr (not stdout) so `commitbrief --json
+  --copy | jq` stays clean. A short hint line ("N findings copied to
+  clipboard (OSC 52 + native) — paste anywhere") goes to stderr,
+  suppressed by `--quiet` but the escape itself is never silenced —
+  it's a terminal side-channel, not info text. New `internal/clipboard`
+  package (transport) + `render.CopyText` / `render.BuildCopyPayload`
+  (format). 3 EN/TR i18n keys, 12 unit + integration tests, ~330 LoC.
+
 - **`commitbrief cache clear` subcommand** — removes the repo-local
   response cache directory (`<repoRoot>/.commitbrief/cache/`) and
   reports how many entries were deleted plus the disk space freed.

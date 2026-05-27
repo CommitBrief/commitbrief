@@ -134,11 +134,11 @@ func TestCardsPanelHasSeverityIcon(t *testing.T) {
 	// distinct glyph (secguard palette). A11y guard: even on NO_COLOR
 	// terminals the user can tell critical from low at a glance.
 	cases := map[Severity]string{
-		SeverityCritical: "⊘",
-		SeverityHigh:     "⚠",
-		SeverityMedium:   "●",
-		SeverityLow:      "○",
-		SeverityInfo:     "ℹ",
+		SeverityCritical: "💥",
+		SeverityHigh:     "🚨",
+		SeverityMedium:   "⚡",
+		SeverityLow:      "📌",
+		SeverityInfo:     "💡",
 	}
 	for sev, icon := range cases {
 		t.Run(string(sev), func(t *testing.T) {
@@ -577,7 +577,7 @@ func TestCardsCompactPreservesIconAndBullet(t *testing.T) {
 	}
 	plain := stripANSI(w.String())
 
-	want := "⊘ CRITICAL · internal/auth/session.go:142 — SQL fragment built from request input"
+	want := "💥 CRITICAL · internal/auth/session.go:142 — SQL fragment built from request input"
 	if !strings.Contains(plain, want) {
 		t.Errorf("compact line layout mismatch:\nwant substring: %q\ngot:\n%s", want, plain)
 	}

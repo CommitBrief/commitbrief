@@ -53,6 +53,7 @@ commitbrief cache clear           # remove cached LLM responses for this repo
 - ` + "`--markdown`" + ` — plain markdown, no ANSI
 - ` + "`-o, --output <file>`" + ` — write to file instead of stdout
 - ` + "`--no-cache`" + ` — bypass cache read and write
+- ` + "`--copy`" + ` — copy findings (severity, path, title, description) to the system clipboard
 - ` + "`-y, --yes`" + ` — auto-confirm prompts
 - ` + "`-v, --verbose`" + ` — show token/cost/latency footer
 - ` + "`-q, --quiet`" + ` — suppress info messages on stderr

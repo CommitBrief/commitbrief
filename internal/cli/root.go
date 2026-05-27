@@ -23,6 +23,7 @@ type globalFlags struct {
 	compact      bool
 	allowSecrets bool
 	noCostCheck  bool
+	copy         bool
 	failOn       string
 	lang         string
 	provider     string
@@ -77,6 +78,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.compact, "compact", false, "one-line per finding (dense review output)")
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
 	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
+	flags.BoolVar(&global.copy, "copy", false, "copy findings (severity, path, title, description) to the system clipboard via OSC 52 + native tool")
 	flags.StringVar(&global.failOn, "fail-on", "", "exit 1 if any finding meets/exceeds severity (critical|high|medium|low|info|any|none)")
 	flags.StringVar(&global.lang, "lang", "", "override output language (e.g. tr, en)")
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")

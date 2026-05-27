@@ -112,7 +112,7 @@ func cardsCompactBody(findings []Finding) string {
 // Description and snippet are intentionally omitted — that's the
 // trade for the density.
 //
-//	⊘ CRITICAL · internal/auth/session.go:142 — SQL fragment built from request input
+//	💥 CRITICAL · internal/auth/session.go:142 — SQL fragment built from request input
 func cardsCompactLine(f Finding) string {
 	theme, ok := severityThemes[f.Severity]
 	if !ok {
@@ -145,11 +145,11 @@ type severityTheme struct {
 }
 
 var severityThemes = map[Severity]severityTheme{
-	SeverityCritical: {panelBg: "#1A1116", border: "#602B38", accent: "#ff6b8a", label: "⊘ CRITICAL"},
-	SeverityHigh:     {panelBg: "#1A1511", border: "#603F2B", accent: "#ffa86b", label: "⚠ HIGH"},
-	SeverityMedium:   {panelBg: "#1A1A11", border: "#5A5A2B", accent: "#f0d050", label: "● MEDIUM"},
-	SeverityLow:      {panelBg: "#11161A", border: "#2B4760", accent: "#6bb8ff", label: "○ LOW"},
-	SeverityInfo:     {panelBg: "#11181A", border: "#2B5560", accent: "#6be0e0", label: "ℹ INFO"},
+	SeverityCritical: {panelBg: "#1A1116", border: "#602B38", accent: "#ff6b8a", label: "💥 CRITICAL"},
+	SeverityHigh:     {panelBg: "#1A1511", border: "#603F2B", accent: "#ffa86b", label: "🚨 HIGH"},
+	SeverityMedium:   {panelBg: "#1A1A11", border: "#5A5A2B", accent: "#f0d050", label: "⚡ MEDIUM"},
+	SeverityLow:      {panelBg: "#11161A", border: "#2B4760", accent: "#6bb8ff", label: "📌 LOW"},
+	SeverityInfo:     {panelBg: "#11181A", border: "#2B5560", accent: "#6be0e0", label: "💡 INFO"},
 }
 
 // Shared palette colors used across all severity themes. Same source
@@ -302,7 +302,7 @@ func parseSnippetToDiffLines(snippet string) []diffLine {
 //
 //	╭────────────────────────────╮
 //	│                            │
-//	│ ⊘ CRITICAL  · path:line    │
+//	│ 💥 CRITICAL  · path:line    │
 //	│                            │
 //	│ Title (white, bold)        │
 //	│ Description (muted)        │

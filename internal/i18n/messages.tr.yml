@@ -52,6 +52,10 @@ cache.clear.confirm: "Tüm önbellek girdileri silinsin mi?"
 cache.clear.aborted: "İptal edildi; önbellek değiştirilmedi."
 cache.clear.success: "%d önbellek girdisi silindi, %s yer açıldı."
 
+clipboard.copied: "%d bulgu panoya kopyalandı (%s) — istediğin yere yapıştırabilirsin"
+clipboard.empty: "Kopyalanacak bir şey yok: review 0 bulgu çıkardı."
+clipboard.failed: "Panoya kopyalanamadı (OSC 52 destekleyen terminal yok ve native araç bulunamadı)."
+
 rules.using_default: "ℹ Yerleşik review kuralları kullanılıyor. Özelleştirmek için 'commitbrief init' çalıştırın."
 rules.output.using_default: "ℹ Yerleşik çıktı formatı kullanılıyor. Özelleştirmek için ~/.commitbrief/OUTPUT.md veya <repo>/.commitbrief/OUTPUT.md oluşturun."
 
