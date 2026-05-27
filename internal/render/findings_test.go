@@ -31,6 +31,7 @@ func TestParseFindings_Valid(t *testing.T) {
 	      "line": 142,
 	      "title": "SQL fragment built from request input",
 	      "description": "String concatenation feeds db.Query() directly.",
+	      "suggestion": "Switch to a prepared statement with bound parameters.",
 	      "language": "go",
 	      "snippet": "- old\n+ new"
 	    },
@@ -39,7 +40,8 @@ func TestParseFindings_Valid(t *testing.T) {
 	      "file": "internal/util/log.go",
 	      "line": 7,
 	      "title": "Unused import",
-	      "description": "context not referenced."
+	      "description": "context not referenced.",
+	      "suggestion": "Remove the import."
 	    }
 	  ]
 	}`
@@ -95,10 +97,11 @@ func TestParseFindings_Errors(t *testing.T) {
 		{"empty input", "", "empty content"},
 		{"whitespace only", "   \n  ", "empty content"},
 		{"malformed json", `{"findings":`, "parse findings"},
-		{"unknown severity", `{"findings":[{"severity":"blocker","file":"a.go","line":1,"title":"t","description":"d"}]}`, "unknown severity"},
-		{"missing file", `{"findings":[{"severity":"high","file":"","line":1,"title":"t","description":"d"}]}`, "missing file"},
-		{"missing title", `{"findings":[{"severity":"high","file":"a.go","line":1,"title":"","description":"d"}]}`, "missing title"},
-		{"missing description", `{"findings":[{"severity":"high","file":"a.go","line":1,"title":"t","description":""}]}`, "missing description"},
+		{"unknown severity", `{"findings":[{"severity":"blocker","file":"a.go","line":1,"title":"t","description":"d","suggestion":"s"}]}`, "unknown severity"},
+		{"missing file", `{"findings":[{"severity":"high","file":"","line":1,"title":"t","description":"d","suggestion":"s"}]}`, "missing file"},
+		{"missing title", `{"findings":[{"severity":"high","file":"a.go","line":1,"title":"","description":"d","suggestion":"s"}]}`, "missing title"},
+		{"missing description", `{"findings":[{"severity":"high","file":"a.go","line":1,"title":"t","description":"","suggestion":"s"}]}`, "missing description"},
+		{"missing suggestion", `{"findings":[{"severity":"high","file":"a.go","line":1,"title":"t","description":"d","suggestion":""}]}`, "missing suggestion"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -119,8 +122,8 @@ func TestParseFindings_LineEndRoundTrip(t *testing.T) {
 	// and tolerate its absence (single-line findings omit it).
 	in := `{
 	  "findings": [
-	    {"severity":"high","file":"x.go","line":10,"line_end":15,"title":"t","description":"d"},
-	    {"severity":"low","file":"y.go","line":3,"title":"t","description":"d"}
+	    {"severity":"high","file":"x.go","line":10,"line_end":15,"title":"t","description":"d","suggestion":"s"},
+	    {"severity":"low","file":"y.go","line":3,"title":"t","description":"d","suggestion":"s"}
 	  ]
 	}`
 	got, err := ParseFindings(in)
@@ -132,6 +135,55 @@ func TestParseFindings_LineEndRoundTrip(t *testing.T) {
 	}
 	if got[1].LineEnd != 0 {
 		t.Errorf("findings[1].LineEnd = %d, want 0 (omitted)", got[1].LineEnd)
+	}
+}
+
+func TestParseFindings_SuggestionRequired(t *testing.T) {
+	// Suggestion is the v0.9.0 actionable-fix field; required for
+	// every finding. A response that omits it (legacy) or sets it
+	// empty must trigger a parse error so the caller's retry/degrade
+	// path kicks in instead of silently rendering a hollow card.
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{
+			"omit suggestion key entirely",
+			`{"findings":[{"severity":"high","file":"x.go","line":1,"title":"t","description":"d"}]}`,
+		},
+		{
+			"explicit empty string",
+			`{"findings":[{"severity":"high","file":"x.go","line":1,"title":"t","description":"d","suggestion":""}]}`,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := ParseFindings(c.in)
+			if err == nil {
+				t.Fatalf("expected parse error for missing/empty suggestion; got nil")
+			}
+			if !strings.Contains(err.Error(), "missing suggestion") {
+				t.Errorf("err = %v, want it to mention 'missing suggestion'", err)
+			}
+		})
+	}
+}
+
+func TestParseFindings_SuggestionRoundTrip(t *testing.T) {
+	// Happy path: the suggestion text survives JSON round-trip
+	// verbatim, including newlines and punctuation that chat clients
+	// sometimes choke on.
+	in := `{"findings":[{
+	  "severity":"high","file":"x.go","line":1,
+	  "title":"t","description":"d",
+	  "suggestion":"Replace the in-memory cache with a Redis-backed store, scoped per-tenant."
+	}]}`
+	got, err := ParseFindings(in)
+	if err != nil {
+		t.Fatalf("ParseFindings: %v", err)
+	}
+	if got[0].Suggestion != "Replace the in-memory cache with a Redis-backed store, scoped per-tenant." {
+		t.Errorf("Suggestion did not round-trip; got %q", got[0].Suggestion)
 	}
 }
 

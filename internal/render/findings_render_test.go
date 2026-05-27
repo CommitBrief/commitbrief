@@ -74,7 +74,7 @@ func findingsPayload() Payload {
 	// returned; the renderer ignores it once Findings is populated. We set
 	// something recognisably JSON-shaped so assertions catch any accidental
 	// echo of it into the body.
-	p.Content = `{"findings":[{"severity":"critical","file":"a.go","line":1,"title":"x","description":"y"}]}`
+	p.Content = `{"findings":[{"severity":"critical","file":"a.go","line":1,"title":"x","description":"y","suggestion":"z"}]}`
 	p.Findings = sampleFindings()
 	return p
 }
@@ -175,6 +175,48 @@ func TestCardsPanelHasBulletSeparator(t *testing.T) {
 	plain := stripANSI(w.String())
 	if !strings.Contains(plain, "CRITICAL  · a.go:42") {
 		t.Errorf("expected 'CRITICAL  · a.go:42' substring; got:\n%s", plain)
+	}
+}
+
+func TestCardsPanelRendersSuggestionWithChevron(t *testing.T) {
+	// The suggestion paragraph renders BELOW the diff strip, prefixed
+	// with "→ " so it reads as the actionable next step distinct from
+	// the diagnostic description above. Regression guard against the
+	// chevron drifting off the leading position.
+	p := samplePayload()
+	p.Findings = []Finding{{
+		Severity: SeverityHigh, File: "x.go", Line: 1,
+		Title:       "t",
+		Description: "d",
+		Suggestion:  "Use a prepared statement here so user input never reaches the SQL string.",
+	}}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	if !strings.Contains(plain, "→ Use a prepared statement") {
+		t.Errorf("expected chevron-prefixed suggestion; got:\n%s", plain)
+	}
+}
+
+func TestCardsPanelSkipsSuggestionWhenEmpty(t *testing.T) {
+	// Suggestion is required in parse, but the renderer is also fed
+	// in unit-test code paths (degraded payloads, struct literals).
+	// Empty suggestion must NOT emit a bare "→" line — that would
+	// look like the model dropped its answer.
+	p := samplePayload()
+	p.Findings = []Finding{{
+		Severity: SeverityHigh, File: "x.go", Line: 1, Title: "t", Description: "d",
+		// Suggestion deliberately omitted.
+	}}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	if strings.Contains(plain, "→") {
+		t.Errorf("empty suggestion should NOT emit a chevron; got:\n%s", plain)
 	}
 }
 

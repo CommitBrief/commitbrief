@@ -363,6 +363,9 @@ func cardsFindingPanel(f Finding) string {
 	if len(diff) > 0 {
 		parts = append(parts, renderDiff(diff, cardContentWidth), blank)
 	}
+	if f.Suggestion != "" {
+		parts = append(parts, renderSuggestion(f.Suggestion, cardContentWidth, theme.panelBg), blank)
+	}
 	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	borderStyle := lipgloss.NewStyle().Foreground(theme.border).Background(theme.panelBg)
@@ -480,6 +483,54 @@ func chunkRunes(s string, width int) []string {
 		out = append(out, string(runes))
 	}
 	return out
+}
+
+// renderSuggestion paints the 2-3 sentence fix recommendation as a
+// chevron-prefixed paragraph wrapped to width. The chevron sits on
+// the first line; continuation lines are indented to align with the
+// suggestion body (under the chevron's trailing space). Lipgloss
+// `Width()` handles the word-aware wrap; we slice the result and
+// rewrite each line's leading 2-column prefix manually.
+//
+// Color: cardWhite — same as the title, so the actionable text reads
+// as "this is the thing you do next" rather than tertiary commentary
+// like the muted description above it.
+func renderSuggestion(text string, width int, bg lipgloss.Color) string {
+	if text == "" {
+		return ""
+	}
+	const prefixLead = "→ "
+	const prefixCont = "  "
+	bodyWidth := width - lipgloss.Width(prefixLead)
+	if bodyWidth <= 0 {
+		bodyWidth = width
+	}
+
+	// First, word-wrap the raw text to bodyWidth using lipgloss
+	// (handles East Asian widths + word boundaries). The styled
+	// background fill goes on the final padded line, not the wrap
+	// stage, so we don't drag spurious bg onto soft-wrap whitespace.
+	wrapper := lipgloss.NewStyle().Width(bodyWidth)
+	wrapped := wrapper.Render(text)
+
+	style := lipgloss.NewStyle().
+		Foreground(cardWhite).
+		Background(bg).
+		Width(width)
+
+	rows := strings.Split(wrapped, "\n")
+	out := make([]string, 0, len(rows))
+	for i, row := range rows {
+		// lipgloss Width pads each row with trailing spaces to fill
+		// bodyWidth — strip them so the prefix + body fit exactly.
+		row = strings.TrimRight(row, " ")
+		prefix := prefixCont
+		if i == 0 {
+			prefix = prefixLead
+		}
+		out = append(out, style.Render(prefix+row))
+	}
+	return strings.Join(out, "\n")
 }
 
 // cardsEmptyPanel is the success view for a review that produced zero

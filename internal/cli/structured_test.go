@@ -65,7 +65,7 @@ func TestTryStructuredReviewRetriesOnce(t *testing.T) {
 
 func TestTryStructuredReviewRetryRecovers(t *testing.T) {
 	// Stateful mock: first response invalid, second valid.
-	validJSON := `{"findings":[{"severity":"info","file":"a.go","line":1,"title":"t","description":"d"}]}`
+	validJSON := `{"findings":[{"severity":"info","file":"a.go","line":1,"title":"t","description":"d","suggestion":"s"}]}`
 	m := &switchingMock{
 		responses: []string{"first call broken", validJSON},
 		usage:     provider.Usage{InputTokens: 50, OutputTokens: 10},

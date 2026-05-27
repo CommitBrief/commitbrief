@@ -13,6 +13,10 @@
 {{ .Snippet }}
 ```
 {{- end }}
+{{- if .Suggestion }}
+
+→ {{ .Suggestion }}
+{{- end }}
 {{ end }}
 {{- end }}
 {{- else }}
@@ -25,7 +29,7 @@ It is never sent to the LLM — the model produces a JSON document, and
 this template shapes how `--markdown` and `--output <file>.md` render it.
 
 Available data:
-  .Findings  []Finding{ Severity, File, Line, LineEnd, Title, Description, Language, Snippet }
+  .Findings  []Finding{ Severity, File, Line, LineEnd, Title, Description, Suggestion, Language, Snippet }
 
 Per-finding methods (preferred over raw field access):
   .LineRef   returns "142" or "142-145" depending on whether LineEnd is set

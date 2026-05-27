@@ -42,13 +42,24 @@ const jsonContract = `Return a single JSON object matching this exact schema. Ou
       "line_end": <integer line number, optional, where the finding ends>,
       "title": "<one-sentence summary of the issue>",
       "description": "<1-3 sentences explaining the issue and its impact>",
+      "suggestion": "<2-3 sentence concrete fix recommendation>",
       "language": "<programming language identifier, optional>",
       "snippet": "<verbatim diff excerpt with - / + / two-space prefixes, optional>"
     }
   ]
 }
 
-Required fields per finding: severity, file, line, title, description.
+Required fields per finding: severity, file, line, title, description, suggestion.
+
+The "suggestion" field is REQUIRED and carries the actionable remediation:
+  - 2-3 sentences explaining what the developer should change and why.
+  - Concrete and specific to this finding — name functions, parameters, or
+    approaches the developer can act on, not generic advice ("be more
+    careful").
+  - Do not restate the description; the suggestion answers "what now?",
+    not "what is wrong".
+  - When the fix is genuinely a one-liner, a single sentence is fine; do
+    not pad to reach 2-3 sentences.
 
 Optional fields:
   - line_end: include ONLY when the finding spans multiple lines (e.g. a
@@ -94,6 +105,8 @@ Title
 
 Description
 
+→ Suggestion
+
 Rules:
 
 - icon is one of: 💥 (critical), 🚨 (high), ⚡ (medium), 📌 (low), 💡 (info).
@@ -105,10 +118,29 @@ Rules:
 - Title is a one-sentence summary of the issue.
 - Description is 1-3 sentences explaining the issue and its impact, on its
   own line (or wrapping naturally).
+- Suggestion (the "→" line) is REQUIRED. It is 2-3 sentences (one sentence
+  fine for one-line fixes) describing the concrete remediation: what to
+  change and why. Do not restate the description; the suggestion answers
+  "what now?", not "what is wrong". Be specific (name functions,
+  parameters, approaches) — avoid generic advice.
 
-Separate adjacent findings with a single blank line. Do not emit any preamble,
-commentary, summary section, or closing remarks — just the findings, top to
-bottom. When the diff has no review-worthy issues, emit a single line:
+Separate adjacent findings with a horizontal rule on its own line, sandwiched
+between blank lines:
+
+    <finding N>
+
+    --------------------
+
+    <finding N+1>
+
+The rule is exactly 20 hyphen characters (no leading/trailing whitespace) so
+the boundary between findings stays unambiguous when output gets pasted into
+chat or piped to a file. Do NOT emit the rule before the first finding or
+after the last one — only BETWEEN adjacent findings.
+
+Do not emit any preamble, commentary, summary section, or closing remarks —
+just the findings, separated as above. When the diff has no review-worthy
+issues, emit a single line:
 
 ✓ No findings. Looks good.`
 

@@ -53,6 +53,7 @@ type Finding struct {
 	LineEnd     int      `json:"line_end,omitempty"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
+	Suggestion  string   `json:"suggestion"`
 	Language    string   `json:"language,omitempty"`
 	Snippet     string   `json:"snippet,omitempty"`
 }
@@ -120,6 +121,9 @@ func ParseFindings(content string) ([]Finding, error) {
 		}
 		if f.Description == "" {
 			return nil, fmt.Errorf("parse findings: finding %d: missing description", i)
+		}
+		if f.Suggestion == "" {
+			return nil, fmt.Errorf("parse findings: finding %d: missing suggestion", i)
 		}
 	}
 	if env.Findings == nil {

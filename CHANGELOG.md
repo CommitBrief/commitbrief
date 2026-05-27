@@ -11,6 +11,54 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **Per-finding `suggestion` field — required actionable remediation.**
+  Every finding now carries a 2–3 sentence concrete fix recommendation
+  alongside the existing title/description. Rendered:
+
+  - **Cards** — chevron-prefixed paragraph below the diff strip
+    (`→ Switch to a prepared statement …`), `cardWhite` foreground so
+    it reads as the actionable next step distinct from the muted
+    description above. Continuation lines indent to align under the
+    chevron's body column.
+  - **Markdown** (`OUTPUT.md`) — `→ {{ .Suggestion }}` block after
+    the snippet fence.
+  - **JSON** (`--json`) — `"suggestion": "…"` field; required, fails
+    `ParseFindings` if empty so the retry/degrade path fires instead
+    of a hollow card.
+  - **`--copy` clipboard payload** — chevron line at the bottom of
+    each finding block, flattened to single-paragraph form so chat
+    clients (Slack, Discord) don't mangle it.
+  - **CLI providers** (claude-cli, gemini-cli) — prompted format
+    includes the `→ Suggestion` line per finding; the host CLI emits
+    it verbatim to stdout. Adjacent findings are now separated by a
+    horizontal rule (`--------------------` on its own line between
+    blank lines) so paste-into-chat output stays readable even
+    without the box-drawing cards have. The rule is prompt-side
+    (the model is instructed to emit it); CLI providers don't get
+    the parse-and-reject enforcement the API path does, so format
+    drift is possible — accept as v0.9.0 experimental limit.
+
+  Prompt contract tightens the field expectations: concrete and
+  specific (name functions, parameters, approaches), no
+  generic-advice padding, no restating the description. The
+  suggestion answers "what now?", not "what is wrong" — the latter
+  is the description's job.
+
+  Provider structured-output schemas all declare `suggestion` as
+  required: Anthropic tools mode, Gemini ResponseSchema, OpenAI
+  strict mode (strict mode rejects optional properties but CAN list
+  required ones — so suggestion gets first-class enforcement
+  there, unlike `language`/`snippet`/`line_end` which stay
+  prompt-driven). BREAKING for any external consumer parsing the
+  v1 JSON schema, but the change is on the producing-side contract
+  the LLM is told to emit — schema version stays at 1 since this
+  is additive in our schema-policy framing (the missing/empty case
+  failing parse mirrors how missing `title`/`description` already
+  behaved). New `internal/render/findings_test.go` cases
+  (`TestParseFindings_SuggestionRequired`,
+  `TestCardsPanelRendersSuggestionWithChevron`,
+  `TestCopyTextIncludesSuggestionWithChevron`) pin the surface.
+
 - **CLI-tool-backed providers — `claude-cli`, `gemini-cli`** (experimental).
   Drive the user's locally-installed Claude Code (`claude`) or Gemini
   CLI (`gemini`) as the review backend via subprocess, instead of an

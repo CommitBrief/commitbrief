@@ -23,8 +23,8 @@ func responseSchema() *sdk.Schema {
 				Description: "Review findings produced by the model.",
 				Items: &sdk.Schema{
 					Type:             sdk.TypeObject,
-					Required:         []string{"severity", "file", "line", "title", "description"},
-					PropertyOrdering: []string{"severity", "file", "line", "line_end", "title", "description", "language", "snippet"},
+					Required:         []string{"severity", "file", "line", "title", "description", "suggestion"},
+					PropertyOrdering: []string{"severity", "file", "line", "line_end", "title", "description", "suggestion", "language", "snippet"},
 					Properties: map[string]*sdk.Schema{
 						"severity": {
 							Type:        sdk.TypeString,
@@ -50,6 +50,10 @@ func responseSchema() *sdk.Schema {
 						"description": {
 							Type:        sdk.TypeString,
 							Description: "1-3 sentences explaining the issue and its impact.",
+						},
+						"suggestion": {
+							Type:        sdk.TypeString,
+							Description: "Required. 2-3 sentence concrete fix recommendation; answers \"what now?\" with specifics (functions, parameters, approaches) rather than restating the description.",
 						},
 						"language": {
 							Type:        sdk.TypeString,

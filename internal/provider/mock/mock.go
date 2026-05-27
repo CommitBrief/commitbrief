@@ -20,7 +20,7 @@ const defaultName = "mock"
 // The single finding's title is "mock review output" — historically
 // asserted by CLI tests that previously expected a plain-text body; the
 // string survives the format change as a finding-title match.
-const DefaultResponseContent = `{"findings":[{"severity":"info","file":"mock.go","line":1,"title":"mock review output","description":"Synthetic finding produced by the mock provider for tests."}]}`
+const DefaultResponseContent = `{"findings":[{"severity":"info","file":"mock.go","line":1,"title":"mock review output","description":"Synthetic finding produced by the mock provider for tests.","suggestion":"This is a synthetic suggestion used only to keep the schema-validation tests passing."}]}`
 
 type Provider struct {
 	mu sync.Mutex

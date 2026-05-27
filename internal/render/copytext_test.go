@@ -126,6 +126,57 @@ func TestCopyTextRendersLineRange(t *testing.T) {
 	}
 }
 
+func TestCopyTextIncludesSuggestionWithChevron(t *testing.T) {
+	// Clipboard payload mirrors the card visual: chevron-prefixed
+	// suggestion line at the end so a paste-into-Slack carries the
+	// actionable bit, not just the diagnostic.
+	f := Finding{
+		Severity:    SeverityCritical,
+		File:        "internal/auth/session.go",
+		Line:        142,
+		Title:       "SQL fragment built from request input",
+		Description: "String concatenation feeds db.Query directly.",
+		Suggestion:  "Switch to a prepared statement with bound parameters.",
+	}
+	got := CopyText(f)
+	if !strings.Contains(got, "→ Switch to a prepared statement with bound parameters.") {
+		t.Errorf("copy payload missing chevron-prefixed suggestion; got:\n%s", got)
+	}
+	// Suggestion sits after description, on its own paragraph.
+	if !strings.Contains(got, "directly.\n\n→ Switch") {
+		t.Errorf("suggestion should appear in its own paragraph below description; got:\n%s", got)
+	}
+}
+
+func TestCopyTextSkipsSuggestionWhenEmpty(t *testing.T) {
+	// Defensive: an empty Suggestion (e.g. from a hand-constructed
+	// Finding in tests) must NOT emit a bare "→" line.
+	f := Finding{
+		Severity: SeverityLow, File: "x.go", Line: 1, Title: "t", Description: "d",
+	}
+	got := CopyText(f)
+	if strings.Contains(got, "→") {
+		t.Errorf("empty suggestion should not emit a chevron; got:\n%s", got)
+	}
+}
+
+func TestCopyTextFlattensMultilineSuggestion(t *testing.T) {
+	// Same flattening rule the description uses — chat clients
+	// occasionally render multi-line text inconsistently.
+	f := Finding{
+		Severity:    SeverityMedium,
+		File:        "x.go",
+		Line:        1,
+		Title:       "t",
+		Description: "d",
+		Suggestion:  "Refactor the loop to use\nbatched updates.\nAvoid the per-row commit.",
+	}
+	got := CopyText(f)
+	if !strings.Contains(got, "→ Refactor the loop to use batched updates. Avoid the per-row commit.") {
+		t.Errorf("multi-line suggestion should be flattened; got:\n%s", got)
+	}
+}
+
 func TestBuildCopyPayloadSingleFindingNoSeparator(t *testing.T) {
 	// One finding → no separator (the rule is a *between*-block
 	// concern). Verifies we don't accidentally pre/append the divider.

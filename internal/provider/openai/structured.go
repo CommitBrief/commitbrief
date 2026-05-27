@@ -32,7 +32,7 @@ var responseSchema = map[string]any{
 			"items": map[string]any{
 				"type":                 "object",
 				"additionalProperties": false,
-				"required":             []string{"severity", "file", "line", "title", "description"},
+				"required":             []string{"severity", "file", "line", "title", "description", "suggestion"},
 				"properties": map[string]any{
 					"severity": map[string]any{
 						"type":        "string",
@@ -54,6 +54,10 @@ var responseSchema = map[string]any{
 					"description": map[string]any{
 						"type":        "string",
 						"description": "1-3 sentences explaining the issue and its impact.",
+					},
+					"suggestion": map[string]any{
+						"type":        "string",
+						"description": "Required. 2-3 sentence concrete fix recommendation; answers \"what now?\" with specifics (functions, parameters, approaches) rather than restating the description.",
 					},
 				},
 			},

@@ -25,7 +25,7 @@ var findingsSchema = sdk.ToolInputSchemaParam{
 			"description": "Review findings produced by the model.",
 			"items": map[string]any{
 				"type":     "object",
-				"required": []string{"severity", "file", "line", "title", "description"},
+				"required": []string{"severity", "file", "line", "title", "description", "suggestion"},
 				"properties": map[string]any{
 					"severity": map[string]any{
 						"type":        "string",
@@ -51,6 +51,10 @@ var findingsSchema = sdk.ToolInputSchemaParam{
 					"description": map[string]any{
 						"type":        "string",
 						"description": "1-3 sentences explaining the issue and its impact.",
+					},
+					"suggestion": map[string]any{
+						"type":        "string",
+						"description": "Required. 2-3 sentence concrete fix recommendation; answers \"what now?\" with specifics (functions, parameters, approaches) rather than restating the description.",
 					},
 					"language": map[string]any{
 						"type":        "string",
