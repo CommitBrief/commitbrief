@@ -6,22 +6,13 @@ setup.api_key.empty: "API key cannot be empty."
 setup.base_url.prompt: "Ollama base URL:"
 setup.model.prompt: "Pick a model:"
 setup.model.discover_failed: "Model name (could not discover from Ollama):"
-setup.test.success: "Connection test successful."
-setup.test.failed: "Connection test failed: %s"
-setup.scope.global: "Saving to user config (~/.commitbrief/config.yml)."
-setup.scope.local: "Saving to repository (.commitbrief/config.yml); added to .gitignore."
 
-cli.error.no_repo: "Not inside a git repository."
-cli.error.no_provider: "No provider configured. Run 'commitbrief setup' first."
-cli.error.no_api_key: "API key for provider %q is not set."
 cli.error.unknown_provider: "Unknown provider: %s"
-cli.error.unsupported_lang: "Unsupported language: %s"
 
 guard.warning_header: "⚠  This review includes changes under .commitbrief/:"
 guard.warning_file: "   M %s"
 guard.warning_detail: "   These files are usually user-specific. Committing them may break\n   other developers' configurations or leak API keys."
 guard.prompt: "   Continue?"
-guard.aborted: "Aborted by user."
 guard.non_interactive: "Aborting (non-interactive mode); pass --yes to override."
 guard.secrets.detected: "⚠  Possible secrets detected in diff (%d line(s)):"
 guard.secrets.line: "   line %d: %s"
@@ -46,8 +37,6 @@ install_hook.not_installed: "install-hook: no commitbrief hook at %s (already un
 install_hook.foreign: "install-hook: %s was not written by commitbrief; refusing to remove. Delete it manually if intended."
 install_hook.uninstalled: "Removed %s"
 
-cache.hit: "(cached)"
-cache.disabled: "(cache disabled)"
 cache.clear.empty: "No cached entries to remove (looked in %s)."
 cache.clear.summary: "Found %d cached entr(y/ies), %s on disk at %s."
 cache.clear.confirm: "Remove all cached entries?"
@@ -68,7 +57,6 @@ progress.retrying: "Retrying..."
 rules.using_default: "ℹ Using built-in review rules. Run 'commitbrief init' to customize."
 rules.output.using_default: "ℹ Using built-in output format. Create ~/.commitbrief/OUTPUT.md or <repo>/.commitbrief/OUTPUT.md to customize."
 
-common.cancelled: "Cancelled."
 common.error_prefix: "Error:"
 # yes/no vocabulary. Catalog-driven so non-English locales can map their
 # native accept-affirmative onto y/yes (Turkish: e/evet, etc.). The
@@ -78,13 +66,11 @@ common.yes_short: "y"
 common.yes_long: "yes"
 common.prompt_yn: "[y/N]"
 
-init.exists: "%s already exists; re-run with --force to overwrite"
 init.wrote: "Wrote %s"
 init.skipped: "Skipped %s (already exists; pass --force to overwrite)"
 
 review.no_changes: "No reviewable changes after filtering."
 review.cache_disabled: "Cache disabled: %v"
-review.pr_format: "--pull-request expects target...feature, got %q"
 review.degraded: "warning: LLM produced malformed JSON; falling back to plain-text view."
 
 output.template.invalid: "OUTPUT.md template is invalid at %s:\n  %s\n\nThe pipeline did not contact the provider. Fix the template, or run\n'commitbrief init --yes' to overwrite it with the default."

@@ -62,7 +62,35 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   footer of a real review and let users decide whether to fire the
   request without having to. (UC-19)
 
+- **`commitbrief compress --dry-run`.** Runs the LLM compression
+  call and prints the Result block (sizes, savings, per-review
+  saved $, compression call cost) but does NOT replace
+  COMMITBRIEF.md or write a backup. Useful for previewing how
+  aggressive a level you actually want before committing to the
+  rewrite. Mutually exclusive with `--out`. (UC-22)
+
+### Fixed
+- **Shared interactive stdin across the review pipeline.** Guard,
+  secret scanner, and cost preflight used to each instantiate their
+  own `bufio.Scanner` over `os.Stdin`. With multiple prompts firing
+  in sequence on a single review, the first scanner's lookahead
+  could swallow input meant for the next site — so piping
+  `e\ne\ne\n` would only reach one prompt and the next would block
+  or read empty. A single `*bufio.Reader` is now plumbed through
+  all three sites. New helper: `readPromptLine`. (UC-21)
+
 ### Removed
+- **Dead i18n keys cleaned up.** `setup.test.*`, `setup.scope.*`,
+  `cli.error.{no_repo,no_provider,no_api_key,unsupported_lang}`,
+  `guard.aborted`, `cache.hit`, `cache.disabled`, `common.cancelled`,
+  `init.exists`, and `review.pr_format` had no Go source references
+  — left over from earlier revisions where the surfaces were
+  rewritten without trimming the catalog. EN ↔ TR parity preserved
+  via `release-check.sh`. New CI guard
+  (`scripts/i18n-deadkey-check.sh`, `make i18n-check`) fails on the
+  first unreferenced key so the catalog can't grow stale again.
+  (UC-25)
+
 - **Locale surface narrowed to `{en, tr}`.** The `langNames` map used
   to advertise 15 languages (`de`, `fr`, `es`, `it`, `pt`, `ja`,
   `zh`, `ko`, `ru`, `ar`, `nl`, `pl`, `sv`) for which we never

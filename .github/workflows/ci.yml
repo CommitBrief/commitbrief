@@ -45,3 +45,13 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+
+  i18n-deadkey-check:
+    # UC-25: catch dead catalog keys before they pile up. The script
+    # exits non-zero on the first unreferenced en key; tr stays in
+    # parity via release-check.sh, so this single check guards both.
+    name: i18n dead-key check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/i18n-deadkey-check.sh

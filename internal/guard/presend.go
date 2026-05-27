@@ -149,13 +149,24 @@ func writeWarning(w io.Writer, triggers []string, catalog *i18n.Catalog) {
 	_, _ = fmt.Fprintln(w)
 }
 
+// readAnswer pulls one line off the supplied reader. UC-21: when the
+// caller passes an already-buffered *bufio.Reader (the shared
+// runReview-scoped one), we use it directly — building a fresh
+// bufio.Scanner would create a second buffer over the same os.Stdin
+// fd and silently swallow input meant for a later prompt (guard →
+// secret scan → cost preflight all fire in sequence on a single
+// review). For non-buffered readers we wrap once.
 func readAnswer(r io.Reader) (string, error) {
-	scanner := bufio.NewScanner(r)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return "", err
-		}
-		return "", nil
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(r)
 	}
-	return strings.TrimSpace(strings.ToLower(scanner.Text())), nil
+	line, err := br.ReadString('\n')
+	if err != nil && line == "" {
+		if err == io.EOF {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(strings.ToLower(line)), nil
 }

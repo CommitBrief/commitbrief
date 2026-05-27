@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"strings"
 	"testing"
@@ -12,6 +13,13 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
 )
+
+// emptyStdin returns a *bufio.Reader over an empty buffer — used to
+// satisfy the UC-21 shared-stdin parameter when the test exercises a
+// code path that never reaches a Read.
+func emptyStdin() *bufio.Reader {
+	return bufio.NewReader(&bytes.Buffer{})
+}
 
 // stubCmd builds a minimal *cobra.Command with stdout/stderr buffers so
 // handleCostPreflight can be exercised without spinning up the full CLI.
@@ -52,7 +60,7 @@ func TestHandleCostPreflightBelowThresholdSilent(t *testing.T) {
 	cmd, errBuf := stubCmd(t)
 	app := stubApp(t, 0.50)
 
-	abort := handleCostPreflight(cmd, app, 0.10) // well below 0.50
+	abort := handleCostPreflight(cmd, app, 0.10, emptyStdin()) // well below 0.50
 	if abort {
 		t.Errorf("below-threshold cost should not abort")
 	}
@@ -68,7 +76,7 @@ func TestHandleCostPreflightDisabledThresholdSilent(t *testing.T) {
 	cmd, errBuf := stubCmd(t)
 	app := stubApp(t, 0)
 
-	if handleCostPreflight(cmd, app, 100) {
+	if handleCostPreflight(cmd, app, 100, emptyStdin()) {
 		t.Errorf("threshold=0 should disable preflight; got abort=true")
 	}
 	if errBuf.Len() > 0 {
@@ -87,7 +95,7 @@ func TestHandleCostPreflightYesDoesNotBypass(t *testing.T) {
 	cmd, errBuf := stubCmd(t)
 	app := stubApp(t, 0.10)
 
-	abort := handleCostPreflight(cmd, app, 0.50)
+	abort := handleCostPreflight(cmd, app, 0.50, emptyStdin())
 	if !abort {
 		t.Errorf("--yes must not bypass cost preflight; got abort=false")
 	}
@@ -108,7 +116,7 @@ func TestHandleCostPreflightNonTTYAborts(t *testing.T) {
 	cmd, errBuf := stubCmd(t)
 	app := stubApp(t, 0.10)
 
-	abort := handleCostPreflight(cmd, app, 0.50)
+	abort := handleCostPreflight(cmd, app, 0.50, emptyStdin())
 	if !abort {
 		t.Errorf("above-threshold + non-TTY should abort; got abort=false")
 	}

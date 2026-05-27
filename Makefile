@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: help build test test-live bench lint fmt tidy clean release-check license-check manpage smoke
+.PHONY: help build test test-live bench lint fmt tidy clean release-check license-check i18n-check manpage smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,6 +53,9 @@ release-check: ## Run pre-release safety checks (scripts/release-check.sh)
 
 license-check: ## Audit dependency licenses for GPL-3.0 compatibility
 	bash scripts/license-check.sh
+
+i18n-check: ## Flag i18n catalog keys with no Go source reference (UC-25)
+	bash scripts/i18n-deadkey-check.sh
 
 manpage: ## Regenerate man/commitbrief.1
 	bash scripts/manpage.sh

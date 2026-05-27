@@ -106,6 +106,14 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// large diffs the repeat allocations are real GC pressure.
 	diffText := parsed.String()
 
+	// UC-21: one bufio.Reader for the entire review's interactive
+	// surface. Guard, secret scanner, and cost preflight all read
+	// from the same buffer so a piped-in `e\ne\ne\n` reaches every
+	// prompt instead of being eaten by whichever scanner asked
+	// first. Concrete *bufio.Reader (not io.Reader) so guard can
+	// type-assert and skip its internal wrapping.
+	stdinReader := bufio.NewReader(os.Stdin)
+
 	// Guard + secret scan can prompt interactively. Pause the animation
 	// so the prompt has a clean canvas; Resume redraws the tree below
 	// the prompt afterwards. Both are typically silent (no-op) on a
@@ -115,6 +123,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		AssumeYes:      global.yes,
 		NonInteractive: !ui.IsStdinTTY(os.Stdin),
 		Catalog:        app.Catalog,
+		Reader:         stdinReader,
 	}); res == guard.Abort {
 		return errors.New("aborted by pre-send guard")
 	}
@@ -142,7 +151,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			matches = append(matches, guard.ScanText(outputLoaded.Content)...)
 		}
 		if len(matches) > 0 {
-			if abort := handleSecretMatches(cmd, app, matches); abort {
+			if abort := handleSecretMatches(cmd, app, matches, stdinReader); abort {
 				return errors.New(app.Catalog.T("guard.secrets.aborted_user"))
 			}
 		}
@@ -254,7 +263,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		}
 		estCost := prov.Pricing(model).Cost(estUsage)
 		prog.Pause()
-		if abort := handleCostPreflight(cmd, app, estCost); abort {
+		if abort := handleCostPreflight(cmd, app, estCost, stdinReader); abort {
 			return errors.New(app.Catalog.T("cost.aborted_user"))
 		}
 		prog.Resume()
@@ -580,7 +589,7 @@ func openOutput(cmd *cobra.Command) (io.Writer, func(), error) {
 // --yes deliberately does NOT bypass this, because users routinely set
 // --yes in CI to skip the guard prompt and we don't want that to also
 // silently approve unbounded spend.
-func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64) bool {
+func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64, stdin *bufio.Reader) bool {
 	threshold := app.Config.Cost.WarnThresholdUSD
 	if threshold <= 0 || estCost <= threshold {
 		return false
@@ -594,12 +603,28 @@ func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64) b
 	}
 
 	_, _ = fmt.Fprint(w, app.Catalog.T("cost.confirm_prompt"))
-	reader := bufio.NewScanner(os.Stdin)
-	if !reader.Scan() {
+	answer, err := readPromptLine(stdin)
+	if err != nil || answer == "" {
 		return true
 	}
-	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
 	return !ui.AcceptsYes(answer, app.Catalog)
+}
+
+// readPromptLine pulls one line off the shared runReview-scoped
+// bufio.Reader. UC-21: every interactive prompt during a review
+// (guard, secret scan, cost preflight) shares the same buffered
+// reader so a piped-in `e\ne\ne\n` reaches all three sites instead
+// of being swallowed by whichever scanner asked first. Returns the
+// trimmed lowercase answer and any read error.
+func readPromptLine(r *bufio.Reader) (string, error) {
+	line, err := r.ReadString('\n')
+	if err != nil && line == "" {
+		if err == io.EOF {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(strings.ToLower(line)), nil
 }
 
 // estimateOutputTokens is a conservative-on-the-high-side guess for
@@ -627,7 +652,7 @@ func estimateOutputTokens(inputTokens int) int {
 // the caller should abort the review. The matched substring is *never*
 // printed — only line numbers and pattern names — to keep the secret
 // out of stderr and any captured CI log.
-func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.SecretMatch) bool {
+func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.SecretMatch, stdin *bufio.Reader) bool {
 	w := cmd.ErrOrStderr()
 	_, _ = fmt.Fprintln(w, app.Catalog.T("guard.secrets.detected", len(matches)))
 	for _, m := range matches {
@@ -641,10 +666,9 @@ func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.Se
 	}
 
 	_, _ = fmt.Fprint(w, app.Catalog.T("guard.secrets.prompt"))
-	reader := bufio.NewScanner(os.Stdin)
-	if !reader.Scan() {
+	answer, err := readPromptLine(stdin)
+	if err != nil || answer == "" {
 		return true
 	}
-	answer := strings.TrimSpace(strings.ToLower(reader.Text()))
 	return !ui.AcceptsYes(answer, app.Catalog)
 }

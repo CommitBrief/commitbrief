@@ -22,7 +22,7 @@ func TestHandleSecretMatchesYesDoesNotBypass(t *testing.T) {
 
 	abort := handleSecretMatches(cmd, app, []guard.SecretMatch{
 		{Line: 12, Patterns: []string{"AWS Access Key"}},
-	})
+	}, emptyStdin())
 	if !abort {
 		t.Errorf("--yes must not bypass secret scanner; got abort=false")
 	}
