@@ -16,44 +16,71 @@ import (
 )
 
 func newInitCmd() *cobra.Command {
-	return &cobra.Command{
+	var force bool
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Write COMMITBRIEF.md and a per-user OUTPUT.md template",
 		Long: "Writes two files:\n" +
 			"  - COMMITBRIEF.md at the repo root (team-shared review content)\n" +
 			"  - .commitbrief/OUTPUT.md (per-user output format template; gitignored)\n" +
 			"Both fall back to embedded defaults at runtime, so creating these files\n" +
-			"is only necessary when you want to customize the prompt.",
+			"is only necessary when you want to customize the prompt.\n" +
+			"\n" +
+			"If only one of the two files already exists, the other is still written\n" +
+			"— init never aborts on first-found existing file. Pass --force (or --yes)\n" +
+			"to overwrite the existing file(s) too.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, err := resolveContext(true)
 			if err != nil {
 				return err
 			}
+			overwrite := force || global.yes
 
 			rulesPath := filepath.Join(ctx.RepoRoot, rules.Filename)
 			outputPath := filepath.Join(ctx.RepoRoot, rules.LocalSubdir, rules.OutputFilename)
 
-			if err := writeIfAbsent(ctx.Catalog, rulesPath, []byte(rules.Default().Content), 0o644); err != nil {
-				return err
+			// UC-17: do NOT short-circuit on the first existing file. The
+			// two artefacts are independent — a customised COMMITBRIEF.md
+			// must not block a fresh OUTPUT.md scaffold (and vice versa).
+			// Real I/O errors still bubble; "already exists" downgrades
+			// to a per-file `init.skipped` info line.
+			var firstErr error
+			for _, t := range []struct {
+				path string
+				data []byte
+			}{
+				{rulesPath, []byte(rules.Default().Content)},
+				{outputPath, []byte(rules.DefaultOutput().Content)},
+			} {
+				if err := writeOrSkip(ctx.Catalog, t.path, t.data, 0o644, overwrite); err != nil && firstErr == nil {
+					firstErr = err
+				}
 			}
-			if err := writeIfAbsent(ctx.Catalog, outputPath, []byte(rules.DefaultOutput().Content), 0o644); err != nil {
-				return err
-			}
-			return nil
+			return firstErr
 		},
 	}
+	// UC-28: docs/02-commands.md has promised `init --force` for ages;
+	// make it real. Same semantic as --yes for init's overwrite check.
+	// Long form only — `-f` is already taken globally by --file.
+	// --yes stays accepted (global flag) so existing muscle memory and
+	// scripts continue to work.
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing COMMITBRIEF.md / OUTPUT.md (alias of --yes for init)")
+	return cmd
 }
 
-// writeIfAbsent writes data to path unless the file already exists. The
-// --yes flag bypasses the "already exists" guard and forces an overwrite.
-// Creates any missing parent directories with 0700 (the .commitbrief/
-// subdirectory must be readable to its owner only, like config.yml).
-func writeIfAbsent(cat *i18n.Catalog, path string, data []byte, mode os.FileMode) error {
+// writeOrSkip writes data to path. If the file already exists and
+// overwrite is false, it emits an info-level "skipped" log and returns
+// nil — the missing-sibling case (UC-17) needs a non-fatal outcome.
+// True I/O failures (permission, parent ENOENT after MkdirAll, etc.)
+// still surface as errors. Parent directories are created with 0700
+// so `.commitbrief/` doesn't leak more permissively than config.yml.
+func writeOrSkip(cat *i18n.Catalog, path string, data []byte, mode os.FileMode, overwrite bool) error {
 	switch _, err := os.Stat(path); {
 	case err == nil:
-		if !global.yes {
-			return errors.New(cat.T("init.exists", path))
+		if !overwrite {
+			infof("%s", cat.T("init.skipped", path))
+			return nil
 		}
 	case errors.Is(err, fs.ErrNotExist):
 		// fall through to write

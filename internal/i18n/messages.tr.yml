@@ -76,8 +76,9 @@ common.yes_short: "e"
 common.yes_long: "evet"
 common.prompt_yn: "[e/H]"
 
-init.exists: "%s zaten mevcut; üzerine yazmak için --yes ile yeniden çalıştırın"
+init.exists: "%s zaten mevcut; üzerine yazmak için --force ile yeniden çalıştırın"
 init.wrote: "%s yazıldı"
+init.skipped: "%s atlandı (zaten mevcut; üzerine yazmak için --force kullanın)"
 
 review.no_changes: "Filtreleme sonrası review edilecek değişiklik yok."
 review.cache_disabled: "Önbellek kapalı: %v"

@@ -57,6 +57,22 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   tip commit for brand-new branches. The push is blocked on the
   first critical finding. (UC-04)
 
+- **`init` no longer aborts on the first existing file.** Re-running
+  `commitbrief init` (or running it on a repo with a customised
+  COMMITBRIEF.md from a pre-v0.6 install that pre-dated OUTPUT.md)
+  used to error out before the second artefact was attempted, which
+  meant a partially-initialised repo could never reach the
+  fully-scaffolded state without first overwriting the customised
+  file with `--yes`. Existing files are now skipped with a per-file
+  log line and the missing sibling is still written. (UC-17)
+
+- **`init --force` is now a real flag.** Previously the docs
+  promised it but the CLI returned "unknown flag"; users had to know
+  to reach for the global `--yes` instead. Same semantic as `--yes`
+  for init's overwrite check; `--yes` continues to work for
+  back-compat. Long form only — `-f` is already bound globally to
+  `--file`. (UC-28)
+
 ### Removed
 - **`cache.max_size_mb` config field.** Defined in the struct and
   surfaced via `config get/set`, but no code ever read the value —

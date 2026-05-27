@@ -179,13 +179,78 @@ func TestInitWritesBothFiles(t *testing.T) {
 	}
 }
 
-func TestInitRefusesOverwriteWithoutYes(t *testing.T) {
+func TestInitSecondRunSkipsExistingFiles(t *testing.T) {
+	// UC-17 regression guard. Pre-v0.9.1, re-running init aborted on
+	// the first existing file. The new semantic is non-destructive
+	// re-entrancy: existing files are skipped (info-level log via
+	// stderr) and the command exits zero so a customised
+	// COMMITBRIEF.md isn't lost. Per-file "Skipped" lines go through
+	// infof → os.Stderr (not the cobra command's stderr buffer), so
+	// this test asserts the *behaviour*: exit zero + files intact +
+	// no I/O error.
 	e := newCLIEnv(t)
 	if err := e.run("init"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.run("init"); err == nil {
-		t.Error("second init should refuse without --yes")
+	rulesPath := filepath.Join(e.repoRoot, "COMMITBRIEF.md")
+	outputPath := filepath.Join(e.repoRoot, ".commitbrief", "OUTPUT.md")
+	rulesBefore, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputBefore, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.run("init"); err != nil {
+		t.Errorf("second init should not error; got %v\nstderr:\n%s", err, e.errOut.String())
+	}
+
+	// Both files must be byte-identical — skip path didn't touch them.
+	rulesAfter, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rulesAfter) != string(rulesBefore) {
+		t.Errorf("COMMITBRIEF.md was mutated by re-run init")
+	}
+	outputAfter, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(outputAfter) != string(outputBefore) {
+		t.Errorf(".commitbrief/OUTPUT.md was mutated by re-run init")
+	}
+}
+
+func TestInitWritesMissingFileEvenWhenSiblingExists(t *testing.T) {
+	// UC-17 regression guard. If COMMITBRIEF.md already exists (e.g.
+	// the user customised it under an older release where init only
+	// wrote that one file) running `commitbrief init` should still
+	// create the missing .commitbrief/OUTPUT.md instead of aborting.
+	// The customised COMMITBRIEF.md must remain untouched.
+	e := newCLIEnv(t)
+	rulesPath := filepath.Join(e.repoRoot, "COMMITBRIEF.md")
+	const sentinel = "## CUSTOMISED — DO NOT OVERWRITE"
+	if err := os.WriteFile(rulesPath, []byte(sentinel+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.run("init"); err != nil {
+		t.Fatalf("init with pre-existing COMMITBRIEF.md should succeed; got %v\nstderr:\n%s",
+			err, e.errOut.String())
+	}
+	outputPath := filepath.Join(e.repoRoot, ".commitbrief", "OUTPUT.md")
+	if _, err := os.Stat(outputPath); err != nil {
+		t.Errorf("OUTPUT.md should be written even when COMMITBRIEF.md exists; got %v", err)
+	}
+	// The pre-existing COMMITBRIEF.md must NOT have been overwritten.
+	data, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), sentinel) {
+		t.Errorf("pre-existing COMMITBRIEF.md was overwritten; got:\n%s", data)
 	}
 }
 
@@ -196,6 +261,29 @@ func TestInitOverwriteWithYes(t *testing.T) {
 	}
 	if err := e.run("init", "--yes"); err != nil {
 		t.Errorf("init --yes should succeed: %v", err)
+	}
+}
+
+func TestInitOverwriteWithForceFlag(t *testing.T) {
+	// UC-28 regression guard. `init --force` is now a real flag with
+	// the same semantics as --yes for the overwrite check. Catches
+	// the regression where docs promised --force but the CLI returned
+	// "unknown flag". Long form only — `-f` is already bound globally
+	// to --file.
+	e := newCLIEnv(t)
+	if err := e.run("init"); err != nil {
+		t.Fatal(err)
+	}
+	rulesPath := filepath.Join(e.repoRoot, "COMMITBRIEF.md")
+	if err := os.WriteFile(rulesPath, []byte("# customised\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.run("init", "--force"); err != nil {
+		t.Errorf("init --force should succeed: %v", err)
+	}
+	data, _ := os.ReadFile(rulesPath)
+	if strings.Contains(string(data), "# customised") {
+		t.Errorf("--force should overwrite the customised file; got:\n%s", data)
 	}
 }
 
