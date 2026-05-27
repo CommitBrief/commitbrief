@@ -107,6 +107,23 @@ func TestBuildCopyPayloadEmptyReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestCopyTextRendersLineRange(t *testing.T) {
+	// Multi-line finding (LineEnd > Line) should show "path:start-end"
+	// in the header so the recipient can see the span at a glance.
+	f := Finding{
+		Severity:    SeverityHigh,
+		File:        "internal/db/migrate.go",
+		Line:        73,
+		LineEnd:     91,
+		Title:       "NOT NULL added without default",
+		Description: "Migration fails on populated tables.",
+	}
+	got := CopyText(f)
+	if !strings.Contains(got, "[🚨 HIGH] internal/db/migrate.go:73-91\n") {
+		t.Errorf("expected range path 'file:73-91'; got:\n%s", got)
+	}
+}
+
 func TestBuildCopyPayloadSingleFindingNoSeparator(t *testing.T) {
 	// One finding → no separator (the rule is a *between*-block
 	// concern). Verifies we don't accidentally pre/append the divider.

@@ -25,14 +25,10 @@ func CopyText(f Finding) string {
 	if !ok {
 		t = severityThemes[SeverityCritical]
 	}
-	path := f.File
-	if f.Line > 0 {
-		path = fmt.Sprintf("%s:%d", f.File, f.Line)
-	}
 	desc := strings.Join(strings.Fields(f.Description), " ")
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "[%s] %s\n", t.label, path)
+	fmt.Fprintf(&b, "[%s] %s\n", t.label, f.PathRef())
 	fmt.Fprintf(&b, "%s\n\n", f.Title)
 	fmt.Fprintf(&b, "%s\n", desc)
 	return b.String()

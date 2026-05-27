@@ -22,7 +22,7 @@ func responseSchema() *sdk.Schema {
 				Items: &sdk.Schema{
 					Type:             sdk.TypeObject,
 					Required:         []string{"severity", "file", "line", "title", "description"},
-					PropertyOrdering: []string{"severity", "file", "line", "title", "description", "language", "snippet"},
+					PropertyOrdering: []string{"severity", "file", "line", "line_end", "title", "description", "language", "snippet"},
 					Properties: map[string]*sdk.Schema{
 						"severity": {
 							Type:        sdk.TypeString,
@@ -35,7 +35,11 @@ func responseSchema() *sdk.Schema {
 						},
 						"line": {
 							Type:        sdk.TypeInteger,
-							Description: "Line number in the file (1-based).",
+							Description: "Line number where the finding starts (1-based).",
+						},
+						"line_end": {
+							Type:        sdk.TypeInteger,
+							Description: "Line number where the finding ends (1-based, inclusive). Include ONLY for multi-line findings and only when line_end > line; omit otherwise.",
 						},
 						"title": {
 							Type:        sdk.TypeString,

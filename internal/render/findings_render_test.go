@@ -176,6 +176,46 @@ func TestCardsPanelHasBulletSeparator(t *testing.T) {
 	}
 }
 
+func TestCardsPanelShowsLineRange(t *testing.T) {
+	// When LineEnd > Line the header should render "file:start-end"
+	// instead of just "file:start". Same path used in the bullet
+	// separator above, so we only need to assert on the range form.
+	p := samplePayload()
+	p.Findings = []Finding{{
+		Severity: SeverityHigh, File: "internal/db/migrate.go",
+		Line: 73, LineEnd: 91, Title: "t", Description: "d",
+	}}
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	if !strings.Contains(plain, "internal/db/migrate.go:73-91") {
+		t.Errorf("expected range 'file:73-91' in panel header; got:\n%s", plain)
+	}
+}
+
+func TestCardsCompactShowsLineRange(t *testing.T) {
+	// Compact mode shares PathRef with the panel layout, so the range
+	// form must also surface there. Density mode is where a user is
+	// most likely to scan many findings and want spans at a glance.
+	p := samplePayload()
+	p.Findings = []Finding{{
+		Severity: SeverityMedium, File: "x.go",
+		Line: 10, LineEnd: 25, Title: "block-level finding",
+		Description: "spans multiple lines",
+	}}
+	p.Compact = true
+	var w bytes.Buffer
+	if err := Cards(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(w.String())
+	if !strings.Contains(plain, "x.go:10-25") {
+		t.Errorf("expected 'x.go:10-25' in compact line; got:\n%s", plain)
+	}
+}
+
 func TestCardsPanelUsesRoundedBorder(t *testing.T) {
 	// Rounded borders use ╭ ╮ ╰ ╯ corner glyphs (lipgloss.RoundedBorder)
 	// instead of the ┌ ┐ └ ┘ used by NormalBorder. Easiest visual diff.
@@ -720,6 +760,29 @@ func TestMarkdownTemplateExecute(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("template output missing %q; got:\n%s", want, out)
 		}
+	}
+}
+
+func TestMarkdownTemplateUsesPathRefMethod(t *testing.T) {
+	// Templates can call the PathRef method directly via Go's
+	// text/template method-resolution; this surfaces the same range
+	// formatting that cards / copytext use without forcing each
+	// custom OUTPUT.md to reproduce the if/printf logic.
+	p := findingsPayload()
+	// Augment one of the findings with a range so we can assert on it.
+	p.Findings[0].LineEnd = 145
+	p.OutputTemplate = `{{ range .Findings }}- {{ .PathRef }}
+{{ end }}`
+	var w bytes.Buffer
+	if err := Markdown(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	out := w.String()
+	if !strings.Contains(out, "- internal/auth/session.go:142-145") {
+		t.Errorf("expected PathRef to emit 'file:142-145'; got:\n%s", out)
+	}
+	if !strings.Contains(out, "- internal/db/migrate.go:73\n") {
+		t.Errorf("expected bare ':73' for single-line finding; got:\n%s", out)
 	}
 }
 

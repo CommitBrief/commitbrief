@@ -36,17 +36,34 @@ const jsonContract = `Return a single JSON object matching this exact schema. Ou
     {
       "severity": "critical | high | medium | low | info",
       "file": "<path relative to repo root>",
-      "line": <integer line number>,
+      "line": <integer line number, 1-based, where the finding starts>,
+      "line_end": <integer line number, optional, where the finding ends>,
       "title": "<one-sentence summary of the issue>",
       "description": "<1-3 sentences explaining the issue and its impact>",
       "language": "<programming language identifier, optional>",
-      "snippet": "<short diff excerpt with - / + prefixes, optional>"
+      "snippet": "<verbatim diff excerpt with - / + / two-space prefixes, optional>"
     }
   ]
 }
 
 Required fields per finding: severity, file, line, title, description.
-Optional fields: language, snippet — include only when a code excerpt clarifies the finding.
+
+Optional fields:
+  - line_end: include ONLY when the finding spans multiple lines (e.g. a
+    function body, a multi-line statement, a block). Must be >= line.
+    Omit for single-line findings (do not emit line_end == line).
+  - language: a short identifier like "go", "ts", "py" for the snippet.
+  - snippet: a small excerpt that clarifies the finding. Strict rules:
+      1. Copy lines VERBATIM from the diff supplied above — do not
+         paraphrase, summarise, edit, or invent code.
+      2. Max 6 lines.
+      3. Use exactly the diff prefixes: "- " for removed, "+ " for added,
+         two spaces for context. No other prefixes.
+      4. NO hunk headers ("@@ ..."), NO line numbers, NO file headers.
+      5. Include snippet ONLY when a code excerpt materially clarifies
+         the finding. When in doubt, omit — an unhelpful snippet is
+         worse than no snippet.
+
 Emit "findings": [] when the diff has no review-worthy issues.`
 
 // Build assembles the system prompt from the user's review rules and then

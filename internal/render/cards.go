@@ -120,7 +120,7 @@ func cardsCompactLine(f Finding) string {
 	}
 	badge := lipgloss.NewStyle().Foreground(theme.accent).Bold(true).Render(theme.label)
 	sep := lipgloss.NewStyle().Foreground(cardMuted).Render(" · ")
-	location := lipgloss.NewStyle().Foreground(cardMuted).Render(fmt.Sprintf("%s:%d", f.File, f.Line))
+	location := lipgloss.NewStyle().Foreground(cardMuted).Render(f.PathRef())
 	dash := lipgloss.NewStyle().Foreground(cardMuted).Render(" — ")
 	return badge + sep + location + dash + f.Title
 }
@@ -324,11 +324,10 @@ func cardsFindingPanel(f Finding) string {
 		Bold(true).
 		Render(theme.label)
 
-	pathStr := fmt.Sprintf("%s:%d", f.File, f.Line)
 	path := lipgloss.NewStyle().
 		Foreground(cardMuted).
 		Background(theme.panelBg).
-		Render("· " + pathStr)
+		Render("· " + f.PathRef())
 
 	gap := lipgloss.NewStyle().Background(theme.panelBg).Render("  ")
 	header := lipgloss.JoinHorizontal(lipgloss.Top, chip, gap, path)

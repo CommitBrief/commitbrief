@@ -111,6 +111,74 @@ func TestParseFindings_Errors(t *testing.T) {
 	}
 }
 
+func TestParseFindings_LineEndRoundTrip(t *testing.T) {
+	// line_end is the schema-additive multi-line indicator (see
+	// docs/json-schema.md). Parser must round-trip it as an integer
+	// and tolerate its absence (single-line findings omit it).
+	in := `{
+	  "findings": [
+	    {"severity":"high","file":"x.go","line":10,"line_end":15,"title":"t","description":"d"},
+	    {"severity":"low","file":"y.go","line":3,"title":"t","description":"d"}
+	  ]
+	}`
+	got, err := ParseFindings(in)
+	if err != nil {
+		t.Fatalf("ParseFindings: %v", err)
+	}
+	if got[0].LineEnd != 15 {
+		t.Errorf("findings[0].LineEnd = %d, want 15", got[0].LineEnd)
+	}
+	if got[1].LineEnd != 0 {
+		t.Errorf("findings[1].LineEnd = %d, want 0 (omitted)", got[1].LineEnd)
+	}
+}
+
+func TestLineRef(t *testing.T) {
+	cases := []struct {
+		name string
+		f    Finding
+		want string
+	}{
+		{"single line", Finding{Line: 142}, "142"},
+		{"multi-line range", Finding{Line: 142, LineEnd: 145}, "142-145"},
+		{"line_end equal collapses", Finding{Line: 142, LineEnd: 142}, "142"},
+		{"line_end less collapses",
+			// Defensive: we never trust LineEnd < Line. Model bugs or
+			// truncated streams shouldn't produce "145-142" backwards
+			// ranges; collapse to single-line ref.
+			Finding{Line: 142, LineEnd: 100}, "142"},
+		{"zero line", Finding{Line: 0}, ""},
+		{"negative line", Finding{Line: -5}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.f.LineRef(); got != c.want {
+				t.Errorf("LineRef = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestPathRef(t *testing.T) {
+	cases := []struct {
+		name string
+		f    Finding
+		want string
+	}{
+		{"file + single line", Finding{File: "a.go", Line: 7}, "a.go:7"},
+		{"file + range", Finding{File: "a.go", Line: 7, LineEnd: 12}, "a.go:7-12"},
+		{"file only (line missing)", Finding{File: "a.go"}, "a.go"},
+		{"file only (line zero)", Finding{File: "a.go", Line: 0}, "a.go"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.f.PathRef(); got != c.want {
+				t.Errorf("PathRef = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 func TestGroupBySeverity_Ordering(t *testing.T) {
 	in := []Finding{
 		{Severity: SeverityInfo, File: "z.go", Title: "t", Description: "d"},

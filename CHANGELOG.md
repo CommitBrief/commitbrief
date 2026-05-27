@@ -10,7 +10,39 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **Multi-line findings via `line_end` (schema-additive)** — Finding
+  payloads can now carry a `line_end` integer alongside `line` to mark
+  spans like a function body or a multi-statement block. When set and
+  greater than `line`, every renderer (cards header, `--compact`,
+  `--copy` clipboard payload, `--markdown` template) shows
+  `file:start-end` instead of just `file:start`. Single-line findings
+  keep emitting only `line` — the model is instructed to *omit*
+  `line_end` rather than emit `line_end == line`. Backward-compatible:
+  consumers that ignore the new field see the same `line` value they
+  always did, no breaking change (JSON schema policy in
+  `internal/render/json.go` explicitly permits additive Finding
+  fields without a version bump). New `Finding.LineRef()` and
+  `Finding.PathRef()` template methods so custom OUTPUT.md files can
+  call `{{ .PathRef }}` instead of replaying the if/printf logic;
+  the embedded default template was updated to demonstrate.
+  Anthropic and Gemini structured-output schemas now declare
+  `line_end`; OpenAI strict mode stays prompt-driven for the same
+  reason `language` / `snippet` already do (strict mode rejects
+  optional properties). Anthropic and Gemini tests cover the
+  end-to-end round-trip.
+
 ### Changed
+- **Tightened snippet contract** in the system prompt so findings
+  stop showing irrelevant or invented code excerpts. The contract
+  now spells out: (1) lines MUST be copied verbatim from the diff
+  supplied — no paraphrasing, no edits, no invention; (2) max 6
+  lines; (3) only the exact `-` / `+` / two-space prefixes are
+  allowed; (4) no hunk headers (`@@ …`), no line numbers, no file
+  headers; (5) emit a snippet ONLY when it materially clarifies the
+  finding ("when in doubt, omit — an unhelpful snippet is worse than
+  no snippet"). Prompt change only — same JSON contract, same
+  renderer, no migration needed.
 - **Severity chip glyphs swapped to emoji** for stronger visual cues
   across both the card panel header and the `--compact` line layout
   (and `--copy` clipboard payload, since it mirrors the chip label):

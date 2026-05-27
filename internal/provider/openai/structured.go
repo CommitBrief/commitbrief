@@ -14,9 +14,11 @@ const schemaName = "review_findings"
 //
 // OpenAI strict mode imposes: all required fields must be listed in
 // `required`, no additional properties, no unsupported keywords. Optional
-// `language` and `snippet` from ADR-0014 are dropped from the strict
-// schema and rely on the system prompt instead — strict mode rejects
-// optional object properties.
+// fields (`line_end`, `language`, `snippet` from ADR-0014) are dropped
+// from the strict schema and rely on the system prompt instead — strict
+// mode rejects optional object properties. The system prompt's JSON
+// contract block documents all four optional fields verbatim, so the
+// model still receives the same instructions.
 var responseSchema = map[string]any{
 	"type":                 "object",
 	"additionalProperties": false,
@@ -41,7 +43,7 @@ var responseSchema = map[string]any{
 					},
 					"line": map[string]any{
 						"type":        "integer",
-						"description": "Line number in the file (1-based).",
+						"description": "Line number where the finding starts (1-based).",
 					},
 					"title": map[string]any{
 						"type":        "string",

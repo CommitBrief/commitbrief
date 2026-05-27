@@ -48,10 +48,43 @@ type Finding struct {
 	Severity    Severity `json:"severity"`
 	File        string   `json:"file"`
 	Line        int      `json:"line"`
+	LineEnd     int      `json:"line_end,omitempty"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Language    string   `json:"language,omitempty"`
 	Snippet     string   `json:"snippet,omitempty"`
+}
+
+// LineRef formats the line reference as "142" when the finding is
+// pinned to a single line, or "142-145" when LineEnd is set and
+// greater than Line. Used by all renderers (cards, copytext,
+// markdown via .LineRef template field) so the range display stays
+// consistent. Returns "" when Line <= 0 so callers can branch on
+// the missing case rather than emit "path:0".
+//
+// LineEnd is treated as a closed range — both endpoints inclusive,
+// matching how source-code "lines 142–145" reads in human writing.
+// Out-of-order values (LineEnd < Line) and equal values (LineEnd ==
+// Line) collapse to a single-line ref; we never emit "142-142" or
+// "145-142", both of which would be confusing.
+func (f Finding) LineRef() string {
+	if f.Line <= 0 {
+		return ""
+	}
+	if f.LineEnd > f.Line {
+		return fmt.Sprintf("%d-%d", f.Line, f.LineEnd)
+	}
+	return fmt.Sprintf("%d", f.Line)
+}
+
+// PathRef joins File and LineRef with ":" so callers don't repeat
+// the conditional logic. Returns File alone when LineRef is empty.
+func (f Finding) PathRef() string {
+	ref := f.LineRef()
+	if ref == "" {
+		return f.File
+	}
+	return f.File + ":" + ref
 }
 
 // findingsEnvelope is the JSON shape the LLM is contracted to return.

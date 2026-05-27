@@ -36,7 +36,11 @@ var findingsSchema = sdk.ToolInputSchemaParam{
 					},
 					"line": map[string]any{
 						"type":        "integer",
-						"description": "Line number in the file (1-based).",
+						"description": "Line number where the finding starts (1-based).",
+					},
+					"line_end": map[string]any{
+						"type":        "integer",
+						"description": "Line number where the finding ends (1-based, inclusive). Include ONLY for multi-line findings and only when line_end > line; omit otherwise.",
 					},
 					"title": map[string]any{
 						"type":        "string",

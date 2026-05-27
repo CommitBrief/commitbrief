@@ -4,7 +4,7 @@
 {{ range groupBySeverity .Findings }}
 ## {{ upper (printf "%s" .Severity) }} ({{ len .Items }})
 {{ range .Items }}
-### {{ .File }}:{{ .Line }} — {{ .Title }}
+### {{ .PathRef }} — {{ .Title }}
 
 {{ .Description }}
 {{- if .Snippet }}
@@ -25,7 +25,11 @@ It is never sent to the LLM — the model produces a JSON document, and
 this template shapes how `--markdown` and `--output <file>.md` render it.
 
 Available data:
-  .Findings  []Finding{ Severity, File, Line, Title, Description, Language, Snippet }
+  .Findings  []Finding{ Severity, File, Line, LineEnd, Title, Description, Language, Snippet }
+
+Per-finding methods (preferred over raw field access):
+  .LineRef   returns "142" or "142-145" depending on whether LineEnd is set
+  .PathRef   shortcut for File + ":" + LineRef; plain File when no line
 
 Available functions:
   upper, lower
