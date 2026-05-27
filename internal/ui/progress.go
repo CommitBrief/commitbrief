@@ -432,7 +432,7 @@ var breathingColors = []string{
 const (
 	// Final-state dots reuse the card palette: green (cardAddFg),
 	// red (cardDelFg), muted neutral.
-	stageDoneDot    = "\033[38;2;34;211;160m⏺\033[0m" // #22d3a0
+	stageDoneDot    = "\033[38;2;34;211;160m⏺\033[0m"  // #22d3a0
 	stageFailDot    = "\033[38;2;255;107;138m⏺\033[0m" // #ff6b8a
 	stageSoftDot    = "\033[38;2;156;163;175m⏺\033[0m" // #9CA3AF
 	stageInfoLeader = " "                              // bare space (no glyph for info lines)

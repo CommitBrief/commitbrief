@@ -102,4 +102,3 @@ func TestAskYesNoAnswers(t *testing.T) {
 		})
 	}
 }
-
