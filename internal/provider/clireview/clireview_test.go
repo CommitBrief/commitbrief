@@ -254,5 +254,77 @@ func TestBackendReviewCombinesSystemAndUserPrompts(t *testing.T) {
 	}
 }
 
+func TestBackendReviewUseStdinPipesPromptViaStdin(t *testing.T) {
+	// UC-24 regression guard. With UseStdin=true the prompt must come
+	// in on the subprocess's stdin and NOT appear in argv. The fake
+	// CLI prints `<argv> :: <stdin>` so we can confirm both halves.
+	scriptPath(t, "stdin-cli",
+		"printf 'argv=%s :: stdin=' \"$*\"; cat -")
+
+	b := New(Spec{
+		Name:   "stdin-cli",
+		Binary: "stdin-cli",
+		// When stdin mode is active the prompt arg is always empty —
+		// adapter returns only the flag combo to read from stdin.
+		PromptArgs: func(p string) []string {
+			if p != "" {
+				t.Errorf("PromptArgs received non-empty prompt %q under UseStdin=true", p)
+			}
+			return []string{"-p", "-"}
+		},
+		UseStdin: true,
+		Timeout:  5 * time.Second,
+	})
+	resp, err := b.Review(context.Background(), provider.Request{
+		SystemPrompt: "SYS",
+		UserPrompt:   "USR",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// stdin half must carry the combined prompt; argv half must NOT.
+	if !strings.Contains(resp.Content, "stdin=SYS\n\nUSR") {
+		t.Errorf("stdin should carry combined prompt; got %q", resp.Content)
+	}
+	if strings.Contains(resp.Content, "argv=-p - SYS") || strings.Contains(resp.Content, "argv=-p - USR") {
+		t.Errorf("argv must not include the prompt; got %q", resp.Content)
+	}
+	if !strings.Contains(resp.Content, "argv=-p -") {
+		t.Errorf("argv should contain the stdin-flag combo; got %q", resp.Content)
+	}
+}
+
+func TestBackendDefaultModelMemoisesVersionCall(t *testing.T) {
+	// UC-23 regression guard. The version subprocess must run *once*
+	// per Backend even when DefaultModel is queried repeatedly — every
+	// cache-key build asks for it, so the cost of re-shelling out is
+	// not academic. We assert by counting probe-file lines that the
+	// fake binary appends per invocation.
+	dir := t.TempDir()
+	probe := filepath.Join(dir, "calls.log")
+	scriptPath(t, "memo-cli",
+		"printf 'memo-cli 1.2.3\\n'; printf '.' >> "+probe)
+
+	b := New(Spec{
+		Name:        "memo-cli",
+		Binary:      "memo-cli",
+		PromptArgs:  func(p string) []string { return []string{"-p", p} },
+		VersionArgs: []string{"--version"},
+	})
+	for i := 0; i < 5; i++ {
+		got := b.DefaultModel()
+		if !strings.Contains(got, "1.2.3") {
+			t.Errorf("call %d: DefaultModel = %q, want it to include the version", i, got)
+		}
+	}
+	data, err := os.ReadFile(probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(data); got != 1 {
+		t.Errorf("version probe ran %d times; sync.Once memo should keep it at 1", got)
+	}
+}
+
 // guard: keep import for fmt usage in formatted assertions
 var _ = fmt.Sprint

@@ -32,6 +32,12 @@ func init() {
 			// `gemini -p "<prompt>"` is Gemini CLI's documented one-shot
 			// invocation. The output is plain text by default; no
 			// extra flag needed.
+			//
+			// UC-24 note: gemini-cli does not yet expose a documented
+			// `-p -` stdin shorthand the way Claude Code does, so we
+			// stay on argv until upstream confirms a stable stdin
+			// transport. Users hitting ARG_MAX on huge diffs should
+			// prefer claude-cli for now.
 			PromptArgs: func(prompt string) []string {
 				return []string{"-p", prompt}
 			},

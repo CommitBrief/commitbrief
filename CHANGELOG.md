@@ -11,6 +11,38 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Changed
+- **CLI providers respect `--output`.** The plain-text emit path used
+  by `--cli claude` / `--cli gemini` now routes through the same
+  `openOutput` helper the structured renderers use, so `--cli claude
+  --output review.md` writes to the file instead of silently dropping
+  the destination and printing to stdout. (UC-07)
+
+- **CLI provider prompt transport switched to stdin for claude-cli.**
+  Combined system+user prompts on large diffs were hitting the
+  platform ARG_MAX limit (~128KB on Linux/macOS), surfacing as
+  `argument list too long`. claude-cli now invokes `claude -p -` and
+  pipes the prompt via stdin, removing the size ceiling. gemini-cli
+  stays on argv for now — upstream lacks a documented stdin
+  shorthand; we'll flip it when there is one. New `clireview.Spec`
+  field: `UseStdin bool`. (UC-24)
+
+- **`DefaultModel` for CLI providers is now memoised + bounded.** The
+  cache-key path queries `DefaultModel` on every review, which used
+  to re-shell out to `<cli> --version` each time and could hang a
+  pipeline behind a misbehaving host CLI. A `sync.Once` memo plus a
+  5-second timeout cap the cost at one short subprocess per
+  Backend. (UC-23)
+
+### Added
+- **`--cli` is mutually exclusive with `--json` and `--markdown`.**
+  CLI-provider output is pre-formatted plain text; combining it with
+  a structured renderer either re-flows the formatting we just paid
+  the host CLI for or, worse, parses prose as JSON. Cobra now rejects
+  the pairing before any provider call. (UC-07)
+
+## [0.9.1] - 2026-05-27
+
+### Changed
 - **`--yes` no longer bypasses the secret scanner or cost preflight.**
   Previously, setting `--yes` (intended to auto-answer the
   `.commitbrief/` pre-send guard) also silently approved any flagged

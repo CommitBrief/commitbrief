@@ -364,13 +364,21 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	return applyFailOn(cmd, app, findings)
 }
 
-// emitPlainText streams a CLI-provider's already-formatted output to
-// stdout verbatim. We don't run it through the cards renderer or
-// glamour — the host CLI's output is the final form the user wants
-// to see, and double-rendering would just re-flow the formatting we
-// asked the model to produce.
+// emitPlainText streams a CLI-provider's already-formatted output
+// verbatim. We don't run it through the cards renderer or glamour —
+// the host CLI's output is the final form the user wants to see, and
+// double-rendering would just re-flow the formatting we asked the
+// model to produce.
+//
+// UC-07: honour --output the same way the structured renderers do.
+// Pre-v0.9.2 the CLI-provider path wrote straight to stdout even
+// when --output X was set, which silently dropped the request.
 func emitPlainText(cmd *cobra.Command, content string) error {
-	w := cmd.OutOrStdout()
+	w, closer, err := openOutput(cmd)
+	if err != nil {
+		return err
+	}
+	defer closer()
 	if _, err := fmt.Fprint(w, content); err != nil {
 		return fmt.Errorf("emit plain-text: %w", err)
 	}

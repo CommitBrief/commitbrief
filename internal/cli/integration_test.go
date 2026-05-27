@@ -1557,6 +1557,27 @@ func TestCLIFlagAndProviderFlagAreMutex(t *testing.T) {
 	}
 }
 
+func TestCLIFlagAndStructuredOutputAreMutex(t *testing.T) {
+	// UC-07 regression guard. --cli routes to a CLI provider whose
+	// response is pre-formatted plain text; combining it with --json
+	// or --markdown either silently drops the formatting (when the
+	// structured renderer kicks in) or, worse, treats the prose as
+	// JSON. Cobra's MarkFlagsMutuallyExclusive surfaces both pairings
+	// as a hard error before any provider call.
+	for _, structured := range []string{"--json", "--markdown"} {
+		t.Run(structured, func(t *testing.T) {
+			e := newCLIEnv(t)
+			err := e.run("dry-run", "--staged", "--cli", "claude", structured)
+			if err == nil {
+				t.Fatalf("expected error for --cli + %s; got nil", structured)
+			}
+			if !strings.Contains(err.Error(), "none of the others can be") {
+				t.Errorf("expected cobra mutex-group error; got: %v", err)
+			}
+		})
+	}
+}
+
 func TestReviewMutuallyExclusiveScopes(t *testing.T) {
 	e := newCLIEnv(t)
 	err := e.run("--staged", "--unstaged")

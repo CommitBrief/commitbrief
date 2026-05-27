@@ -28,11 +28,21 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/tokens"
 )
+
+// versionTimeout caps how long the Backend will wait for the host
+// CLI's version command. CLIs occasionally hang on first-run network
+// lookups (license checks, telemetry handshakes) and we don't want
+// DefaultModel — which is on the hot path for every cache key — to
+// stall a review behind that. 5 seconds is comfortably above a happy
+// path (sub-100ms in practice) and well under user-perceptible
+// review latency.
+const versionTimeout = 5 * time.Second
 
 // Spec describes one CLI backend. Each concrete provider package
 // fills this in once and passes it to New.
@@ -52,7 +62,23 @@ type Spec struct {
 	// model's response to stdout and exits. Implementations should
 	// disable colors and tool use where possible so the output stays
 	// machine-friendly.
+	//
+	// When [UseStdin] is true the prompt argument is the empty string
+	// and PromptArgs returns *only* the flag/positional combo that
+	// makes the host CLI read its prompt from stdin (e.g. claude's
+	// `-p -`). The Backend then pipes the combined prompt into the
+	// subprocess's stdin instead of embedding it in argv.
 	PromptArgs func(prompt string) []string
+
+	// UseStdin selects the stdin transport for the prompt. UC-24 in
+	// PATCH_ROADMAP: large prompts (mid-size diffs + rules) exceed the
+	// platform ARG_MAX limit when embedded in argv, surfacing as
+	// `argument list too long` on Linux/macOS at ~128KB. Piping the
+	// prompt via stdin sidesteps the limit entirely.
+	//
+	// Adapter authors: only set this true when you've confirmed the
+	// host CLI reliably reads from stdin in one-shot mode.
+	UseStdin bool
 
 	// VersionArgs prints the CLI version and exits. Used by
 	// TestConnection to confirm the binary works and by the cache
@@ -70,8 +96,16 @@ type Spec struct {
 // Backend is a provider.Provider + provider.PlainTextEmitter built
 // around a single Spec. Construct via New; callers don't need to
 // touch the struct directly.
+//
+// versionOnce + versionMemo cache the result of the host CLI's
+// version query for the lifetime of the process. DefaultModel is on
+// every cache-key computation, so paying the subprocess cost more
+// than once per process startup would be wasteful — and the version
+// can't change underneath us mid-run anyway.
 type Backend struct {
-	spec Spec
+	spec        Spec
+	versionOnce sync.Once
+	versionMemo string
 }
 
 // New returns a Backend ready to register with the provider registry.
@@ -173,8 +207,21 @@ func (b *Backend) Review(ctx context.Context, req provider.Request) (provider.Re
 		defer cancel()
 	}
 
-	args := b.spec.PromptArgs(combined)
+	// UC-24: when the spec opted into stdin transport, build argv
+	// without the prompt and pipe the combined prompt to the
+	// subprocess's stdin. This sidesteps the platform ARG_MAX limit
+	// (~128KB on Linux/macOS) that fires once diffs + rules exceed
+	// the kitchen-sink size class.
+	var args []string
+	if b.spec.UseStdin {
+		args = b.spec.PromptArgs("")
+	} else {
+		args = b.spec.PromptArgs(combined)
+	}
 	cmd := exec.CommandContext(cctx, b.spec.Binary, args...)
+	if b.spec.UseStdin {
+		cmd.Stdin = strings.NewReader(combined)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -205,19 +252,28 @@ func (b *Backend) Review(ctx context.Context, req provider.Request) (provider.Re
 	}, nil
 }
 
-// versionOrEmpty runs the version command and returns the first line
-// of output. Failures are swallowed — the cache key gracefully
-// degrades to "binary-name without version".
+// versionOrEmpty returns the host CLI's version string (first line of
+// `<binary> --version` output, trimmed). The result is memoised — see
+// the Backend doc-comment for why. UC-23 in PATCH_ROADMAP: each call
+// runs under a [versionTimeout] context so a hung CLI doesn't stall
+// DefaultModel (which feeds every cache-key computation). On error
+// or timeout, the memo records "" so subsequent calls don't retry
+// the same broken binary on every review.
 func (b *Backend) versionOrEmpty() string {
-	if len(b.spec.VersionArgs) == 0 {
-		return ""
-	}
-	cmd := exec.Command(b.spec.Binary, b.spec.VersionArgs...)
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return ""
-	}
-	first, _, _ := strings.Cut(stdout.String(), "\n")
-	return strings.TrimSpace(first)
+	b.versionOnce.Do(func() {
+		if len(b.spec.VersionArgs) == 0 {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, b.spec.Binary, b.spec.VersionArgs...)
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		if err := cmd.Run(); err != nil {
+			return
+		}
+		first, _, _ := strings.Cut(stdout.String(), "\n")
+		b.versionMemo = strings.TrimSpace(first)
+	})
+	return b.versionMemo
 }

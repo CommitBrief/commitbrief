@@ -29,15 +29,20 @@ func init() {
 		return clireview.New(clireview.Spec{
 			Name:   Name,
 			Binary: "claude",
-			// `claude -p "<prompt>" --output-format text` is the
-			// documented one-shot, non-interactive invocation for
-			// Claude Code. `--output-format text` keeps the response
-			// clean (no JSON envelope) so we can pass it through
-			// verbatim to the user; `--print` (`-p`) bypasses the
-			// interactive REPL.
-			PromptArgs: func(prompt string) []string {
-				return []string{"-p", prompt, "--output-format", "text"}
+			// Claude Code's one-shot, non-interactive invocation:
+			// `-p` ("print") bypasses the interactive REPL and
+			// `--output-format text` keeps the response clean (no
+			// JSON envelope) so we can pass it through verbatim.
+			//
+			// UC-24: the prompt is piped on stdin (`-p -`, where the
+			// dash is the documented stdin placeholder) instead of
+			// embedded in argv. This sidesteps the platform ARG_MAX
+			// limit that previously surfaced as
+			// `argument list too long` on large diffs + rules.
+			PromptArgs: func(_ string) []string {
+				return []string{"-p", "-", "--output-format", "text"}
 			},
+			UseStdin:    true,
 			VersionArgs: []string{"--version"},
 			Timeout:     5 * time.Minute,
 		}), nil

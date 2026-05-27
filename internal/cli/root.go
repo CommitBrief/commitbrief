@@ -93,6 +93,14 @@ func newRootCmd() *cobra.Command {
 	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories (repeatable); combines with the active scope flag")
 	flags.StringVar(&global.cli, "cli", "", "use a locally-installed CLI tool (claude|gemini) as the review backend; shorthand for --provider <name>-cli")
 	cmd.MarkFlagsMutuallyExclusive("provider", "cli")
+	// UC-07: CLI providers emit pre-formatted plain text that goes
+	// straight to the user. --json / --markdown drive structured
+	// renderers that don't apply to a CLI provider's response (and
+	// would silently strip the formatting we just paid the host CLI
+	// for). Surface this as a cobra-level conflict instead of letting
+	// the user discover it via mangled output.
+	cmd.MarkFlagsMutuallyExclusive("cli", "json")
+	cmd.MarkFlagsMutuallyExclusive("cli", "markdown")
 
 	// Hidden: drives scripts/manpage.sh; not part of the user-visible surface.
 	flags.StringVar(&global.genMan, "gen-man", "", "generate man pages into <dir> and exit (hidden)")
