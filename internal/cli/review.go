@@ -17,6 +17,7 @@ import (
 
 	"github.com/CommitBrief/commitbrief/internal/cache"
 	"github.com/CommitBrief/commitbrief/internal/clipboard"
+	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/guard"
@@ -181,7 +182,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		Lang:         app.Lang.Code,
 	})
 
-	cacheStore, err := openCache(app.RepoRoot)
+	cacheStore, err := openCache(app.RepoRoot, app.Config.Cache)
 	if err != nil {
 		infof("%s", app.Catalog.T("review.cache_disabled", err))
 	}
@@ -488,13 +489,31 @@ func buildMatcher(repoRoot string) *ignore.Matcher {
 	return ignore.Compose(builtin, repoIgnore)
 }
 
-func openCache(repoRoot string) (*cache.Cache, error) {
+// openCache resolves the on-disk store for the active repo, applying
+// the cache.* knobs from config. UC-02 in PATCH_ROADMAP:
+//   - cache.enabled=false now shortcircuits to (nil, nil) — the review
+//     pipeline treats a nil store as "skip lookup + write" without
+//     surfacing it as an error.
+//   - cache.ttl_days is passed through as cache.Options.TTL; zero/unset
+//     falls back to cache.DefaultTTL inside Open.
+//
+// `--no-cache` still wins above this (it's checked before each Get/Put
+// call site); this function only governs whether a store exists at all.
+func openCache(repoRoot string, cfg config.CacheConfig) (*cache.Cache, error) {
 	if repoRoot == "" {
 		return nil, errors.New("no repo root")
+	}
+	if !cfg.Enabled {
+		return nil, nil
+	}
+	var ttl time.Duration
+	if cfg.TTLDays > 0 {
+		ttl = time.Duration(cfg.TTLDays) * 24 * time.Hour
 	}
 	return cache.Open(cache.Options{
 		Dir:      filepath.Join(repoRoot, ".commitbrief", "cache"),
 		RepoRoot: repoRoot,
+		TTL:      ttl,
 	})
 }
 

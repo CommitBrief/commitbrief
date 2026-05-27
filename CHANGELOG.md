@@ -10,6 +10,48 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **`--yes` no longer bypasses the secret scanner or cost preflight.**
+  Previously, setting `--yes` (intended to auto-answer the
+  `.commitbrief/` pre-send guard) also silently approved any flagged
+  credential and any above-threshold cost estimate. That's a footgun:
+  users routinely wire `--yes` into CI to skip the guard prompt, and
+  it shouldn't also nuke unrelated safety nets. The dedicated
+  bypasses (`--allow-secrets` for the scanner, `--no-cost-check` for
+  the preflight) remain. (UC-01, UC-06)
+
+- **Active provider doctor check.** `commitbrief doctor` now verifies
+  that the *currently selected* provider (`config.provider`) has its
+  own credentials — not just that *some* provider does. Closes a gap
+  where setting `provider: openai` while only `anthropic.api_key` was
+  configured would pass doctor but fail every review. (UC-03)
+
+- **Localised confirm vocabulary, guard prompt, and setup wizard.**
+  The catalog now drives accept-vocabulary (`y/yes` in EN, `e/evet`
+  in TR), the `[y/N]` / `[e/H]` suffix, the `.commitbrief/` guard
+  warning header and detail, and every label in `commitbrief setup`.
+  EN remains the default; TR users get fully translated prompts.
+  (UC-14, UC-15, UC-16)
+
+### Added
+- **Rules content secret scan.** The pre-send secret scanner now
+  inspects user-authored `COMMITBRIEF.md` and `OUTPUT.md` content in
+  addition to the diff itself. Rules join the system prompt verbatim,
+  so a credential pasted into either file would leak just as surely
+  as one in a diff. Embedded defaults are presumed-clean and skipped.
+  New public API: `guard.ScanText`. (UC-05)
+
+- **`cache.enabled` and `cache.ttl_days` are now honored.** Previously
+  defined but inert. Setting `cache.enabled: false` skips the on-disk
+  store entirely (no Get, no Put, no orphan directory). `ttl_days`
+  passes through to `cache.Options.TTL` for normal expiry math. (UC-02)
+
+### Removed
+- **`cache.max_size_mb` config field.** Defined in the struct and
+  surfaced via `config get/set`, but no code ever read the value —
+  cache eviction is TTL-based, not size-based. Setting it now errors
+  as an unknown field; reading it errors the same way. (UC-02)
+
 ## [0.9.0] - 2026-05-27
 
 ### Changed

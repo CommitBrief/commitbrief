@@ -18,9 +18,8 @@ func Default() *Config {
 			Color:  "auto",
 		},
 		Cache: CacheConfig{
-			Enabled:   true,
-			TTLDays:   7,
-			MaxSizeMB: 100,
+			Enabled: true,
+			TTLDays: 7,
 		},
 		Guard: GuardConfig{
 			SecretScan: true,

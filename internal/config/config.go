@@ -46,7 +46,6 @@ type OutputConfig struct {
 }
 
 type CacheConfig struct {
-	Enabled   bool `yaml:"enabled"`
-	TTLDays   int  `yaml:"ttl_days"`
-	MaxSizeMB int  `yaml:"max_size_mb"`
+	Enabled bool `yaml:"enabled"`
+	TTLDays int  `yaml:"ttl_days"`
 }

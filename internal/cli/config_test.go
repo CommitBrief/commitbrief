@@ -105,6 +105,32 @@ func TestConfigGetUnknownKey(t *testing.T) {
 	}
 }
 
+func TestConfigGetMaxSizeMBNoLongerSupported(t *testing.T) {
+	// UC-02 cleanup: cache.max_size_mb was dead config — defined in
+	// the struct but never read anywhere. It is gone in v0.9.1, so
+	// `config get cache.max_size_mb` must now error with the standard
+	// "unknown field" message rather than silently returning a number.
+	e := newCLIEnv(t)
+	err := e.run("config", "get", "cache.max_size_mb")
+	if err == nil {
+		t.Fatalf("max_size_mb should error after removal; got success: %s", e.out.String())
+	}
+	if !strings.Contains(err.Error(), "max_size_mb") || !strings.Contains(err.Error(), "unknown field") {
+		t.Errorf("error %q should name the offending field as unknown", err.Error())
+	}
+}
+
+func TestConfigSetMaxSizeMBNoLongerSupported(t *testing.T) {
+	e := newCLIEnv(t)
+	err := e.run("config", "set", "cache.max_size_mb", "200")
+	if err == nil {
+		t.Fatal("max_size_mb set should error after removal")
+	}
+	if !strings.Contains(err.Error(), "max_size_mb") || !strings.Contains(err.Error(), "unknown field") {
+		t.Errorf("error %q should name the offending field as unknown", err.Error())
+	}
+}
+
 func TestConfigGetUnknownProvider(t *testing.T) {
 	e := newCLIEnv(t)
 	err := e.run("config", "get", "providers.nonexistent.model")

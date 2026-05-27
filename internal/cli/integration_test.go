@@ -158,7 +158,6 @@ output:
 cache:
   enabled: true
   ttl_days: 7
-  max_size_mb: 100
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.yml"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -966,6 +965,29 @@ func TestInstallHookHonorsHookFlag(t *testing.T) {
 }
 
 // ---------- end install-hook ----------
+
+// ---------- cache.enabled wiring ----------
+
+func TestCacheEnabledFalseSkipsStoreWrite(t *testing.T) {
+	// UC-02 regression guard. Prior to v0.9.1, cache.enabled was dead
+	// config — the review path always opened a store and persisted
+	// entries. Now openCache shortcircuits on enabled=false, so even
+	// a happy-path review must NOT leave anything under .commitbrief/cache.
+	e := newCLIEnv(t)
+	cfgPath := filepath.Join(e.homeDir, ".commitbrief", "config.yml")
+	body := "version: 1\nprovider: mock\nproviders:\n  mock:\n    api_key: test\n    model: mock-model\noutput:\n  lang: en\ncache:\n  enabled: false\n"
+	if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.run("--staged", "--no-cost-check"); err != nil {
+		t.Fatalf("review with cache.enabled=false: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	cacheDir := filepath.Join(e.repoRoot, ".commitbrief", "cache")
+	entries, err := os.ReadDir(cacheDir)
+	if err == nil && len(entries) > 0 {
+		t.Errorf("cache.enabled=false but %d entries written under %s", len(entries), cacheDir)
+	}
+}
 
 // ---------- cache clear ----------
 

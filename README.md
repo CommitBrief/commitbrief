@@ -204,7 +204,6 @@ output:
 cache:
   enabled: true
   ttl_days: 7
-  max_size_mb: 100
 ```
 
 Review content lives in two files:
