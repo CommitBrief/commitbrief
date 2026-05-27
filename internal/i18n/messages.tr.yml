@@ -95,6 +95,7 @@ compress.replace_prompt: "COMMITBRIEF.md sıkıştırılmış sürümle değişt
 compress.aborted_user: "Kullanıcı tarafından iptal edildi; hiçbir dosya değişmedi."
 compress.backed_up: "Orijinal %s konumuna yedeklendi"
 compress.wrote_compressed: "Sıkıştırılmış %s yazıldı"
+compress.dry_run_notice: "Dry run — COMMITBRIEF.md değiştirilmedi. Uygulamak için --dry-run olmadan tekrar çalıştırın."
 
 setup.saved_local: "Yapılandırma ./.commitbrief/config.yml dosyasına kaydedildi"
 setup.saved_global: "Yapılandırma ~/.commitbrief/config.yml dosyasına kaydedildi"

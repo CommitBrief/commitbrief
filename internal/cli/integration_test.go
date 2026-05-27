@@ -1228,6 +1228,11 @@ func TestDryRunStaged(t *testing.T) {
 		".commitbriefignore net filtered",
 		"Files (review):", "Provider:", "mock",
 		"Cache key:", "Rules source:", "Output source:",
+		// UC-19: provider-derived cost/context now surfaced.
+		"Input tokens (est):",
+		"Output tokens (est):",
+		"Context window:",
+		"Cost estimate:",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run missing %q; got:\n%s", want, out)
@@ -1447,6 +1452,56 @@ func TestCompressUnknownLevel(t *testing.T) {
 	}
 }
 
+func TestCompressDryRunDoesNotWriteOrBackup(t *testing.T) {
+	// UC-22 regression guard. --dry-run still fires the provider
+	// call (the user paid the tokens for the Result block) but
+	// must NOT touch COMMITBRIEF.md or write a backup. The mock
+	// provider returns a smaller "compressed" body so Aborted=false
+	// — exactly the path where the write would normally happen.
+	e := newCLIEnv(t)
+	if err := e.run("init"); err != nil {
+		t.Fatal(err)
+	}
+	rulesPath := filepath.Join(e.repoRoot, "COMMITBRIEF.md")
+	rulesBefore, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.run("compress", "--dry-run"); err != nil {
+		t.Fatalf("compress --dry-run: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+
+	rulesAfter, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rulesAfter) != string(rulesBefore) {
+		t.Errorf("COMMITBRIEF.md must not change under --dry-run")
+	}
+	// No backup file should exist.
+	backupDir := filepath.Join(e.repoRoot, ".commitbrief", "backups")
+	if entries, err := os.ReadDir(backupDir); err == nil && len(entries) > 0 {
+		t.Errorf("--dry-run should not create backups; got %d entries under %s", len(entries), backupDir)
+	}
+}
+
+func TestCompressDryRunRejectsCombinationWithOut(t *testing.T) {
+	// --dry-run and --out are conceptually contradictory: dry-run
+	// promises no write, --out wants a file to land at. Cobra mutex.
+	e := newCLIEnv(t)
+	if err := e.run("init"); err != nil {
+		t.Fatal(err)
+	}
+	err := e.run("compress", "--dry-run", "--out", filepath.Join(e.repoRoot, "out.md"))
+	if err == nil {
+		t.Error("compress --dry-run --out should error")
+	}
+	if !strings.Contains(err.Error(), "none of the others can be") {
+		t.Errorf("expected cobra mutex error; got: %v", err)
+	}
+}
+
 // ---------- .commitbriefignore + guard ----------
 
 func TestDryRunIgnorePipelineFiltersBuiltin(t *testing.T) {
@@ -1656,29 +1711,32 @@ func TestDiffCmdThreeDotRange(t *testing.T) {
 }
 
 func TestDiffCmdRejectsZeroArgs(t *testing.T) {
-	// Cobra's RangeArgs(1, 2) rejects zero positional args. The error
+	// Cobra's MinimumNArgs(1) rejects zero positional args. The error
 	// message references the command surface so users know they need
-	// at least one ref.
+	// at least one ref (or pathspec).
 	e := newCLIEnv(t)
 	err := e.run("diff")
 	if err == nil {
 		t.Fatal("expected error for `diff` with no args; got nil")
 	}
-	if !strings.Contains(err.Error(), "accepts between 1 and 2") {
+	if !strings.Contains(err.Error(), "requires at least 1 arg") {
 		t.Errorf("expected cobra arg-count error; got: %v", err)
 	}
 }
 
-func TestDiffCmdRejectsThreeArgs(t *testing.T) {
-	// More than two refs is also rejected — `git diff A B C` isn't a
-	// thing, and accepting it silently would hide the user's typo.
+func TestDiffCmdAcceptsPathspecAfterDoubleDash(t *testing.T) {
+	// UC-08 regression guard. Pre-v0.9.2 the diff subcommand capped
+	// at 2 args (cobra.RangeArgs(1, 2)) which rejected legitimate
+	// `git diff <ref> -- <pathspec>` invocations. We now forward
+	// whatever the user typed (modulo at-least-one) and let git
+	// arbitrate. The mock repo has a single staged Go file from
+	// newCLIEnv, so the pathspec narrows the diff to it.
 	e := newCLIEnv(t)
-	err := e.run("diff", "HEAD~1", "HEAD", "HEAD~2")
-	if err == nil {
-		t.Fatal("expected error for `diff` with three args; got nil")
-	}
-	if !strings.Contains(err.Error(), "accepts between 1 and 2") {
-		t.Errorf("expected cobra arg-count error; got: %v", err)
+	gitCmd(t, e.repoRoot, "reset", "--hard", "HEAD")
+	// Build a 3+ arg invocation: ref + -- + pathspec
+	if err := e.run("diff", "HEAD", "--", "*.go"); err != nil {
+		t.Fatalf("diff HEAD -- *.go should be accepted post-UC-08; got %v\nstderr:\n%s",
+			err, e.errOut.String())
 	}
 }
 

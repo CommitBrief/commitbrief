@@ -97,14 +97,54 @@ func TestResolveNilConfigsHandled(t *testing.T) {
 	}
 }
 
-func TestResolveUnknownLangPreservesCodeAsName(t *testing.T) {
-	repo := &config.Config{Output: config.OutputConfig{Lang: "xx"}}
+func TestResolveUnknownLangSilentlyCoercesToEnglish(t *testing.T) {
+	// UC-09 regression guard. Pre-v0.9.2 the resolver preserved any
+	// unknown code (e.g. "de") and i18n.Load *separately* fell back
+	// to English, giving a confusing "Resolution says de but output
+	// is English" mismatch. The locale surface is now narrowed to
+	// {en, tr} and Resolve coerces silently — Source is preserved so
+	// the dry-run footer still attributes the original config layer
+	// even when the code itself is rewritten.
+	repo := &config.Config{Output: config.OutputConfig{Lang: "de"}}
 	res := Resolve(repo, nil, Env{})
-	if res.Code != "xx" {
-		t.Errorf("Code = %q, want xx", res.Code)
+	if res.Code != "en" {
+		t.Errorf("Code = %q, want en (coerced)", res.Code)
 	}
-	if res.Name != "xx" {
-		t.Errorf("Name = %q, want raw code fallback", res.Name)
+	if res.Name != "English" {
+		t.Errorf("Name = %q, want English", res.Name)
+	}
+	if res.Source != SourceRepoConfig {
+		t.Errorf("Source = %v, want SourceRepoConfig preserved through coercion", res.Source)
+	}
+}
+
+func TestResolveUnknownEnvLANGCoercesToEnglish(t *testing.T) {
+	// Same UC-09 coercion when the unsupported code arrives through
+	// the LANG env var path.
+	res := Resolve(nil, nil, Env{LANG: "fr_FR.UTF-8"})
+	if res.Code != "en" {
+		t.Errorf("Code = %q, want en (coerced from LANG=fr_FR)", res.Code)
+	}
+	if res.Source != SourceEnvLANG {
+		t.Errorf("Source = %v, want SourceEnvLANG preserved", res.Source)
+	}
+}
+
+func TestCoerceCLIFlagUnknownLandsAtEnglish(t *testing.T) {
+	// UC-09 — CLI flag path mirrors the config path. --lang=de must
+	// also land at "en" so i18n.Load doesn't hit a missing catalog.
+	res := CoerceCLIFlag("de")
+	if res.Code != "en" {
+		t.Errorf("Code = %q, want en", res.Code)
+	}
+	if res.Source != SourceCLIFlag {
+		t.Errorf("Source = %v, want SourceCLIFlag", res.Source)
+	}
+}
+
+func TestCoerceCLIFlagSupportedPasses(t *testing.T) {
+	if res := CoerceCLIFlag("tr"); res.Code != "tr" || res.Name != "Türkçe" {
+		t.Errorf("supported tr should pass through; got %+v", res)
 	}
 }
 

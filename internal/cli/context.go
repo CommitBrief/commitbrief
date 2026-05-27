@@ -86,7 +86,10 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 	rawRepo, _ := config.LoadFile(repoPath)
 	langRes := lang.Resolve(rawRepo, rawGlobal, lang.Env{LANG: os.Getenv("LANG")})
 	if global.lang != "" {
-		langRes = lang.Resolution{Code: global.lang, Source: lang.SourceCLIFlag}
+		// UC-09: --lang goes through the same supported() coercion the
+		// config-file path uses, so passing --lang=de on the CLI lands
+		// at "en" rather than blowing up i18n.Load below.
+		langRes = lang.CoerceCLIFlag(global.lang)
 	}
 
 	cat, err := i18n.Load(langRes.Code)

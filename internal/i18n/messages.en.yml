@@ -97,6 +97,7 @@ compress.replace_prompt: "Replace COMMITBRIEF.md with the compressed version? Or
 compress.aborted_user: "Aborted by user; no files changed."
 compress.backed_up: "Backed up original to %s"
 compress.wrote_compressed: "Wrote compressed %s"
+compress.dry_run_notice: "Dry run — COMMITBRIEF.md was NOT modified. Re-run without --dry-run to apply."
 
 setup.saved_local: "Configuration saved to ./.commitbrief/config.yml"
 setup.saved_global: "Configuration saved to ~/.commitbrief/config.yml"

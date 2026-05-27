@@ -40,6 +40,39 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   the host CLI for or, worse, parses prose as JSON. Cobra now rejects
   the pairing before any provider call. (UC-07)
 
+### Fixed
+- **`commitbrief diff` now accepts pathspecs and >2 args.** The
+  subcommand used to cap at two positional args, which rejected
+  legitimate `git diff <ref> -- <pathspec>` invocations (e.g.
+  `commitbrief diff main -- '*.go'`). Cobra constraint relaxed to
+  `MinimumNArgs(1)`; everything past the first arg is forwarded to
+  `git diff` verbatim and git itself arbitrates validity. (UC-08)
+
+- **`ui.EnableANSI` is now called from `Execute`.** On legacy Windows
+  consoles the VT100 escape mode must be opted into before any ANSI
+  codes are written; we shipped the helper but never invoked it at
+  the entry point, so colored output landed as raw escape sequences
+  on those terminals. POSIX builds keep the no-op stub. (UC-18)
+
+### Added
+- **`dry-run` now reports output tokens, context window, and cost
+  estimate.** The previous report stopped at the input-tokens
+  estimate, which made it useful for "will this fit?" but useless
+  for "what will this cost?". The new lines mirror the verbose
+  footer of a real review and let users decide whether to fire the
+  request without having to. (UC-19)
+
+### Removed
+- **Locale surface narrowed to `{en, tr}`.** The `langNames` map used
+  to advertise 15 languages (`de`, `fr`, `es`, `it`, `pt`, `ja`,
+  `zh`, `ko`, `ru`, `ar`, `nl`, `pl`, `sv`) for which we never
+  shipped translations — `i18n.Load` silently fell through to
+  English, leaving the dry-run footer claiming "Lang: Deutsch" while
+  the actual output was in English. Resolve now coerces any
+  unsupported code (`output.lang: de`, `--lang fr`, `LANG=es_ES`) to
+  `en` while preserving the original `Source` for attribution. New
+  exported helper: `lang.CoerceCLIFlag`. (UC-09)
+
 ## [0.9.1] - 2026-05-27
 
 ### Changed

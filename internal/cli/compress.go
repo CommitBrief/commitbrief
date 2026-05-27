@@ -20,8 +20,9 @@ import (
 
 func newCompressCmd() *cobra.Command {
 	var (
-		levelFlag string
-		outFlag   string
+		levelFlag  string
+		outFlag    string
+		dryRunFlag bool
 	)
 	cmd := &cobra.Command{
 		Use:   "compress",
@@ -96,6 +97,18 @@ func newCompressCmd() *cobra.Command {
 				return errors.New(app.Catalog.T("compress.aborted_larger", result.AbortReason))
 			}
 
+			// UC-22: --dry-run stops here. The Result block above
+			// already tells the user how much they'd save and what
+			// the compression call cost; replacing or backing up the
+			// file would defeat the "let me see first" intent. Note
+			// this still consumes provider tokens (the call already
+			// fired); --dry-run is about the *write* being a no-op,
+			// not the LLM call.
+			if dryRunFlag {
+				infof("%s", app.Catalog.T("compress.dry_run_notice"))
+				return nil
+			}
+
 			// --out bypass: write elsewhere, never touch original.
 			if outFlag != "" {
 				if err := os.WriteFile(outFlag, []byte(result.CompressedContent), 0o644); err != nil {
@@ -137,5 +150,7 @@ func newCompressCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&levelFlag, "level", "balanced", "compression level: light | balanced | aggressive")
 	cmd.Flags().StringVar(&outFlag, "out", "", "write result to this path instead of replacing COMMITBRIEF.md")
+	cmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "show the result summary; do not write or back up anything")
+	cmd.MarkFlagsMutuallyExclusive("dry-run", "out")
 	return cmd
 }

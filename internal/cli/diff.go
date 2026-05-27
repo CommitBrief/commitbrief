@@ -38,7 +38,12 @@ func newDiffCmd() *cobra.Command {
 			"verbatim to git, so any ref combination git understands works: " +
 			"HEAD, HEAD~3 HEAD, main feature, main...feature, etc. " +
 			"`--file` and `--dir` global filters apply on top.",
-		Args: cobra.RangeArgs(1, 2),
+		// UC-08: previously capped at 2 args, which rejected legitimate
+		// `git diff` invocations like `git diff main -- *.go` or any
+		// pathspec-after-`--` shape. Forward whatever the user wrote
+		// (modulo the at-least-one requirement) and let git itself
+		// arbitrate validity.
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runReview(cmd, reviewScopeFlags{}, args)
 		},

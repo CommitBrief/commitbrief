@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra/doc"
 
 	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 	"github.com/CommitBrief/commitbrief/internal/version"
 )
 
@@ -129,6 +130,16 @@ func newRootCmd() *cobra.Command {
 
 // Execute is the package entry point used by cmd/commitbrief/main.go.
 func Execute() {
+	// UC-18: on Windows the VT100 escape mode needs to be opted into
+	// before any ANSI codes hit stdout/stderr — the unix build of
+	// EnableANSI is a documented no-op, so calling unconditionally
+	// costs nothing on POSIX. Errors are intentionally swallowed:
+	// failure here just means colors won't render correctly on a
+	// legacy console, and we'd rather degrade silently than abort
+	// the review.
+	_ = ui.EnableANSI(os.Stdout)
+	_ = ui.EnableANSI(os.Stderr)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

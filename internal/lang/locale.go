@@ -37,22 +37,25 @@ func normalize(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
+// langNames lists every locale we actually ship translations for.
+// UC-09: this used to advertise 15 languages — but only en + tr have
+// real catalogs in internal/i18n/messages.*.yml. Listing more in
+// `commitbrief providers list`'s sample output and in nameOf() made
+// the CLI look multilingual while every unsupported pick silently
+// fell back to English at i18n.Load time. Now the map matches the
+// shipped reality; the supported() helper drives coercion in
+// resolve.go.
 var langNames = map[string]string{
 	"en": "English",
 	"tr": "Türkçe",
-	"de": "Deutsch",
-	"fr": "Français",
-	"es": "Español",
-	"it": "Italiano",
-	"pt": "Português",
-	"ja": "日本語",
-	"zh": "中文",
-	"ko": "한국어",
-	"ru": "Русский",
-	"ar": "العربية",
-	"nl": "Nederlands",
-	"pl": "Polski",
-	"sv": "Svenska",
+}
+
+// supported reports whether we ship a real i18n catalog for the
+// given code (case-normalised). Used by Resolve to coerce unknown
+// codes back to "en" before they reach i18n.Load.
+func supported(code string) bool {
+	_, ok := langNames[normalize(code)]
+	return ok
 }
 
 func nameOf(code string) string {
@@ -60,5 +63,9 @@ func nameOf(code string) string {
 	if n, ok := langNames[code]; ok {
 		return n
 	}
+	// Fallback presentation for unsupported codes — Resolve coerces
+	// the *active* code to "en", but callers that pass a raw code
+	// directly to nameOf (e.g. tests, error messages) still need a
+	// non-empty display string.
 	return code
 }
