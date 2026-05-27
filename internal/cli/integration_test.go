@@ -829,6 +829,85 @@ func TestInstallHookHonorsHookFlag(t *testing.T) {
 
 // ---------- end install-hook ----------
 
+// ---------- cache clear ----------
+
+func TestCacheClearEmptyReportsNothing(t *testing.T) {
+	// No cache directory yet — should print the "nothing to clear"
+	// message and exit zero. Regression guard: an `os.RemoveAll` on a
+	// missing path is fine, but the user-visible message must NOT claim
+	// entries were removed.
+	e := newCLIEnv(t)
+	if err := e.run("cache", "clear"); err != nil {
+		t.Fatalf("cache clear on empty repo: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "No cached entries") {
+		t.Errorf("empty cache clear should surface empty-state message; got:\n%s",
+			truncate(out, 400))
+	}
+	if strings.Contains(out, "Removed") || strings.Contains(out, "freed") {
+		t.Errorf("empty cache must not claim removal; got:\n%s", truncate(out, 400))
+	}
+}
+
+func TestCacheClearWithYesRemovesAllEntries(t *testing.T) {
+	// Seed two cache files + one subdirectory and verify `--yes` deletes
+	// the directory and reports the freed byte count. `--yes` skips the
+	// confirmation prompt so this test runs non-interactively.
+	e := newCLIEnv(t)
+	cacheDir := filepath.Join(e.repoRoot, ".commitbrief", "cache")
+	if err := os.MkdirAll(filepath.Join(cacheDir, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.json", "b.json", "sub/c.json"} {
+		path := filepath.Join(cacheDir, name)
+		if err := os.WriteFile(path, []byte(`{"x":1}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := e.run("cache", "clear", "--yes"); err != nil {
+		t.Fatalf("cache clear --yes: %v", err)
+	}
+	if _, err := os.Stat(cacheDir); !os.IsNotExist(err) {
+		t.Errorf("cache dir should be gone after clear; stat err=%v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Removed 3") {
+		t.Errorf("expected 'Removed 3' in output; got:\n%s", truncate(out, 600))
+	}
+}
+
+func TestCacheClearAbortsOnNoTTY(t *testing.T) {
+	// Without --yes and without a TTY stdin, the confirm helper should
+	// treat the prompt as declined and leave the cache untouched. This
+	// matches the rest of the CLI (`compress`, pre-send guard) — never
+	// destructively act in a non-interactive context unless explicitly
+	// authorized by --yes.
+	e := newCLIEnv(t)
+	cacheDir := filepath.Join(e.repoRoot, ".commitbrief", "cache")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	seeded := filepath.Join(cacheDir, "keep.json")
+	if err := os.WriteFile(seeded, []byte(`{"k":"v"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := e.run("cache", "clear"); err != nil {
+		t.Fatalf("cache clear (non-tty): %v", err)
+	}
+	if _, err := os.Stat(seeded); err != nil {
+		t.Errorf("cache file should survive non-tty abort; stat err=%v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Aborted") {
+		t.Errorf("expected abort message; got:\n%s", truncate(out, 600))
+	}
+}
+
+// ---------- end cache clear ----------
+
 // ---------- dry-run ----------
 
 func TestDryRunStaged(t *testing.T) {

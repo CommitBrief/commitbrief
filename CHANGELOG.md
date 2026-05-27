@@ -10,6 +10,19 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`commitbrief cache clear` subcommand** — removes the repo-local
+  response cache directory (`<repoRoot>/.commitbrief/cache/`) and
+  reports how many entries were deleted plus the disk space freed.
+  Empty cache short-circuits with a "nothing to remove" message
+  (exit 0). Without `--yes` and without a TTY stdin the command
+  aborts safely — same non-interactive guard as `compress` and the
+  pre-send write check. Useful after `compress` (system prompt hash
+  changes guarantee a cache miss anyway) or when switching test
+  config/provider. Mounted under a new `cache` parent so future
+  inspection helpers can slot in without re-flattening the CLI
+  surface. 5 EN/TR i18n keys, 3 integration tests, ~130 LoC.
+
 ## [0.8.1] - 2026-05-27
 
 ### Changed

@@ -102,6 +102,7 @@ func newRootCmd() *cobra.Command {
 		newDryRunCmd(),
 		newListCmd(),
 		newCompressCmd(),
+		newCacheCmd(),
 	)
 	return cmd
 }

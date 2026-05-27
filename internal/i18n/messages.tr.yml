@@ -46,6 +46,11 @@ install_hook.uninstalled: "%s kaldırıldı"
 
 cache.hit: "(önbellekten)"
 cache.disabled: "(önbellek kapalı)"
+cache.clear.empty: "Silinecek önbellek girdisi yok (%s konumuna bakıldı)."
+cache.clear.summary: "%d önbellek girdisi bulundu, diskte %s, konum %s."
+cache.clear.confirm: "Tüm önbellek girdileri silinsin mi?"
+cache.clear.aborted: "İptal edildi; önbellek değiştirilmedi."
+cache.clear.success: "%d önbellek girdisi silindi, %s yer açıldı."
 
 rules.using_default: "ℹ Yerleşik review kuralları kullanılıyor. Özelleştirmek için 'commitbrief init' çalıştırın."
 rules.output.using_default: "ℹ Yerleşik çıktı formatı kullanılıyor. Özelleştirmek için ~/.commitbrief/OUTPUT.md veya <repo>/.commitbrief/OUTPUT.md oluşturun."

@@ -46,6 +46,11 @@ install_hook.uninstalled: "Removed %s"
 
 cache.hit: "(cached)"
 cache.disabled: "(cache disabled)"
+cache.clear.empty: "No cached entries to remove (looked in %s)."
+cache.clear.summary: "Found %d cached entr(y/ies), %s on disk at %s."
+cache.clear.confirm: "Remove all cached entries?"
+cache.clear.aborted: "Aborted; cache left untouched."
+cache.clear.success: "Removed %d cached entr(y/ies), freed %s."
 
 rules.using_default: "ℹ Using built-in review rules. Run 'commitbrief init' to customize."
 rules.output.using_default: "ℹ Using built-in output format. Create ~/.commitbrief/OUTPUT.md or <repo>/.commitbrief/OUTPUT.md to customize."

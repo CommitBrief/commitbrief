@@ -44,6 +44,7 @@ commitbrief list                  # this reference
 
 ` + "```" + `
 commitbrief compress              # shrink COMMITBRIEF.md losslessly
+commitbrief cache clear           # remove cached LLM responses for this repo
 ` + "```" + `
 
 ## Global flags
