@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-05-27
+
 ### Changed
 - **Finding card design** ported verbatim from the maintainer's
   `./secguard/main.go` reference. Replaces the v0.8.0 visual layer
