@@ -312,7 +312,7 @@ func TestRenderDiffWrapsLongLinesWithSignAlignment(t *testing.T) {
 	pad := strings.Repeat(" ", signWidth)
 	// Find the row that starts with " -  " then verify the next row
 	// also begins with `signWidth` spaces (alignment).
-	var firstMinusIdx int = -1
+	firstMinusIdx := -1
 	for i, l := range plainLines {
 		if strings.HasPrefix(l, " -  ") {
 			firstMinusIdx = i
@@ -339,7 +339,7 @@ func TestRenderDiffWrapsLongLinesWithSignAlignment(t *testing.T) {
 	}
 
 	// Same alignment check on the `+` block.
-	var firstPlusIdx int = -1
+	firstPlusIdx := -1
 	for i, l := range plainLines {
 		if strings.HasPrefix(l, " +  ") {
 			firstPlusIdx = i
