@@ -29,6 +29,7 @@ type globalFlags struct {
 	noCostCheck  bool
 	copy         bool
 	failOn       string
+	minSeverity  string
 	lang         string
 	provider     string
 	model        string
@@ -87,6 +88,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
 	flags.BoolVar(&global.copy, "copy", false, "copy findings (severity, path, title, description) to the system clipboard via OSC 52 + native tool")
 	flags.StringVar(&global.failOn, "fail-on", "", "exit 1 if any finding meets/exceeds severity (critical|high|medium|low|info|any|none)")
+	flags.StringVar(&global.minSeverity, "min-severity", "", "hide findings below this severity in the rendered output (critical|high|medium|low|info); --json and --fail-on still see the full set")
 	flags.StringVar(&global.lang, "lang", "", "override output language (e.g. tr, en)")
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")

@@ -176,7 +176,9 @@ commitbrief cache prune [flags]            # bounded cleanup; defaults --keep-la
 ```
 
 Global flags: `--json`, `--markdown`, `--output <file>`, `--copy`,
-`--compact`, `--no-cache`, `--fail-on=<sev>`, `-f/--file` (repeatable),
+`--compact`, `--no-cache`, `--fail-on=<sev>`, `--min-severity=<sev>`
+(hide findings below this severity in the rendered output; `--json` and
+`--fail-on` still see the full set), `-f/--file` (repeatable),
 `-d/--dir` (repeatable), `--yes`, `--verbose`, `--quiet`, `--lang`,
 `--provider`, `--model`, `--cli <claude|gemini>` (shorthand for the
 CLI-tool-backed providers; mutually exclusive with `--json` /
