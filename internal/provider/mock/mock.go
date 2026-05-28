@@ -23,6 +23,10 @@ const defaultName = "mock"
 // string survives the format change as a finding-title match.
 const DefaultResponseContent = `{"findings":[{"severity":"info","file":"mock.go","line":1,"title":"mock review output","description":"Synthetic finding produced by the mock provider for tests.","suggestion":"This is a synthetic suggestion used only to keep the schema-validation tests passing."}]}`
 
+// DefaultCommitMessage is the canned plain-text response the mock returns
+// for a FreeForm request (ADR-0015), exercising the --suggest-commit path.
+const DefaultCommitMessage = "feat(store): add user lookup by name\n\nSynthetic commit message from the mock provider."
+
 type Provider struct {
 	mu sync.Mutex
 
@@ -106,6 +110,9 @@ func (m *Provider) Review(ctx context.Context, req provider.Request) (provider.R
 	m.LastRequest = req
 	err := m.ReviewErr
 	content := m.ResponseContent
+	if req.FreeForm {
+		content = DefaultCommitMessage
+	}
 	usage := m.usage()
 	model := req.Model
 	if model == "" {

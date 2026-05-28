@@ -82,8 +82,13 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 	// the JSON document is the canonical Content. If it refused (some
 	// models occasionally emit a text-only apology), fall back to the
 	// text blocks and let the renderer degrade gracefully.
-	if structured, ok := extractStructured(msg); ok {
-		content = structured
+	//
+	// FreeForm (ADR-0015) skips the tool entirely — the response is plain
+	// text (e.g. a commit message), so the text blocks ARE the content.
+	if !req.FreeForm {
+		if structured, ok := extractStructured(msg); ok {
+			content = structured
+		}
 	}
 	return provider.Response{
 		Content: content,
@@ -115,16 +120,21 @@ func (c *Client) buildParams(req provider.Request) sdk.MessageNewParams {
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokens
 	}
-	return sdk.MessageNewParams{
+	params := sdk.MessageNewParams{
 		Model:     sdk.Model(model),
 		MaxTokens: maxTokens,
 		System:    systemPromptWithCache(req.SystemPrompt),
 		Messages: []sdk.MessageParam{
 			sdk.NewUserMessage(sdk.NewTextBlock(req.UserPrompt)),
 		},
-		Tools:      []sdk.ToolUnionParam{buildReportTool()},
-		ToolChoice: sdk.ToolChoiceParamOfTool(toolName),
 	}
+	// Structured-findings contract (ADR-0014): force the report tool. Skip
+	// it for FreeForm (ADR-0015) so the model returns plain text.
+	if !req.FreeForm {
+		params.Tools = []sdk.ToolUnionParam{buildReportTool()}
+		params.ToolChoice = sdk.ToolChoiceParamOfTool(toolName)
+	}
+	return params
 }
 
 func extractText(msg *sdk.Message) string {

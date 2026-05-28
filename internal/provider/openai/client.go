@@ -111,12 +111,17 @@ func (c *Client) buildParams(req provider.Request) sdk.ChatCompletionNewParams {
 	}
 	messages = append(messages, sdk.UserMessage(req.UserPrompt))
 
-	return sdk.ChatCompletionNewParams{
+	params := sdk.ChatCompletionNewParams{
 		Model:               shared.ChatModel(model),
 		MaxCompletionTokens: sdk.Int(maxTokens),
 		Messages:            messages,
-		ResponseFormat:      buildResponseFormat(),
 	}
+	// Structured-findings JSON contract (ADR-0014). Omitted for FreeForm
+	// (ADR-0015) so the model returns a plain-text completion.
+	if !req.FreeForm {
+		params.ResponseFormat = buildResponseFormat()
+	}
+	return params
 }
 
 func extractText(c *sdk.ChatCompletion) string {
