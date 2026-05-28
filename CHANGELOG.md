@@ -18,6 +18,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   comments is now derived from the PR's `url` field (which always points
   at the base repo, including cross-fork PRs).
 ### Added
+- **Per-model pricing override (OQ-09).** `providers.<name>.pricing.<model>`
+  in config overrides the built-in `$/1M`-token rate snapshot used by the
+  cost preflight, the verbose footer, and cached-cost figures. Fields:
+  `input_per_1m`, `output_per_1m`, `cached_input_per_1m`; zero/omitted
+  fields fall back to the built-in value (partial override OK). Edited in
+  the config file and shown by `commitbrief config show`. Useful when the
+  hard-coded snapshot drifts or for a negotiated rate.
 - **CI integration: the `commitbrief-action` GitHub Action.** A separate
   repo (`CommitBrief/commitbrief-action`) ships a composite action that
   runs CommitBrief on pull requests — either posting inline review

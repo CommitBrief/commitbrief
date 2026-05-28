@@ -37,6 +37,21 @@ type ProviderConfig struct {
 	APIKey  string `yaml:"api_key,omitempty"`
 	Model   string `yaml:"model,omitempty"`
 	BaseURL string `yaml:"base_url,omitempty"`
+
+	// Pricing overrides the built-in per-model rate table (OQ-09), keyed
+	// by model name. Useful when the hard-coded snapshot drifts or for a
+	// negotiated rate. Zero fields fall back to the built-in value, so a
+	// partial override (e.g. only output_per_1m) is allowed. Consumed by
+	// the cost preflight, verbose footer, and cached-cost figures via
+	// resolvePricing (internal/cli).
+	Pricing map[string]ModelPricing `yaml:"pricing,omitempty"`
+}
+
+// ModelPricing is a per-1M-token rate override for one model.
+type ModelPricing struct {
+	InputPer1M       float64 `yaml:"input_per_1m,omitempty"`
+	OutputPer1M      float64 `yaml:"output_per_1m,omitempty"`
+	CachedInputPer1M float64 `yaml:"cached_input_per_1m,omitempty"`
 }
 
 type OutputConfig struct {
