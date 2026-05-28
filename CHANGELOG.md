@@ -8,6 +8,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [Unreleased]
+
+### Fixed
+- **`commitbrief remote pr` no longer requests a non-existent `gh` JSON
+  field.** `gh pr view --json` has no `baseRepository` field, so the PR
+  fetch failed with `Unknown JSON field: "baseRepository"` against every
+  real `gh` version. The base repository slug used for posting inline
+  comments is now derived from the PR's `url` field (which always points
+  at the base repo, including cross-fork PRs).
+
 ## [1.1.0] - 2026-05-28
 
 ### Added
