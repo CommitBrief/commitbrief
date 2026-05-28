@@ -399,15 +399,31 @@ func emitPlainText(cmd *cobra.Command, content string) error {
 		return err
 	}
 	defer closer()
-	if _, err := fmt.Fprint(w, content); err != nil {
+	if _, err := fmt.Fprint(w, wrapPlainText(content)); err != nil {
 		return fmt.Errorf("emit plain-text: %w", err)
 	}
-	// Ensure a trailing newline so the shell prompt lands on a fresh
-	// line. CLIs sometimes omit it; defensive but cheap.
-	if len(content) == 0 || content[len(content)-1] != '\n' {
-		_, _ = fmt.Fprintln(w)
-	}
 	return nil
+}
+
+// plainTextRule mirrors the 20-hyphen separator the CLI-provider prompt
+// instructs the model to emit between findings (internal/rules/prompt.go).
+const plainTextRule = "--------------------"
+
+// wrapPlainText brackets CLI-provider review output with the finding
+// separator on the top and bottom edges too, so the whole block reads as
+// one fenced unit when pasted into chat or piped to a file. The model is
+// told to emit the rule only BETWEEN findings; the edge rules are added
+// here deterministically — and any stray edge rule the model emitted
+// anyway is stripped first so the edges never double up. The trailing
+// blank line keeps the next shell prompt off the bottom rule.
+func wrapPlainText(content string) string {
+	body := strings.TrimSpace(content)
+	if body == "" {
+		return "\n"
+	}
+	body = strings.TrimSpace(strings.TrimPrefix(body, plainTextRule))
+	body = strings.TrimSpace(strings.TrimSuffix(body, plainTextRule))
+	return plainTextRule + "\n\n" + body + "\n\n" + plainTextRule + "\n\n"
 }
 
 // handleCopyFlag pushes a plain-text summary of findings onto the
@@ -564,20 +580,31 @@ func renderResult(cmd *cobra.Command, content, outputTemplate string, findings [
 	}
 	defer closer()
 
-	switch {
-	case global.json:
+	// JSON is machine output: emit it exactly, with no trailing blank line.
+	if global.json {
 		return render.JSON(w, payload)
-	case global.markdown:
-		return render.Markdown(w, payload)
 	}
-	if ui.ColorEnabled(w, ui.ParseColorMode(global.color)) {
+
+	var rerr error
+	switch {
+	case global.markdown:
+		rerr = render.Markdown(w, payload)
+	case ui.ColorEnabled(w, ui.ParseColorMode(global.color)):
 		// Cards is the default rich TTY layout: glamour-rendered body
 		// framed by a styled header, status line, and footer (Phase 11
 		// Stage A). Terminal (glamour-only, no frame) stays exported for
 		// callers that want a thinner render but is no longer the default.
-		return render.Cards(w, payload)
+		rerr = render.Cards(w, payload)
+	default:
+		rerr = render.Markdown(w, payload)
 	}
-	return render.Markdown(w, payload)
+	if rerr != nil {
+		return rerr
+	}
+	// Trailing blank line after the final output line so the result is
+	// visually separated from the next shell prompt.
+	_, err = io.WriteString(w, "\n")
+	return err
 }
 
 func openOutput(cmd *cobra.Command) (io.Writer, func(), error) {

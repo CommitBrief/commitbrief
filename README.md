@@ -200,7 +200,9 @@ Four API providers + two CLI-tool-backed providers ship in the box:
 CLI-backed providers emit pre-formatted plain text — they bypass the
 structured-findings JSON path, the per-finding cards renderer, and the
 `--fail-on` severity gate (the host CLI's response shape isn't our
-contract to enforce). Output streams verbatim to stdout, so
+contract to enforce). The review block is bracketed top and bottom
+with a `--------------------` rule (the same separator used between
+findings) and written to stdout, so
 `commitbrief --cli claude --output review.md` writes the file just
 like the API providers do; `--json` / `--markdown` are rejected
 upfront. Useful when you've already paid for a Claude or Gemini CLI

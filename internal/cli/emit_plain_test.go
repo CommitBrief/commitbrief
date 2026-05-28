@@ -60,7 +60,39 @@ func TestEmitPlainTextDefaultsToStdoutWhenNoOutputFlag(t *testing.T) {
 	if err := emitPlainText(cmd, "hello"); err != nil {
 		t.Fatal(err)
 	}
-	if got := stdout.String(); !strings.HasPrefix(got, "hello") {
+	got := stdout.String()
+	if !strings.Contains(got, "hello") {
 		t.Errorf("stdout should carry the content; got %q", got)
+	}
+	// Output is bracketed top and bottom with the finding separator rule.
+	if !strings.HasPrefix(got, plainTextRule) {
+		t.Errorf("plain-text output should open with the %q rule; got %q", plainTextRule, got)
+	}
+	if !strings.HasSuffix(strings.TrimRight(got, "\n"), plainTextRule) {
+		t.Errorf("plain-text output should close with the %q rule; got %q", plainTextRule, got)
+	}
+}
+
+func TestWrapPlainTextBracketsAndDedupesEdges(t *testing.T) {
+	// Bookend rules are added on both edges; the between-findings rule
+	// the model emits is preserved untouched.
+	body := "finding one\n\n" + plainTextRule + "\n\nfinding two"
+	got := wrapPlainText(body)
+
+	if !strings.HasPrefix(got, plainTextRule+"\n\n") {
+		t.Errorf("missing top bracket rule; got %q", got)
+	}
+	if !strings.HasSuffix(got, plainTextRule+"\n\n") {
+		t.Errorf("missing bottom bracket rule; got %q", got)
+	}
+	// Three rules total: top bracket + one between findings + bottom bracket.
+	if n := strings.Count(got, plainTextRule); n != 3 {
+		t.Errorf("expected 3 rules (top + between + bottom), got %d in %q", n, got)
+	}
+
+	// A stray edge rule the model emitted must not double up.
+	withEdges := plainTextRule + "\n\nonly finding\n\n" + plainTextRule
+	if n := strings.Count(wrapPlainText(withEdges), plainTextRule); n != 2 {
+		t.Errorf("stray edge rules should be deduped to 2 (top + bottom), got %d", n)
 	}
 }
