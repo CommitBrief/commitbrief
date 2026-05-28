@@ -8,6 +8,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [Unreleased]
+
+### Added
+- **`commitbrief remote pr <ID>` — terminal-driven GitHub PR review**
+  (ADR-0016, targeted at v1.1.0). Pulls a PR's diff via the `gh` CLI,
+  runs the review pipeline, posts each finding as an inline review
+  comment, and submits a verdict (approve / comment / request-changes).
+  Subcommand-local `--request-changes-on=<critical|high|medium|low>`
+  (default `critical`) sets the request-changes threshold; `--repo
+  owner/repo` overrides git-context repo discovery. API providers only —
+  `claude-cli` / `gemini-cli` are refused (no structured findings).
+  Bot-mode: the pre-send guards auto-allow with a stderr warning instead
+  of aborting; `--fail-on` is ignored (the GitHub verdict replaces the
+  exit-code gate). Race-safe: one retry if the PR head moves during the
+  review, then abort. GitHub-posted text is fixed English; local
+  stderr is localized (EN/TR). New `internal/remote` package +
+  `remote.*` catalog keys.
+- **Trailing blank line after review output** and **`----` brackets
+  around CLI-provider (`claude-cli` / `gemini-cli`) output** for
+  readability.
+
 ## [1.0.0] - 2026-05-28
 
 ### Migration guide (v0.x → v1.0)

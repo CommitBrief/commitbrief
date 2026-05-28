@@ -210,6 +210,30 @@ subscription and don't want to manage a second API key.
 
 Adding a provider is one new package under `internal/provider/<name>/`.
 
+> The `remote pr` subcommand (below) requires an **API provider** —
+> `claude-cli` / `gemini-cli` are incompatible because they don't produce
+> structured findings.
+
+## Reviewing pull requests from the terminal
+
+`commitbrief remote pr <ID>` reviews a GitHub pull request and writes the
+result back to GitHub: each finding becomes an inline review comment and
+the review is submitted with a verdict (approve / comment /
+request-changes). It drives your local `gh` CLI — no hosted bot, no extra
+auth.
+
+```sh
+commitbrief remote pr 42                       # PR #42 in the current repo
+commitbrief remote pr CommitBrief/web#10       # cross-repo (owner/repo#N)
+commitbrief remote pr 42 --request-changes-on=high
+```
+
+`--request-changes-on=<critical|high|medium|low>` (default `critical`)
+sets the severity at or above which the verdict becomes request-changes;
+`--repo owner/repo` overrides git-context repo discovery. Requires an API
+provider. `--fail-on` is ignored here — the GitHub verdict replaces the
+exit-code gate.
+
 ## Configuration
 
 Two-tier YAML config with field-level merge:

@@ -130,6 +130,7 @@ remote.plain_text_provider: "remote pr: CLI-tool-backed providers (claude-cli / 
 remote.request_changes_on_info: "remote pr: --request-changes-on=info is not valid; you cannot request changes on an info-only review."
 remote.request_changes_on_invalid: "remote pr: invalid --request-changes-on=%q (use critical, high, medium, or low)."
 remote.self_pr_blocked: "remote pr: you are the author of this PR; GitHub does not allow self-review."
+remote.too_volatile: "remote pr: the PR head changed twice during review; aborted — try again once it settles."
 remote.repo_required: "remote pr: not inside a git repository and --repo was not given; pass --repo owner/repo."
 remote.output_flags: "remote pr: --json / --markdown / --output / --copy / --compact don't apply (output goes to GitHub)."
 remote.fail_on_ignored: "ℹ --fail-on is ignored in remote-pr mode; the GitHub verdict is controlled by --request-changes-on."
