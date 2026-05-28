@@ -62,6 +62,27 @@ var DefaultSpecs = []ProviderSpec{
 		APIKeyHelp: "Get an API key from https://aistudio.google.com/",
 	},
 	{
+		Name:       "deepseek",
+		Label:      "DeepSeek",
+		NeedsKey:   true,
+		Models:     []string{"deepseek-chat", "deepseek-reasoner"},
+		APIKeyHelp: "Get an API key from https://platform.deepseek.com/",
+	},
+	{
+		Name:       "mistral",
+		Label:      "Mistral",
+		NeedsKey:   true,
+		Models:     []string{"mistral-large-latest", "mistral-small-latest", "codestral-latest"},
+		APIKeyHelp: "Get an API key from https://console.mistral.ai/",
+	},
+	{
+		Name:       "cohere",
+		Label:      "Cohere",
+		NeedsKey:   true,
+		Models:     []string{"command-r-plus", "command-r", "command-a-03-2025"},
+		APIKeyHelp: "Get an API key from https://dashboard.cohere.com/",
+	},
+	{
 		Name:     "ollama",
 		Label:    "Ollama (local, no API key needed)",
 		NeedsURL: true,

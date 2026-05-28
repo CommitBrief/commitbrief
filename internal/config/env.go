@@ -22,6 +22,15 @@ func ApplyEnv(c *Config) {
 	if v := os.Getenv("GEMINI_API_KEY"); v != "" {
 		setProviderField(c, "gemini", func(p *ProviderConfig) { p.APIKey = v })
 	}
+	if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" {
+		setProviderField(c, "deepseek", func(p *ProviderConfig) { p.APIKey = v })
+	}
+	if v := os.Getenv("MISTRAL_API_KEY"); v != "" {
+		setProviderField(c, "mistral", func(p *ProviderConfig) { p.APIKey = v })
+	}
+	if v := os.Getenv("COHERE_API_KEY"); v != "" {
+		setProviderField(c, "cohere", func(p *ProviderConfig) { p.APIKey = v })
+	}
 	if v := os.Getenv("OLLAMA_HOST"); v != "" {
 		setProviderField(c, "ollama", func(p *ProviderConfig) { p.BaseURL = v })
 	}
