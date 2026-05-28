@@ -198,6 +198,9 @@ Four API providers + two CLI-tool-backed providers ship in the box:
 | **Anthropic** | Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 | Ephemeral prompt caching (5 m TTL) cuts repeated input cost ~10×. |
 | **OpenAI** | GPT-4o, GPT-4o-mini | Automatic prompt caching at ≥1024-token prefixes. |
 | **Google Gemini** | Gemini 2.5 Pro (2 M context!), 2.5 Flash, 1.5 Flash | Largest free-tier context windows. |
+| **DeepSeek** | deepseek-chat, deepseek-reasoner | OpenAI-compatible API (`DEEPSEEK_API_KEY`); JSON is prompt-driven (degrades gracefully). |
+| **Mistral** | Mistral Large / Small, Codestral | OpenAI-compatible API (`MISTRAL_API_KEY`). |
+| **Cohere** | Command R+ / R, Command A | Cohere's OpenAI-compatibility endpoint (`COHERE_API_KEY`). |
 | **Ollama** | Whatever you've `ollama pull`'d | Local-only, no API key, no per-token cost. |
 | **`claude-cli`** | Whatever your local Claude Code uses | Subprocess of `claude -p -` — no API key on our side; reuses your Claude Code subscription. `commitbrief --cli claude --staged`. |
 | **`gemini-cli`** | Whatever your local Gemini CLI uses | Subprocess of `gemini -p` — no API key on our side; reuses your Gemini CLI auth. `commitbrief --cli gemini --staged`. |

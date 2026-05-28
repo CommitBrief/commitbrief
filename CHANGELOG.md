@@ -18,6 +18,17 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   comments is now derived from the PR's `url` field (which always points
   at the base repo, including cross-fork PRs).
 ### Added
+- **Three new providers: DeepSeek, Mistral, Cohere.** Each is a standalone
+  provider package reusing the `openai-go` SDK pointed at the provider's
+  OpenAI-compatible endpoint — **no new dependency** (DeepSeek
+  `api.deepseek.com`, Mistral `api.mistral.ai/v1`, Cohere's
+  `compatibility/v1`). API keys via config or `DEEPSEEK_API_KEY` /
+  `MISTRAL_API_KEY` / `COHERE_API_KEY`; all three appear in
+  `commitbrief setup`. Structured output is prompt-driven (no
+  `response_format`) since these providers' strict-JSON support varies —
+  the retry-once-then-degrade pipeline (ADR-0014) covers non-conforming
+  output, same as Ollama. Total live providers: **9** (4 API + these 3 +
+  2 CLI-backed).
 - **`--suggest-commit`.** After the review, makes a second free-form
   provider call and prints a single Conventional Commit message for the
   staged diff to stdout. Read-only — it suggests, never writes git
