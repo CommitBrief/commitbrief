@@ -120,7 +120,7 @@ func TestSubmitReviewThreadsRepo(t *testing.T) {
 func TestPostCommentSendsSideRight(t *testing.T) {
 	fr := &fakeRunner{}
 	c := CommentRequest{
-		Owner: "octo", Repo: "demo", PRNumber: 7,
+		RepoSlug: "octo/demo", PRNumber: 7,
 		CommitID: "deadbeef", Path: "main.go", Line: 12, Body: "x",
 	}
 	if err := PostComment(context.Background(), fr, c); err != nil {
@@ -140,7 +140,7 @@ func TestPostCommentSendsSideRight(t *testing.T) {
 
 func TestPostCommentPropagatesError(t *testing.T) {
 	fr := &fakeRunner{errs: []error{errors.New("422 Unprocessable Entity")}}
-	err := PostComment(context.Background(), fr, CommentRequest{Owner: "o", Repo: "r", PRNumber: 1, Path: "f", Line: 1})
+	err := PostComment(context.Background(), fr, CommentRequest{RepoSlug: "o/r", PRNumber: 1, Path: "f", Line: 1})
 	if err == nil {
 		t.Fatal("expected error to propagate so the caller can count/skip it")
 	}

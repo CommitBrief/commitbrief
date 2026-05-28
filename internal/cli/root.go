@@ -125,6 +125,7 @@ func newRootCmd() *cobra.Command {
 		newCompressCmd(),
 		newCacheCmd(),
 		newDiffCmd(),
+		newRemoteCmd(),
 	)
 	return cmd
 }

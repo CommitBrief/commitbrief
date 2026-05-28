@@ -30,11 +30,11 @@ func BuildCommentBody(f render.Finding, whoami string) string {
 	return b.String()
 }
 
-// CommentRequest is one inline comment to POST. Owner/Repo come from the
-// PR's baseRepository (cross-fork correctness); CommitID is the head OID.
+// CommentRequest is one inline comment to POST. RepoSlug is the PR's
+// baseRepository ("owner/name", cross-fork correctness); CommitID is the
+// head OID the diff was fetched at.
 type CommentRequest struct {
-	Owner    string
-	Repo     string
+	RepoSlug string
 	PRNumber int
 	CommitID string
 	Path     string
@@ -47,7 +47,7 @@ type CommentRequest struct {
 // finding pinned to a deleted line may return 422, which the caller
 // swallows per-comment (ADR-0016 §9).
 func PostComment(ctx context.Context, r Runner, c CommentRequest) error {
-	endpoint := fmt.Sprintf("/repos/%s/%s/pulls/%d/comments", c.Owner, c.Repo, c.PRNumber)
+	endpoint := fmt.Sprintf("/repos/%s/pulls/%d/comments", c.RepoSlug, c.PRNumber)
 	_, err := r.Run(ctx,
 		"api", "--method", "POST",
 		"-H", "Accept: application/vnd.github+json",
