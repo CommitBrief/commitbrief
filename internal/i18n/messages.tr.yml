@@ -143,3 +143,8 @@ remote.posted_summary: "%d/%d yorum gönderildi, %d başarısız."
 remote.action_approve: "PR #%d onaylandı."
 remote.action_comment: "PR #%d yalnızca yorum olarak gönderildi."
 remote.action_request_changes: "PR #%d için değişiklik talep edildi."
+
+# --suggest-commit (ADR-0015)
+commit.suggested_header: "Önerilen commit mesajı:"
+commit.suggest_staged_only: "--suggest-commit yalnızca staged değişikliklerle çalışır; --staged kullanın (--unstaged veya diff subcommand ile değil)."
+commit.suggest_output_conflict: "--suggest-commit; --json, --markdown veya --output ile birlikte kullanılamaz."

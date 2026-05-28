@@ -176,7 +176,10 @@ commitbrief cache prune [flags]            # bounded cleanup; defaults --keep-la
 ```
 
 Global flags: `--json`, `--markdown`, `--output <file>`, `--copy`,
-`--compact`, `--no-cache`, `--fail-on=<sev>`, `--min-severity=<sev>`
+`--suggest-commit` (after the review, suggest a Conventional Commit
+message for the staged diff; prints to stdout, requires `--staged`, not
+with `--json`/`--markdown`/`--output`), `--compact`, `--no-cache`,
+`--fail-on=<sev>`, `--min-severity=<sev>`
 (hide findings below this severity in the rendered output; `--json` and
 `--fail-on` still see the full set), `-f/--file` (repeatable),
 `-d/--dir` (repeatable), `--yes`, `--verbose`, `--quiet`, `--lang`,

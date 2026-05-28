@@ -18,6 +18,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   comments is now derived from the PR's `url` field (which always points
   at the base repo, including cross-fork PRs).
 ### Added
+- **`--suggest-commit`.** After the review, makes a second free-form
+  provider call and prints a single Conventional Commit message for the
+  staged diff to stdout. Read-only — it suggests, never writes git
+  (NG4-safe). Requires the staged scope (`--staged` or the default run);
+  rejected with `--unstaged`, the `diff` subcommand, and
+  `--json`/`--markdown`/`--output`. Works with every provider via the new
+  additive `provider.Request.FreeForm`, which makes API providers
+  (Anthropic / OpenAI / Gemini / Ollama) skip their structured-output
+  enforcement for this one call. The suggestion itself is not yet cached
+  (the review — the expensive call — still is). See ADR-0015.
 - **`--min-severity=<level>` display filter.** Hides findings below the
   given severity in the rendered output (Cards, Markdown, `--copy`).
   `--json` stays complete (machine contract) and `--fail-on` always
