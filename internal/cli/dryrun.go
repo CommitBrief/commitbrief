@@ -85,7 +85,7 @@ func newDryRunCmd() *cobra.Command {
 					modelName = prov.DefaultModel()
 				}
 				contextWindow = prov.ContextWindow(modelName)
-				estCost = prov.Pricing(modelName).Cost(provider.Usage{
+				estCost = resolvePricing(app.Config, prov, modelName).Cost(provider.Usage{
 					InputTokens:  inputTokens,
 					OutputTokens: outputTokens,
 				})

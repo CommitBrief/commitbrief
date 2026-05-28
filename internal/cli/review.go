@@ -238,7 +238,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				Cached:       true,
 				Timestamp:    entry.CreatedAt,
 				Usage:        usage,
-				Cost:         prov.Pricing(model).Cost(usage),
+				Cost:         resolvePricing(app.Config, prov, model).Cost(usage),
 				Files:        parsed.FileCount(),
 				LinesAdded:   parsed.AddedLines(),
 				LinesRemoved: parsed.DeletedLines(),
@@ -284,7 +284,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			InputTokens:  p.EstimatedTokens(),
 			OutputTokens: estimateOutputTokens(p.EstimatedTokens()),
 		}
-		estCost := prov.Pricing(model).Cost(estUsage)
+		estCost := resolvePricing(app.Config, prov, model).Cost(estUsage)
 		prog.Pause()
 		if abort := handleCostPreflight(cmd, app, estCost, stdinReader); abort {
 			return errors.New(app.Catalog.T("cost.aborted_user"))
@@ -356,7 +356,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		Model:        respModel,
 		Lang:         app.Lang.Code,
 		Usage:        usage,
-		Cost:         prov.Pricing(respModel).Cost(usage),
+		Cost:         resolvePricing(app.Config, prov, respModel).Cost(usage),
 		Latency:      latency,
 		Timestamp:    time.Now().UTC(),
 		Files:        parsed.FileCount(),

@@ -297,6 +297,10 @@ provider: anthropic                # default provider
 providers:
   anthropic:
     model: claude-opus-4-7
+    pricing:                         # optional: override built-in $/1M rates
+      claude-opus-4-7:               # (cost preflight / verbose footer / cache)
+        input_per_1m: 15.0
+        output_per_1m: 75.0          # omitted fields keep the built-in value
   openai:
     model: gpt-4o
   ollama:

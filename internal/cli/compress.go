@@ -77,7 +77,7 @@ func newCompressCmd() *cobra.Command {
 			latency := time.Since(start)
 
 			percent, deltaTokens := result.Savings()
-			pricing := prov.Pricing(model)
+			pricing := resolvePricing(app.Config, prov, model)
 			// Cost-per-review input savings: input-token rate * delta tokens.
 			perReviewSavedUSD := float64(deltaTokens) * pricing.InputPer1M / 1_000_000
 
