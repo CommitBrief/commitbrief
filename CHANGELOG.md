@@ -8,7 +8,7 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
-## [Unreleased]
+## [1.1.0] - 2026-05-28
 
 ### Added
 - **`commitbrief remote pr <ID>` — terminal-driven GitHub PR review**
