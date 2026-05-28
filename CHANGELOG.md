@@ -8,7 +8,7 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
-## [Unreleased]
+## [1.2.0]
 
 ### Fixed
 - **`commitbrief remote pr` no longer requests a non-existent `gh` JSON
