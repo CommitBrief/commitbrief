@@ -117,9 +117,13 @@ func (c *Client) buildParams(req provider.Request) ([]*sdk.Content, *sdk.Generat
 		{Role: sdk.RoleUser, Parts: []*sdk.Part{sdk.NewPartFromText(req.UserPrompt)}},
 	}
 	cfg := &sdk.GenerateContentConfig{
-		MaxOutputTokens:  maxTokens,
-		ResponseMIMEType: "application/json",
-		ResponseSchema:   responseSchema(),
+		MaxOutputTokens: maxTokens,
+	}
+	// Structured-findings JSON contract (ADR-0014). Omitted for FreeForm
+	// (ADR-0015) so the model returns a plain-text completion.
+	if !req.FreeForm {
+		cfg.ResponseMIMEType = "application/json"
+		cfg.ResponseSchema = responseSchema()
 	}
 	if req.SystemPrompt != "" {
 		cfg.SystemInstruction = &sdk.Content{

@@ -145,3 +145,8 @@ remote.posted_summary: "Posted %d/%d comments, %d failed."
 remote.action_approve: "Approved PR #%d."
 remote.action_comment: "Submitted as comment-only on PR #%d."
 remote.action_request_changes: "Requested changes on PR #%d."
+
+# --suggest-commit (ADR-0015)
+commit.suggested_header: "Suggested commit message:"
+commit.suggest_staged_only: "--suggest-commit only works with staged changes; use --staged (not --unstaged or the diff subcommand)."
+commit.suggest_output_conflict: "--suggest-commit can't be combined with --json, --markdown, or --output."

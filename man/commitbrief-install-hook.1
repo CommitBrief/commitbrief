@@ -95,6 +95,10 @@ comment). Refuses to touch a hook that doesn't carry our marker.
 	emit plain markdown (no ANSI)
 
 .PP
+\fB--min-severity\fP=""
+	hide findings below this severity in the rendered output (critical|high|medium|low|info); --json and --fail-on still see the full set
+
+.PP
 \fB--model\fP=""
 	override configured model
 
@@ -117,6 +121,10 @@ comment). Refuses to touch a hook that doesn't carry our marker.
 .PP
 \fB-q\fP, \fB--quiet\fP[=false]
 	suppress info messages on stderr
+
+.PP
+\fB--suggest-commit\fP[=false]
+	after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)
 
 .PP
 \fB-v\fP, \fB--verbose\fP[=false]

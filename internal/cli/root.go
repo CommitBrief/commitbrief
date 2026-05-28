@@ -17,27 +17,28 @@ import (
 )
 
 type globalFlags struct {
-	json         bool
-	markdown     bool
-	output       string
-	noCache      bool
-	yes          bool
-	verbose      bool
-	quiet        bool
-	compact      bool
-	allowSecrets bool
-	noCostCheck  bool
-	copy         bool
-	failOn       string
-	minSeverity  string
-	lang         string
-	provider     string
-	model        string
-	color        string
-	cli          string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
-	files        []string // global --file (repeatable); path filter applied post-parse
-	dirs         []string // global --dir (repeatable); prefix filter applied post-parse
-	genMan       string   // hidden: --gen-man <dir> writes man pages and exits
+	json          bool
+	markdown      bool
+	output        string
+	noCache       bool
+	yes           bool
+	verbose       bool
+	quiet         bool
+	compact       bool
+	allowSecrets  bool
+	noCostCheck   bool
+	copy          bool
+	suggestCommit bool
+	failOn        string
+	minSeverity   string
+	lang          string
+	provider      string
+	model         string
+	color         string
+	cli           string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
+	files         []string // global --file (repeatable); path filter applied post-parse
+	dirs          []string // global --dir (repeatable); prefix filter applied post-parse
+	genMan        string   // hidden: --gen-man <dir> writes man pages and exits
 }
 
 var global globalFlags
@@ -87,6 +88,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
 	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
 	flags.BoolVar(&global.copy, "copy", false, "copy findings (severity, path, title, description) to the system clipboard via OSC 52 + native tool")
+	flags.BoolVar(&global.suggestCommit, "suggest-commit", false, "after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)")
 	flags.StringVar(&global.failOn, "fail-on", "", "exit 1 if any finding meets/exceeds severity (critical|high|medium|low|info|any|none)")
 	flags.StringVar(&global.minSeverity, "min-severity", "", "hide findings below this severity in the rendered output (critical|high|medium|low|info); --json and --fail-on still see the full set")
 	flags.StringVar(&global.lang, "lang", "", "override output language (e.g. tr, en)")

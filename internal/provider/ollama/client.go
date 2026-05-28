@@ -123,13 +123,19 @@ func (c *Client) buildBody(req provider.Request, stream bool) chatRequest {
 	}
 	messages = append(messages, chatMessage{Role: "user", Content: req.UserPrompt})
 
-	return chatRequest{
+	body := chatRequest{
 		Model:    model,
 		Messages: messages,
 		Stream:   stream,
 		Format:   formatJSON,
 		Options:  &chatOptions{NumPredict: maxTokens},
 	}
+	// FreeForm (ADR-0015): drop format:"json" (omitempty) so the model
+	// returns a plain-text completion instead of the findings envelope.
+	if req.FreeForm {
+		body.Format = ""
+	}
+	return body
 }
 
 func (c *Client) postJSON(ctx context.Context, path string, body chatRequest) (*http.Response, error) {

@@ -58,6 +58,18 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		return err
 	}
 
+	// --suggest-commit (ADR-0015) is staged-only and conflicts with the
+	// structured / file-output flags. Validate up front so a misuse fails
+	// before any provider call.
+	if global.suggestCommit {
+		if scope.unstaged || len(diffArgs) > 0 {
+			return errors.New(app.Catalog.T("commit.suggest_staged_only"))
+		}
+		if global.json || global.markdown || global.output != "" {
+			return errors.New(app.Catalog.T("commit.suggest_output_conflict"))
+		}
+	}
+
 	// Load rules + output template up front so any "using built-in"
 	// infof emissions land BEFORE the progress UI starts animating —
 	// otherwise they would interleave with the spinner's cursor-up
@@ -250,6 +262,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			} else if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
 				return err
 			}
+			if err := suggestCommitMessage(ctx, cmd, app, prov, model, diffText); err != nil {
+				return err
+			}
 			handleCopyFlag(cmd, app, findings)
 			return applyFailOn(cmd, app, findings)
 		}
@@ -386,6 +401,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	} else if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
 		return err
 	}
+	if err := suggestCommitMessage(ctx, cmd, app, prov, model, diffText); err != nil {
+		return err
+	}
 	handleCopyFlag(cmd, app, findings)
 	return applyFailOn(cmd, app, findings)
 }
@@ -430,6 +448,38 @@ func wrapPlainText(content string) string {
 	body = strings.TrimSpace(strings.TrimPrefix(body, plainTextRule))
 	body = strings.TrimSpace(strings.TrimSuffix(body, plainTextRule))
 	return plainTextRule + "\n\n" + body + "\n\n" + plainTextRule + "\n\n"
+}
+
+// suggestCommitMessage runs a second, free-form provider call (ADR-0015)
+// to produce a Conventional Commit message for the staged diff and prints
+// it to stdout after the review. No-op unless --suggest-commit is set.
+//
+// The suggestion is NOT cached and skips the cost preflight: the review
+// (the expensive call) is already cached and preflighted, and the
+// commit-message prompt is small. Caching the suggestion is a follow-up.
+// Works for every provider — FreeForm makes API providers return plain
+// text, and PlainTextEmitter providers already do.
+func suggestCommitMessage(ctx context.Context, cmd *cobra.Command, app *appContext, prov provider.Provider, model, diffText string) error {
+	if !global.suggestCommit {
+		return nil
+	}
+	p := prompt.BuildCommitMessage(diffText)
+	resp, err := prov.Review(ctx, provider.Request{
+		Model:        model,
+		SystemPrompt: p.System,
+		UserPrompt:   p.User,
+		Lang:         app.Lang.Code,
+		FreeForm:     true,
+	})
+	if err != nil {
+		return fmt.Errorf("suggest-commit: %w", err)
+	}
+	block := "\n" + app.Catalog.T("commit.suggested_header") + "\n\n" +
+		strings.TrimSpace(resp.Content) + "\n\n"
+	if _, err := io.WriteString(cmd.OutOrStdout(), block); err != nil {
+		return fmt.Errorf("suggest-commit: write: %w", err)
+	}
+	return nil
 }
 
 // handleCopyFlag pushes a plain-text summary of findings onto the
