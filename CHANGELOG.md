@@ -18,6 +18,12 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   comments is now derived from the PR's `url` field (which always points
   at the base repo, including cross-fork PRs).
 ### Added
+- **CI integration: the `commitbrief-action` GitHub Action.** A separate
+  repo (`CommitBrief/commitbrief-action`) ships a composite action that
+  runs CommitBrief on pull requests — either posting inline review
+  comments + a verdict (`comment` mode, via `remote pr`) or running an
+  exit-code gate (`gate` mode, via `diff --fail-on`). The README's new
+  "Continuous integration" section documents usage; no CLI change.
 - **Three new providers: DeepSeek, Mistral, Cohere.** Each is a standalone
   provider package reusing the `openai-go` SDK pointed at the provider's
   OpenAI-compatible endpoint — **no new dependency** (DeepSeek

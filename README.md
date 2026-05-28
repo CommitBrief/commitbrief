@@ -242,6 +242,32 @@ sets the severity at or above which the verdict becomes request-changes;
 provider. `--fail-on` is ignored here — the GitHub verdict replaces the
 exit-code gate.
 
+## Continuous integration
+
+Run CommitBrief on pull requests with the **[CommitBrief Review GitHub
+Action](https://github.com/CommitBrief/commitbrief-action)**:
+
+```yaml
+# .github/workflows/commitbrief.yml
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write   # comment mode posts the review
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: CommitBrief/commitbrief-action@v1
+        with:
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+It posts each finding as an inline review comment plus a verdict
+(`comment` mode, via `remote pr`), or runs an exit-code gate
+(`mode: gate`, via `diff --fail-on`). You can also drive the binary
+directly in any workflow: `commitbrief diff <base>...<head> --fail-on=high`.
+
 ## Configuration
 
 Two-tier YAML config with field-level merge:
@@ -371,9 +397,10 @@ pieces are in place: `--fail-on=<severity>` (or `--fail-on=any`)
 returns a non-zero exit code when a finding meets or exceeds the
 threshold, `--json` emits the structured-findings document machine-
 readably, and `commitbrief install-hook` scaffolds a pre-commit /
-commit-msg / pre-push hook locally. A dedicated GitHub Action wrapper
-is still on the v1.x roadmap; for now drive the binary directly from
-your workflow.
+commit-msg / pre-push hook locally. For pull-request CI there's the
+[CommitBrief Review GitHub Action](https://github.com/CommitBrief/commitbrief-action)
+(see "Continuous integration" above), or you can drive the binary
+directly from any workflow.
 
 **Why GPL-3.0?**
 The CLI is end-user software, and copyleft keeps forks and
