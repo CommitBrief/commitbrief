@@ -216,7 +216,7 @@ func jsonField(args []string) string {
 
 func prMetaJSON(author, oid string) string {
 	return `{"number":42,"author":{"login":"` + author + `"},` +
-		`"baseRepository":{"name":"web","owner":{"login":"CommitBrief"}},` +
+		`"url":"https://github.com/CommitBrief/web/pull/42",` +
 		`"headRepository":{"name":"web","owner":{"login":"forker"}},` +
 		`"commits":[{"oid":"` + oid + `"}]}`
 }

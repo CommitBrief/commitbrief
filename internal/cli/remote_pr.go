@@ -220,7 +220,7 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 	if len(postable) > 0 {
 		infof("%s", cat.T("remote.posting_comments", len(postable)))
 	}
-	slug := meta.BaseRepository.Slug()
+	slug := meta.BaseSlug()
 	posted, failed := 0, 0
 	for _, fnd := range postable {
 		if fnd.Line <= 0 {

@@ -10,6 +10,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Fixed
+- **`commitbrief remote pr` no longer requests a non-existent `gh` JSON
+  field.** `gh pr view --json` has no `baseRepository` field, so the PR
+  fetch failed with `Unknown JSON field: "baseRepository"` against every
+  real `gh` version. The base repository slug used for posting inline
+  comments is now derived from the PR's `url` field (which always points
+  at the base repo, including cross-fork PRs).
 ### Added
 - **`--min-severity=<level>` display filter.** Hides findings below the
   given severity in the rendered output (Cards, Markdown, `--copy`).

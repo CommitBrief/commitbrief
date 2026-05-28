@@ -150,7 +150,7 @@ func TestFetchPRMetaUnmarshal(t *testing.T) {
 	canned := []byte(`{
 		"number": 42,
 		"author": {"login": "contributor"},
-		"baseRepository": {"name": "web", "owner": {"login": "CommitBrief"}},
+		"url": "https://github.com/CommitBrief/web/pull/42",
 		"headRepository": {"name": "web", "owner": {"login": "fork-user"}},
 		"commits": [{"oid": "aaa"}, {"oid": "bbb"}]
 	}`)
@@ -165,11 +165,28 @@ func TestFetchPRMetaUnmarshal(t *testing.T) {
 	if m.AuthorLogin() != "contributor" {
 		t.Errorf("author = %q, want contributor", m.AuthorLogin())
 	}
-	if got := m.BaseRepository.Slug(); got != "CommitBrief/web" {
+	if got := m.BaseSlug(); got != "CommitBrief/web" {
 		t.Errorf("base slug = %q, want CommitBrief/web", got)
 	}
 	if got := m.LastOID(); got != "bbb" {
 		t.Errorf("last oid = %q, want bbb", got)
+	}
+}
+
+func TestBaseSlug(t *testing.T) {
+	cases := []struct {
+		url, want string
+	}{
+		{"https://github.com/CommitBrief/web/pull/42", "CommitBrief/web"},
+		{"https://github.com/greenglobaltr/BulutApi/pull/1652", "greenglobaltr/BulutApi"},
+		{"https://ghe.example.com/org/repo/pull/3", "org/repo"},
+		{"", ""},
+		{"not-a-url", ""},
+	}
+	for _, c := range cases {
+		if got := (PRMeta{URL: c.url}).BaseSlug(); got != c.want {
+			t.Errorf("BaseSlug(%q) = %q, want %q", c.url, got, c.want)
+		}
 	}
 }
 
