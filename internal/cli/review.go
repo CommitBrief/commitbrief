@@ -52,6 +52,12 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		return err
 	}
 
+	// Validate --min-severity up front so a typo fails fast instead of
+	// silently showing every finding after a paid provider round-trip.
+	if _, _, err := parseMinSeverity(global.minSeverity); err != nil {
+		return err
+	}
+
 	// Load rules + output template up front so any "using built-in"
 	// infof emissions land BEFORE the progress UI starts animating —
 	// otherwise they would interleave with the spinner's cursor-up
@@ -441,6 +447,9 @@ func handleCopyFlag(cmd *cobra.Command, app *appContext, findings []render.Findi
 	if !global.copy {
 		return
 	}
+	// Copy honours --min-severity too — it's a display/share surface, so
+	// the user only shares what they chose to see.
+	findings = filterMinSeverity(findings)
 	w := cmd.ErrOrStderr()
 	hint := func(key string, args ...any) {
 		if global.quiet {
@@ -580,10 +589,15 @@ func renderResult(cmd *cobra.Command, content, outputTemplate string, findings [
 	}
 	defer closer()
 
-	// JSON is machine output: emit it exactly, with no trailing blank line.
+	// JSON is machine output: emit it exactly (full, unfiltered) with no
+	// trailing blank line. --min-severity is a display-only filter and
+	// must not touch the machine contract.
 	if global.json {
 		return render.JSON(w, payload)
 	}
+
+	// Human render paths honour --min-severity (Cards / Markdown).
+	payload.Findings = filterMinSeverity(payload.Findings)
 
 	var rerr error
 	switch {
