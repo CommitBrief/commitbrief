@@ -208,7 +208,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	numberedDiff := parsed.NumberedString()
 	var p prompt.Prompt
 	if plainText {
-		p = prompt.BuildPlainText(loaded, app.Lang, numberedDiff)
+		p = prompt.BuildPlainText(loaded, app.Lang, numberedDiff, global.withContext)
 	} else {
 		p = prompt.Build(loaded, app.Lang, numberedDiff)
 	}
