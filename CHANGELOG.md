@@ -35,6 +35,9 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   lines — `remote pr` shows fetch → review → post → submit. The finished
   tree stays on screen (it is not cleared) for these commands since no
   rich card output replaces it.
+- **Startup banner tweaks.** The footer links now point to the repo
+  **Issues** page (replacing the GitHub link) and drop the Author link;
+  the license tag reads `GNU GPL v3` instead of `GNU-GPL3.0`.
 - **`remote pr` suggestion lines are prefixed with `💡`.** The remediation
   line in both inline comments and the review-summary fallback now starts
   with `💡 ` so it reads distinctly from the description. The signature was

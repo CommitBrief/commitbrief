@@ -144,15 +144,14 @@ func Print(w io.Writer, version string) {
 
 	gap := "   "
 	word := bold + fg(ink50) + "commitbrief" + reset + " " +
-		fg(ink300) + version + " © GNU-GPL3.0" + reset
+		fg(ink300) + version + " © GNU GPL v3" + reset
 	tagline := fg(ink300) + "LLM-driven code review for git diffs" + reset
 
 	sep := fg(ink300) + " · " + reset
 	links := fg(ink50) + link("https://commitbrief.com", "Home") + reset + sep +
 		fg(ink50) + link("https://commitbrief.com/docs", "Docs") + reset + sep +
-		fg(ink50) + link("https://github.com/CommitBrief/commitbrief", "GitHub") + reset + sep +
-		fg(ink50) + link("https://github.com/sponsors/muhammetsafak", "Donation") + reset + sep +
-		fg(ink50) + link("https://www.muhammetsafak.com.tr", "Author") + reset
+		fg(ink50) + link("https://github.com/CommitBrief/commitbrief/issues", "Issues") + reset + sep +
+		fg(ink50) + link("https://github.com/sponsors/muhammetsafak", "Donation") + reset
 
 	lines[2] += gap + word
 	lines[4] += gap + tagline
