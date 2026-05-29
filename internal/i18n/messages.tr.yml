@@ -125,7 +125,7 @@ doctor.detail.gitignore_no_entry: ".commitbrief/ listede yok; eklemek için 'com
 # remote pr — gh ile GitHub PR review (ADR-0016, v1.1.0). Yalnızca yerel stderr;
 # GitHub'a gönderilen metin internal/remote içinde sabit İngilizce kalır.
 remote.gh_missing: "remote pr: 'gh' CLI gerekli ama PATH'te yok. https://cli.github.com adresinden kurun (brew install gh / winget install GitHub.cli / dnf install gh)."
-remote.plain_text_provider: "remote pr: CLI-tabanlı provider'lar (claude-cli / gemini-cli) yapılandırılmış bulgu üretemez. Bir API provider kullanın (anthropic / openai / gemini / ollama)."
+remote.plain_text_provider: "remote pr: CLI-tabanlı provider'lar (claude-cli / gemini-cli / codex-cli) yapılandırılmış bulgu üretemez. Bir API provider kullanın (anthropic / openai / gemini / ollama)."
 remote.request_changes_on_info: "remote pr: --request-changes-on=info geçersiz; yalnızca info içeren bir review'da değişiklik talep edemezsiniz."
 remote.request_changes_on_invalid: "remote pr: geçersiz --request-changes-on=%q (critical, high, medium veya low kullanın)."
 remote.self_pr_blocked: "remote pr: bu PR'ın yazarı sizsiniz; GitHub kendi PR'ınızı incelemenize izin vermez."

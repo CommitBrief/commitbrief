@@ -10,6 +10,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [1.2.1]
 
+### Added
+- **New CLI-tool-backed provider: `codex-cli`.** Drives a locally
+  installed OpenAI Codex CLI (`codex`) as the review engine, joining
+  `claude-cli` and `gemini-cli`. Selectable via `--cli codex` or
+  `--provider codex-cli`; no API key needed (reuses the host CLI's auth).
+  Driven through `codex exec --sandbox read-only --skip-git-repo-check`
+  (non-interactive, read-only). Like the other CLI providers it is a plain-text emitter —
+  no structured findings, so `--json` / `--markdown` / `remote pr` do not
+  apply.
+
 ### Fixed
 - **`commitbrief remote pr` no longer mis-places inline comments.**
   Comments are now anchored to the diff side each finding's line lives on
