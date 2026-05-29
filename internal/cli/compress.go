@@ -63,7 +63,14 @@ func newCompressCmd() *cobra.Command {
 				model = prov.DefaultModel()
 			}
 
-			infof("%s", app.Catalog.T("compress.compressing", rulesPath, prov.Name(), model, level))
+			// Same staged-tree progress as review / remote pr. compress
+			// is a single long provider call, so it is one stage; we Close
+			// (not Clear) to keep the finished stage line on screen above
+			// the result block, and stop the animation before the stdout
+			// report and the interactive replace prompt take the terminal.
+			prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
+			defer prog.Close()
+			prog.Start(app.Catalog.T("compress.compressing", rulesPath, prov.Name(), model, level))
 
 			start := time.Now()
 			result, err := compress.Run(cmd.Context(), prov, compress.Request{
@@ -72,9 +79,11 @@ func newCompressCmd() *cobra.Command {
 				Model:    model,
 			})
 			if err != nil {
+				prog.Fail(err)
 				return err
 			}
 			latency := time.Since(start)
+			prog.Close()
 
 			percent, deltaTokens := result.Savings()
 			pricing := resolvePricing(app.Config, prov, model)
