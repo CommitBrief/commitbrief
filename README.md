@@ -28,8 +28,9 @@ read on your diff before another human (or your future self) sees it.
 - **Local-first.** Diffs and review output stay on your machine. The
   only network egress is to the provider you chose.
 - **Provider-agnostic.** Anthropic, OpenAI, Gemini, or Ollama as
-  API-backed providers; `claude-cli` and `gemini-cli` reuse your
-  local Claude Code / Gemini CLI subscription (no extra API key).
+  API-backed providers; `claude-cli`, `gemini-cli`, and `codex-cli`
+  reuse your local Claude Code / Gemini / Codex CLI subscription (no
+  extra API key).
 - **Cache aware.** Re-running on an unchanged diff is essentially free —
   one disk read, no token spend. `--verbose` shows what you saved.
 - **Custom review rules.** A repo's `COMMITBRIEF.md` is sent as the
@@ -183,7 +184,7 @@ with `--json`/`--markdown`/`--output`), `--compact`, `--no-cache`,
 (hide findings below this severity in the rendered output; `--json` and
 `--fail-on` still see the full set), `-f/--file` (repeatable),
 `-d/--dir` (repeatable), `--yes`, `--verbose`, `--quiet`, `--lang`,
-`--provider`, `--model`, `--cli <claude|gemini>` (shorthand for the
+`--provider`, `--model`, `--cli <claude|gemini|codex>` (shorthand for the
 CLI-tool-backed providers; mutually exclusive with `--json` /
 `--markdown`), `--allow-secrets` (acknowledge a flagged credential in
 the diff), `--no-cost-check` (skip cost preflight), `--color`. See
@@ -204,6 +205,7 @@ Four API providers + two CLI-tool-backed providers ship in the box:
 | **Ollama** | Whatever you've `ollama pull`'d | Local-only, no API key, no per-token cost. |
 | **`claude-cli`** | Whatever your local Claude Code uses | Subprocess of `claude -p -` — no API key on our side; reuses your Claude Code subscription. `commitbrief --cli claude --staged`. |
 | **`gemini-cli`** | Whatever your local Gemini CLI uses | Subprocess of `gemini -p` — no API key on our side; reuses your Gemini CLI auth. `commitbrief --cli gemini --staged`. |
+| **`codex-cli`** | Whatever your local Codex CLI uses | Subprocess of `codex exec --sandbox read-only --skip-git-repo-check` — no API key on our side; reuses your Codex CLI (ChatGPT) auth. `commitbrief --cli codex --staged`. |
 
 CLI-backed providers emit pre-formatted plain text — they bypass the
 structured-findings JSON path, the per-finding cards renderer, and the
@@ -219,8 +221,8 @@ subscription and don't want to manage a second API key.
 Adding a provider is one new package under `internal/provider/<name>/`.
 
 > The `remote pr` subcommand (below) requires an **API provider** —
-> `claude-cli` / `gemini-cli` are incompatible because they don't produce
-> structured findings.
+> `claude-cli` / `gemini-cli` / `codex-cli` are incompatible because they
+> don't produce structured findings.
 
 ## Reviewing pull requests from the terminal
 

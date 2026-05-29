@@ -13,6 +13,7 @@ import (
 	// a local subprocess rather than an HTTPS API.
 	_ "github.com/CommitBrief/commitbrief/internal/provider/anthropic"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/claude-cli"
+	_ "github.com/CommitBrief/commitbrief/internal/provider/codex-cli"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/cohere"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/deepseek"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/gemini"

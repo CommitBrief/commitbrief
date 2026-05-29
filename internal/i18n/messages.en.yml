@@ -127,7 +127,7 @@ doctor.detail.gitignore_no_entry: ".commitbrief/ not listed; run 'commitbrief se
 # remote pr — GitHub PR review via gh (ADR-0016, v1.1.0). Local stderr only;
 # text posted to GitHub stays hardcoded English in internal/remote.
 remote.gh_missing: "remote pr: the 'gh' CLI is required but not on PATH. Install it from https://cli.github.com (brew install gh / winget install GitHub.cli / dnf install gh)."
-remote.plain_text_provider: "remote pr: CLI-tool-backed providers (claude-cli / gemini-cli) can't produce structured findings. Use an API provider (anthropic / openai / gemini / ollama)."
+remote.plain_text_provider: "remote pr: CLI-tool-backed providers (claude-cli / gemini-cli / codex-cli) can't produce structured findings. Use an API provider (anthropic / openai / gemini / ollama)."
 remote.request_changes_on_info: "remote pr: --request-changes-on=info is not valid; you cannot request changes on an info-only review."
 remote.request_changes_on_invalid: "remote pr: invalid --request-changes-on=%q (use critical, high, medium, or low)."
 remote.self_pr_blocked: "remote pr: you are the author of this PR; GitHub does not allow self-review."

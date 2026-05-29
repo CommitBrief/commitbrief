@@ -117,11 +117,45 @@ implementation that costs a few ns may still be net-positive).
 3. Material decisions or scope changes update the appropriate ADR
    (open a new ADR if needed — supersede rather than silently contradict
    an existing one).
-4. New dependencies pass `make license-check` (must be GPL-3.0-compatible —
-   MIT, Apache-2.0, BSD, ISC, MPL-2.0, GPL/LGPL-3.0+ are fine; AGPL and
-   proprietary are not).
+4. New dependencies follow the [Adding a dependency](#adding-a-dependency)
+   checklist and pass `make license-check`.
 5. Pre-release tags additionally pass `make release-check` (e.g. the
    `internal/rules/default.md` placeholder guard from PRD §10 / OQ-25).
+
+The fastest way to clear gates 1, 2, and 4 (plus the SPDX-header and
+i18n parity checks) in one shot is `make check` — the same gate CI runs.
+
+## Adding a dependency
+
+New third-party modules are accepted but deliberately rare. Every import
+becomes combined work under GPL-3.0 (the conservative reading for
+statically-linked Go), adds supply-chain surface, and grows the binary.
+Before adding one, work through this checklist:
+
+1. **Justify it.** Can the standard library or an already-required module
+   do the job? For a new LLM provider specifically, prefer reusing the
+   existing `openai-go` client against the provider's OpenAI-compatible
+   endpoint — the `deepseek` / `mistral` / `cohere` packages do exactly
+   this and add **zero** new dependencies — before pulling in a bespoke
+   SDK.
+2. **Check the license.** It must be on the GPL-3.0-compatible allow-list
+   maintained in `scripts/license-check.sh`: `Apache-2.0`, `BSD-2-Clause`,
+   `BSD-3-Clause`, `GPL-3.0(-or-later)`, `ISC`, `LGPL-3.0(-or-later)`,
+   `MIT`, `MPL-2.0`, `Unlicense`. **AGPL, proprietary, and anything not on
+   the list are rejected — no exceptions.** Check the module's own license
+   *and* its transitive dependencies.
+3. **Add and sync.** `go get <module>@<version>`, then `make tidy` so
+   `go.mod` / `go.sum` stay clean and minimal. Pin a specific released
+   version, not a branch or pseudo-version, unless there is no tagged
+   release.
+4. **Audit.** `make license-check` must pass locally — it runs
+   `go-licenses` over the entire module graph (transitive deps included),
+   not just your direct addition. CI enforces it too.
+5. **If it's incompatible, don't vendor it.** When a module you want ships
+   under an incompatible license, build the integration in-house or find a
+   compatible replacement rather than adding it.
+6. **Document.** State the new dependency and why in the PR description.
+   If it changes user-facing behavior, add a `CHANGELOG.md` entry.
 
 ## Cross-platform notes
 

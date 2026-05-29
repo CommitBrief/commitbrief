@@ -97,7 +97,7 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
 	flags.StringSliceVarP(&global.files, "file", "f", nil, "review only these files (repeatable); combines with the active scope flag")
 	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories (repeatable); combines with the active scope flag")
-	flags.StringVar(&global.cli, "cli", "", "use a locally-installed CLI tool (claude|gemini) as the review backend; shorthand for --provider <name>-cli")
+	flags.StringVar(&global.cli, "cli", "", "use a locally-installed CLI tool (claude|gemini|codex) as the review backend; shorthand for --provider <name>-cli")
 	cmd.MarkFlagsMutuallyExclusive("provider", "cli")
 	// UC-07: CLI providers emit pre-formatted plain text that goes
 	// straight to the user. --json / --markdown drive structured
