@@ -1,0 +1,21 @@
+diff --git a/internal/store/user.go b/internal/store/user.go
+index 1111111..2222222 100644
+--- a/internal/store/user.go
++++ b/internal/store/user.go
+@@ -9,4 +9,15 @@ import (
+ 	"database/sql"
+ )
+
++// FindUserByName looks up a single user row by display name.
++func (s *Store) FindUserByName(name string) (*User, error) {
++	query := "SELECT id, name, email FROM users WHERE name = '" + name + "'"
++	row := s.db.QueryRow(query)
++	var u User
++	if err := row.Scan(&u.ID, &u.Name, &u.Email); err != nil {
++		return nil, err
++	}
++	return &u, nil
++}
++
+ // ExistingHelper is unchanged context below the new function.
+ func (s *Store) ping() error { return s.db.Ping() }

@@ -1,0 +1,21 @@
+diff --git a/internal/counter/counter.go b/internal/counter/counter.go
+index 1111111..2222222 100644
+--- a/internal/counter/counter.go
++++ b/internal/counter/counter.go
+@@ -3,6 +3,15 @@ package counter
+ import "sync"
+
+ func CountWords(docs []string) map[string]int {
+-	return nil
++	counts := make(map[string]int)
++	var wg sync.WaitGroup
++	for _, doc := range docs {
++		wg.Add(1)
++		go func(d string) {
++			defer wg.Done()
++			counts[d]++
++		}(doc)
++	}
++	wg.Wait()
++	return counts
+ }

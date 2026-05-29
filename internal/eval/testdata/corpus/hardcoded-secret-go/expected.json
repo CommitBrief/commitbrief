@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"hardcoded-secret","file":"internal/client/config.go","line":13,"line_tol":3,"category":"security","min_severity":"high","summary":"A live API token is hardcoded as a source constant; remove it, rotate the leaked credential, and load secrets from an environment variable or secret store."}
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,17 @@
+diff --git a/internal/io/read.go b/internal/io/read.go
+index 1111111..2222222 100644
+--- a/internal/io/read.go
++++ b/internal/io/read.go
+@@ -5,6 +5,13 @@ package io
+ import "os"
+
+ func ReadAll(path string) ([]byte, error) {
+-	return nil, nil
++	f, err := os.Open(path)
++	if err != nil {
++		return nil, err
++	}
++	buf := make([]byte, 1024)
++	n, err := f.Read(buf)
++	return buf[:n], err
+ }

@@ -8,6 +8,91 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [1.4.0] - 2026-05-29
+
+### Fixed
+- **Progress spinner floods the screen (repeats a stage line every frame).**
+  The animated renderer redraws in place by moving the cursor up
+  `prevLen` *logical* lines, but a stage line longer than the terminal
+  width wraps to multiple *physical* rows — so the cursor-up under-counted,
+  the tree marched downward, and the top line (e.g. "Searching for
+  changes…") was left behind on every frame. The long `--with-context`
+  security-warning line triggered this on normal-width terminals. Rendered
+  lines are now clipped to the terminal width so they never wrap, keeping
+  the in-place redraw exact. Additionally, `TERM=dumb` terminals (emacs
+  `M-x shell`, some IDE consoles) — which report as a TTY but ignore
+  cursor-movement escapes — now fall back to plain mode. Workaround on
+  older builds: `--color never` or `NO_COLOR=1`.
+- **`isRetriable` (eval harness) matched HTTP codes as bare substrings.** A
+  non-transient error embedding `500`/`503` in a token count or duration
+  (e.g. "requested 130500 tokens", "1500ms") was wrongly retried as a
+  billable live call. Status codes now match on a digit boundary.
+
+### Added
+- **Live elapsed-time counter on the active progress stage.** Once a stage
+  has run for more than a second, the animated tree shows a muted timer
+  beside it (e.g. `Thinking… 0:42`), so a slow `--with-context` agent call
+  reads as working rather than frozen. Fast stages stay clean; the timer's
+  width is reserved out of the line budget so it never causes wrapping.
+- **`--show-prompt` flag.** Prints the exact system + user prompt that
+  would be sent to the model, then exits — no provider call, no cache
+  lookup, no cost. Reflects every prompt-shaping flag (scope,
+  `--with-context`, `--cli`/`--provider`, `--lang`) and honours `--output`.
+  A transparency inspector for "what exactly leaves my machine?" (v1.4).
+- **`guard.token_preflight` config (opt-in, default false).** When on, a
+  review whose estimated prompt tokens exceed the provider's context
+  window prompts for confirmation (TTY) or aborts (non-TTY) before the
+  paid round-trip, instead of letting the provider reject it with a raw
+  400. Off by default — the estimate is a chars/4 heuristic (ADR-0003, v1.4).
+- **Review-quality eval harness (`make eval`).** A maintainer-facing
+  harness that scores actual review output against a curated known-answer
+  corpus and reports precision / recall / false-positive rate (ADR-0018,
+  v1.4.0 "Trust & quality"). The corpus lives at
+  `internal/eval/testdata/corpus/<name>/` — one directory per fixture with
+  `input.diff` (the change under review), `expected.json` (the answer key),
+  and `mock_response.json` (scripted findings for the deterministic tier).
+  Scoring matches produced findings on file + line-tolerance + severity
+  floor and reuses the locked `--json` schema v1 `findings[]` (no new
+  output contract). Two tiers: `make eval` runs the mock provider over the
+  corpus (deterministic, runs in plain `go test ./...`, validates the
+  harness + matcher — part of CI) and `make eval-live` runs a real provider
+  (resolved from `COMMITBRIEF_EVAL_PROVIDER`/`COMMITBRIEF_EVAL_API_KEY` or,
+  with no env vars, the default provider in `~/.commitbrief/config.yml`;
+  behind the `live` build tag, non-deterministic, the source of README
+  quality numbers — never a CI gate). Ships with a 23-fixture seed corpus
+  spanning security (SQL/command/path/SSRF/XSS injection, weak crypto,
+  hardcoded secret), correctness (nil deref, off-by-one, unchecked type
+  assert, mutable default arg), concurrency (data race, WaitGroup misuse),
+  resource leaks (unclosed file/response-body/SQL-rows), error handling
+  (swallowed error, bare except, panic-on-input), a performance case, and
+  three clean controls (rename, comment-typo, added test) that must stay
+  silent. Several fixtures annotate more than one expected finding where the
+  diff genuinely contains secondary defects (e.g. a second panic, an ignored
+  `rows.Scan` error, a truncating fixed-buffer read).
+- **`make eval-dump` diagnostic.** Prints every finding a live provider
+  produces per fixture, tagged `match` / `EXTRA`, to decide whether an
+  EXTRA is a legitimate secondary defect to annotate or genuine noise to
+  leave as a measured false positive.
+- **Held-out slice (Goodhart protection).** A fixture can set
+  `"held_out": true`; ~26% of the corpus (6/23, spanning all defect
+  categories + a clean control) is held out from any prompt/corpus tuning.
+  `make eval-live` reports FULL / DEV / HELD-OUT scorecards separately, and
+  the deterministic `TestHeldOutSlice` fails if the slice is emptied,
+  drops below 15%, or stops being representative — so the protection
+  cannot be silently disabled (ADR-0018 §Goodhart).
+- **`COMMITBRIEF_EVAL_PROVIDER` / `COMMITBRIEF_EVAL_MODEL` overrides.**
+  Select the eval provider and model via env while the API key is read
+  from `~/.commitbrief/config.yml`, so one config benchmarks every
+  provider/model without putting a key on the command line. `RunCorpus`
+  retries each fixture (linear backoff) to ride over transient provider
+  503s during a run.
+- **README "Measured review quality" table.** First published scorecard
+  across five models (Haiku 4.5 / Sonnet 4.6 / Opus 4.8 / Gemini 2.5 Flash
+  / GPT-4o, 2026-05-29), each cell reported as `dev · held` (tunable slice
+  vs held-out generalization slice). Every model recalls the full held-out
+  slice; precision 0.48–0.84 is a conservative floor (recall + FP-rate are
+  the cleaner signals).
+
 ## [1.3.0]
 
 ### Added

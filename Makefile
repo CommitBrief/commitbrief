@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: help build test test-live bench lint fmt tidy clean check release-check license-check i18n-check spdx-check security-check manpage smoke
+.PHONY: help build test test-live eval eval-live bench lint fmt tidy clean check release-check license-check i18n-check spdx-check security-check manpage smoke
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -26,6 +26,15 @@ test: ## Run unit + integration tests (live provider tests excluded)
 
 test-live: ## Run live provider tests (real API keys required)
 	$(GO) test -tags=live ./...
+
+eval: ## Deterministic mock-tier review-quality eval (CI-safe; ADR-0018)
+	$(GO) test ./internal/eval/ -run TestEvalMockCorpus -v
+
+eval-live: ## Live-provider review-quality eval (uses COMMITBRIEF_EVAL_PROVIDER or ~/.commitbrief/config.yml)
+	$(GO) test -tags=live -count=1 -timeout=20m ./internal/eval/ -run '^TestEvalLive$$' -v
+
+eval-dump: ## Diagnostic: print every finding a live provider produces per fixture (match/EXTRA)
+	$(GO) test -tags=live -count=1 -timeout=20m ./internal/eval/ -run '^TestEvalLiveDump$$' -v
 
 bench: ## Run local-pipeline + cache benchmarks (PRD §7.1 targets)
 	$(GO) test -bench=. -benchmem -run=^$$ ./internal/diff ./internal/cache

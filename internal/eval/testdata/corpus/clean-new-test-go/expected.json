@@ -1,0 +1,9 @@
+{
+  "held_out": true,
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file":"internal/math/add_test.go","line":12,"reason":"Adds a correct, well-formed unit test function TestAdd; defining a new test is not a defect."},
+    {"file":"internal/math/add_test.go","line":13,"reason":"A straightforward assertion (Add(2,3) == 5) with a clear failure message; nothing to flag."}
+  ]
+}

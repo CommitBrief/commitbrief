@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"cmd-injection","file":"internal/exec/run.go","line":16,"line_tol":3,"category":"security","min_severity":"critical","summary":"User input is passed to sh -c, enabling OS command injection; pass arguments as separate exec.Command args or validate against an allowlist."}
+  ],
+  "must_stay_silent_on": []
+}

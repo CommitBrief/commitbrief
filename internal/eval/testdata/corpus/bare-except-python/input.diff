@@ -1,0 +1,13 @@
+diff --git a/app/task.py b/app/task.py
+index 1111111..2222222 100644
+--- a/app/task.py
++++ b/app/task.py
+@@ -5,5 +5,8 @@ def run_task(payload):
+     logger.info("starting task")
+     result = None
+-    result = process(payload)
++    try:
++        result = process(payload)
++    except:
++        pass
+     return result

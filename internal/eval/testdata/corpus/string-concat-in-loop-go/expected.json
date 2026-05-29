@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"concat-in-loop","file":"internal/report/build.go","line":6,"line_tol":3,"category":"performance","min_severity":"low","summary":"String is built with result += inside a loop, causing O(n^2) allocations; use strings.Builder instead."}
+  ],
+  "must_stay_silent_on": []
+}

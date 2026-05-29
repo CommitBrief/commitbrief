@@ -1,0 +1,7 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {"id":"ssrf-requests-get","file":"app/fetch.py","line":6,"line_tol":3,"category":"security","min_severity":"high","summary":"requests.get is called on an unvalidated user-supplied URL, enabling server-side request forgery; validate the URL against an allowlist of permitted hosts/schemes before fetching."}
+  ],
+  "must_stay_silent_on": []
+}

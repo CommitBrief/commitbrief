@@ -1,0 +1,15 @@
+diff --git a/internal/parse/parse.go b/internal/parse/parse.go
+index 1111111..2222222 100644
+--- a/internal/parse/parse.go
++++ b/internal/parse/parse.go
+@@ -7,6 +7,9 @@ func ParsePort(raw string) (int, error) {
+ 	n, err := strconv.Atoi(raw)
+ 	if err != nil {
+-		return 0, err
++		panic("invalid port: " + raw)
+ 	}
++	if n < 0 || n > 65535 {
++		panic("port out of range")
++	}
+ 	return n, nil
+ }

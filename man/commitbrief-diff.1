@@ -91,6 +91,10 @@ Review the output of \fBgit diff <args>\fR\&. Arguments are forwarded verbatim t
 	suppress info messages on stderr
 
 .PP
+\fB--show-prompt\fP[=false]
+	print the exact system + user prompt that would be sent, then exit (no provider call, no cost)
+
+.PP
 \fB--suggest-commit\fP[=false]
 	after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)
 

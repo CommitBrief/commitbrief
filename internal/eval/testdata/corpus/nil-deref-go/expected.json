@@ -1,0 +1,15 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {
+      "id": "nil-deref-1",
+      "file": "internal/cache/entry.go",
+      "line": 24,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "high",
+      "summary": "lookup() returns nil on a cache miss, but the result e is dereferenced (e.AccessedAt) without a nil check — panics on any missing key. Guard with `if e == nil { return }`."
+    }
+  ],
+  "must_stay_silent_on": []
+}

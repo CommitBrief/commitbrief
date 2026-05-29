@@ -1,0 +1,16 @@
+{
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "internal/util/count.go",
+      "line": 5,
+      "reason": "Pure local-variable rename (cnt -> count). Semantically identical; flagging it is noise."
+    },
+    {
+      "file": "internal/util/count.go",
+      "line": 6,
+      "reason": "The returned variable's rename mirrors line 5; not a finding."
+    }
+  ]
+}

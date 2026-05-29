@@ -1,0 +1,8 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"unclosed-file","file":"internal/io/read.go","line":8,"line_tol":3,"category":"resource-leak","min_severity":"medium","summary":"The *os.File from os.Open is never closed, leaking a file descriptor; add defer f.Close() after the error check."},
+    {"id":"truncating-read","file":"internal/io/read.go","line":13,"line_tol":3,"category":"correctness","min_severity":"medium","summary":"ReadAll reads into a fixed 1024-byte buffer with a single f.Read, silently truncating any file larger than 1024 bytes; use io.ReadAll(f) to read the whole file."}
+  ],
+  "must_stay_silent_on": []
+}

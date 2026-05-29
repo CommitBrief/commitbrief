@@ -1,0 +1,8 @@
+{
+  "held_out": true,
+  "language": "go",
+  "expected_findings": [
+    {"id":"waitgroup-add-in-goroutine","file":"internal/worker/pool.go","line":10,"line_tol":3,"category":"concurrency","min_severity":"high","summary":"wg.Add(1) runs inside the spawned goroutine and races with wg.Wait(); call wg.Add(1) before the go statement."}
+  ],
+  "must_stay_silent_on": []
+}

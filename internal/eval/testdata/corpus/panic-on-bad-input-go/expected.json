@@ -1,0 +1,8 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"panic-on-bad-input","file":"internal/parse/parse.go","line":9,"line_tol":3,"category":"error-handling","min_severity":"high","summary":"ParsePort panics on unparseable user input instead of returning an error; return the error to the caller."},
+    {"id":"panic-on-out-of-range","file":"internal/parse/parse.go","line":12,"line_tol":3,"category":"error-handling","min_severity":"high","summary":"ParsePort also panics on an out-of-range port value instead of returning an error; return an error for invalid input."}
+  ],
+  "must_stay_silent_on": []
+}

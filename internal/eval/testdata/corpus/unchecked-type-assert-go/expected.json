@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"unchecked-type-assertion","file":"internal/decode/decode.go","line":5,"line_tol":3,"category":"correctness","min_severity":"high","summary":"The single-value type assertion i.(string) panics when i holds a non-string dynamic type; use the two-value form v, ok := i.(string) and handle the failure."}
+  ],
+  "must_stay_silent_on": []
+}

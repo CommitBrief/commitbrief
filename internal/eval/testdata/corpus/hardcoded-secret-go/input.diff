@@ -1,0 +1,11 @@
+diff --git a/internal/client/config.go b/internal/client/config.go
+index 1111111..2222222 100644
+--- a/internal/client/config.go
++++ b/internal/client/config.go
+@@ -8,3 +8,6 @@ package client
+ func existing() {
+ 	_ = "noop"
+ }
++
++// apiToken authenticates outbound API requests.
++const apiToken = "sk_live_51H*REDACTED*abcdef0123456789ABCDEF"

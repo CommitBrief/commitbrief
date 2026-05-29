@@ -1,0 +1,14 @@
+diff --git a/internal/math/add_test.go b/internal/math/add_test.go
+index 1111111..2222222 100644
+--- a/internal/math/add_test.go
++++ b/internal/math/add_test.go
+@@ -8,3 +8,9 @@ func TestSub(t *testing.T) {
+ 		t.Fatalf("Sub(3,1) = %d, want 2", got)
+ 	}
+ }
++
++func TestAdd(t *testing.T) {
++	if got := Add(2, 3); got != 5 {
++		t.Fatalf("Add(2,3) = %d, want 5", got)
++	}
++}

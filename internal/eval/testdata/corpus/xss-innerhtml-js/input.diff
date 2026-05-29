@@ -1,0 +1,11 @@
+diff --git a/src/render.js b/src/render.js
+index 1111111..2222222 100644
+--- a/src/render.js
++++ b/src/render.js
+@@ -1,4 +1,8 @@
+ export function renderComment(userInput) {
+   const element = document.getElementById("comment");
++  // Inject the raw comment text into the DOM.
++  element.innerHTML = userInput;
++  return element;
+ }

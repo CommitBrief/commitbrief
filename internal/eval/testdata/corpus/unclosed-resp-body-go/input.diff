@@ -1,0 +1,18 @@
+diff --git a/internal/http/fetch.go b/internal/http/fetch.go
+index 1111111..2222222 100644
+--- a/internal/http/fetch.go
++++ b/internal/http/fetch.go
+@@ -6,6 +6,13 @@ package http
+
+ func Fetch(url string) ([]byte, error) {
+-	return nil, nil
++	resp, err := http.Get(url)
++	if err != nil {
++		return nil, err
++	}
++	data, err := io.ReadAll(resp.Body)
++	if err != nil {
++		return nil, err
++	}
++	return data, nil
+ }
