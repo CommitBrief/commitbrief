@@ -191,6 +191,16 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// guarantees unreliable. See ADR-0009 supersession note and the
 	// clireview package.
 	_, plainText := prov.(provider.PlainTextEmitter)
+	// --with-context (ADR-0017) only means anything for a CLI-backed
+	// provider: an API provider has no filesystem to read, so the flag is
+	// inert there. Reject it before any provider call rather than silently
+	// ignoring it. Fail-fast: diff fetch above is local/free, so this
+	// still fires before the cost preflight and the paid round-trip.
+	if global.withContext && !plainText {
+		ctxErr := errors.New(app.Catalog.T("context.cli_only"))
+		prog.Fail(ctxErr)
+		return ctxErr
+	}
 	// The model sees the line-numbered diff so it can copy line numbers
 	// instead of counting them; the cache key and secret scan keep using
 	// the plain diffText (numberedDiff is a deterministic function of it,

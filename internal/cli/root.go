@@ -36,6 +36,7 @@ type globalFlags struct {
 	model         string
 	color         string
 	cli           string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
+	withContext   bool     // --with-context; CLI providers only — let the host CLI read project files beyond the diff (ADR-0017)
 	files         []string // global --file (repeatable); path filter applied post-parse
 	dirs          []string // global --dir (repeatable); prefix filter applied post-parse
 	genMan        string   // hidden: --gen-man <dir> writes man pages and exits
@@ -98,6 +99,7 @@ func newRootCmd() *cobra.Command {
 	flags.StringSliceVarP(&global.files, "file", "f", nil, "review only these files (repeatable); combines with the active scope flag")
 	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories (repeatable); combines with the active scope flag")
 	flags.StringVar(&global.cli, "cli", "", "use a locally-installed CLI tool (claude|gemini|codex) as the review backend; shorthand for --provider <name>-cli")
+	flags.BoolVar(&global.withContext, "with-context", false, "let the CLI provider read project files beyond the diff to ground the review (CLI providers only; the host CLI's agent reads your repo — see --help)")
 	cmd.MarkFlagsMutuallyExclusive("provider", "cli")
 	// UC-07: CLI providers emit pre-formatted plain text that goes
 	// straight to the user. --json / --markdown drive structured
