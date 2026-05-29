@@ -17,8 +17,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   `--provider codex-cli`; no API key needed (reuses the host CLI's auth).
   Driven through `codex exec --sandbox read-only --skip-git-repo-check`
   (non-interactive, read-only). Like the other CLI providers it is a plain-text emitter —
-  no structured findings, so `--json` / `--markdown` / `remote pr` do not
-  apply.
+  no structured findings, so `--json` / `--markdown` and `remote pr`'s
+  posting mode don't apply (but `remote pr --no-post`, added below, does).
 - **SPDX-header CI guard.** `make spdx-check` (`scripts/spdx-check.sh`,
   folded into `make check` and a dedicated CI job) fails the build if any
   Go source — tracked or newly added — is missing its
@@ -57,6 +57,14 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   the truly bare invocation — any explicit flag or subcommand bypasses it.
   Expanded git-alias style before argument parsing (ADR-0005). Set via
   `config set -- command.default "…"` or by editing `config.yml`.
+- **`remote pr --no-post` — review a PR locally, no GitHub writes.**
+  Fetches the PR diff via `gh` and renders the review to your terminal
+  like a local review, posting nothing to GitHub (no inline comments, no
+  verdict). Because output is local, the flags posting mode rejects now
+  apply: `--json`, `--markdown`, `--output`, `--copy`, `--compact`,
+  `--cli` (CLI providers), and `--fail-on` (exit code). No self-PR block;
+  results are cached like a local review. `--request-changes-on` /
+  `--with-context` are noted-and-ignored in this mode (ADR-0016 §Update).
 
 ## [1.2.1]
 

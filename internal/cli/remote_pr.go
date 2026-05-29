@@ -3,9 +3,13 @@
 package cli
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -27,6 +31,7 @@ import (
 type remotePRFlags struct {
 	requestChangesOn string
 	repo             string
+	noPost           bool
 }
 
 func newRemotePRCmd() *cobra.Command {
@@ -46,6 +51,8 @@ func newRemotePRCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.requestChangesOn, "request-changes-on", "critical",
 		"severity at/above which the verdict becomes request-changes (critical|high|medium|low)")
 	cmd.Flags().StringVar(&f.repo, "repo", "", "target repository owner/repo (overrides git context)")
+	cmd.Flags().BoolVar(&f.noPost, "no-post", false,
+		"review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review")
 	return cmd
 }
 
@@ -70,6 +77,14 @@ func parseRequestChangesOn(raw string) (render.Severity, error) {
 }
 
 func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote.Runner) error {
+	// --no-post (ADR-0016 §Update): use the PR diff purely as a review
+	// source and render to the terminal like a local review — no GitHub
+	// writes (no comments, no verdict), so the local-render and CLI flags
+	// apply. Diverges enough from the posting flow to warrant its own path.
+	if f.noPost {
+		return runRemotePRLocal(cmd, prID, f, runner)
+	}
+
 	ctx := cmd.Context()
 
 	app, err := resolveContext(false)
@@ -180,6 +195,278 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.FooterLine(footerMeta, res.findings))
 	}
 	return nil
+}
+
+// runRemotePRLocal is the `remote pr <ID> --no-post` path: fetch the PR
+// diff via gh and run it through the same review+render pipeline a local
+// review uses, printing to the terminal instead of posting to GitHub.
+// No GitHub writes happen, so the local-render flags (--json/--markdown/
+// --output/--copy/--compact), CLI providers (--cli), and --fail-on all
+// apply, and there is no self-PR restriction. It mirrors runReview's
+// core (cache → cost preflight → call → render); the differences are the
+// diff source (gh, not git) and that the secret scanner WARNS rather than
+// aborts (you can't fix another author's PR locally, and aborting a
+// read-only review is unhelpful), matching the posting path's posture.
+func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner remote.Runner) error {
+	ctx := cmd.Context()
+	app, err := resolveContext(false)
+	if err != nil {
+		return err
+	}
+	cat := app.Catalog
+
+	if _, _, err := parseMinSeverity(global.minSeverity); err != nil {
+		return err
+	}
+	if f.repo == "" && app.RepoRoot == "" {
+		return errors.New(cat.T("remote.repo_required"))
+	}
+	// --request-changes-on only drives a GitHub verdict, which --no-post
+	// never submits. Note it only when the user explicitly set it.
+	if cmd.Flags().Changed("request-changes-on") {
+		infof("%s", cat.T("remote.no_post_request_changes_ignored"))
+	}
+	if err := remote.EnsureGH(); err != nil {
+		return errors.New(cat.T("remote.gh_missing"))
+	}
+
+	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
+	if err != nil {
+		return err
+	}
+	_, plainText := prov.(provider.PlainTextEmitter)
+	// --with-context grounds a CLI review in the LOCAL working tree, which
+	// need not match the PR's branch — combining it with a remote diff is
+	// misleading, so it is not wired here. Note it if the user set it.
+	if global.withContext {
+		infof("%s", cat.T("remote.no_post_context_ignored"))
+	}
+	model := app.Config.Providers[app.Config.Provider].Model
+	if model == "" {
+		model = prov.DefaultModel()
+	}
+
+	loaded, err := rules.Load(app.RepoRoot)
+	if err != nil {
+		return err
+	}
+	if loaded.Source == rules.SourceDefault {
+		infof("%s", cat.T("rules.using_default"))
+	}
+	outputLoaded, err := rules.LoadOutput(app.RepoRoot, userHome())
+	if err != nil {
+		return err
+	}
+	if outputLoaded.Source == rules.SourceDefault {
+		infof("%s", cat.T("rules.output.using_default"))
+	} else if verr := render.ValidateOutputTemplate(outputLoaded.Content); verr != nil {
+		return errors.New(cat.T("output.template.invalid", outputLoaded.Path, verr.Error()))
+	}
+
+	if !global.quiet {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.HeaderLine(render.Meta{Provider: prov.Name(), Model: model}))
+	}
+	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
+	defer prog.Close()
+
+	prog.Start(cat.T("remote.fetching_pr", prID))
+	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
+	if err != nil {
+		prog.Fail(err)
+		return err
+	}
+	parsed, err := diff.Parse(git.Diff{Content: rawDiff, Origin: git.OriginDiff})
+	if err != nil {
+		prog.Fail(err)
+		return err
+	}
+	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
+	parsed = diff.KeepPaths(parsed, global.files, global.dirs)
+	if parsed.Empty() {
+		prog.Finish()
+		prog.Close()
+		infof("%s", cat.T("review.no_changes"))
+		return nil
+	}
+	prog.Info(render.StatusLine(render.Meta{
+		Files:        parsed.FileCount(),
+		LinesAdded:   parsed.AddedLines(),
+		LinesRemoved: parsed.DeletedLines(),
+		RulesLoaded:  loaded.Source != rules.SourceDefault,
+	}))
+	diffText := parsed.String()
+	numbered := parsed.NumberedString()
+
+	// Secret scanner warns (does not abort) — the diff is a remote PR's.
+	if app.Config.Guard.SecretScan && !global.allowSecrets {
+		if hits := guard.ScanForSecrets(diffText); len(hits) > 0 {
+			prog.Info(cat.T("remote.secret_warn", len(hits)))
+		}
+	}
+
+	var p prompt.Prompt
+	if plainText {
+		p = prompt.BuildPlainText(loaded, app.Lang, numbered, false)
+	} else {
+		p = prompt.Build(loaded, app.Lang, numbered)
+	}
+
+	cacheKey := cache.Compute(cache.ComputeArgs{
+		Diff:         diffText,
+		SystemPrompt: p.System,
+		Provider:     prov.Name(),
+		Model:        model,
+		Lang:         app.Lang.Code,
+	})
+	cacheStore, cerr := openCache(app.RepoRoot, app.Config.Cache)
+	if cerr != nil {
+		infof("%s", cat.T("review.cache_disabled", cerr))
+	}
+
+	if !global.noCache && cacheStore != nil {
+		if entry, hit := cacheStore.Get(cacheKey); hit {
+			prog.Finish()
+			prog.Clear()
+			usage := provider.Usage{
+				InputTokens:       entry.Result.Tokens.Input,
+				OutputTokens:      entry.Result.Tokens.Output,
+				CachedInputTokens: entry.Result.Tokens.Cached,
+			}
+			meta := render.Meta{
+				Provider:     prov.Name(),
+				Model:        model,
+				Lang:         app.Lang.Code,
+				Cached:       true,
+				Timestamp:    entry.CreatedAt,
+				Usage:        usage,
+				Cost:         resolvePricing(app.Config, prov, model).Cost(usage),
+				Files:        parsed.FileCount(),
+				LinesAdded:   parsed.AddedLines(),
+				LinesRemoved: parsed.DeletedLines(),
+				RulesLoaded:  loaded.Source != rules.SourceDefault,
+			}
+			var findings []render.Finding
+			switch entry.Result.Format {
+			case cache.FormatJSON, "":
+				findings, _ = render.ParseFindings(entry.Result.Content)
+			}
+			if entry.Result.Format == cache.FormatPlainText {
+				if err := emitPlainText(cmd, entry.Result.Content); err != nil {
+					return err
+				}
+			} else if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
+				return err
+			}
+			handleCopyFlag(cmd, app, findings)
+			return applyFailOn(cmd, app, findings)
+		}
+	}
+	prog.Finish()
+
+	// Cost preflight, same as a local review (no-op for zero-priced CLI
+	// providers). --no-cost-check bypasses; --yes deliberately does not.
+	if !global.noCostCheck {
+		estUsage := provider.Usage{
+			InputTokens:  p.EstimatedTokens(),
+			OutputTokens: estimateOutputTokens(p.EstimatedTokens()),
+		}
+		estCost := resolvePricing(app.Config, prov, model).Cost(estUsage)
+		prog.Pause()
+		if abort := handleCostPreflight(cmd, app, estCost, bufio.NewReader(os.Stdin)); abort {
+			return errors.New(cat.T("cost.aborted_user"))
+		}
+		prog.Resume()
+	}
+
+	prog.Start(cat.T("remote.reviewing"))
+	start := time.Now()
+	req := provider.Request{
+		Model:        model,
+		SystemPrompt: p.System,
+		UserPrompt:   p.User,
+		Lang:         app.Lang.Code,
+	}
+	var (
+		content string
+		usage   provider.Usage
+		format  string
+	)
+	if plainText {
+		resp, callErr := prov.Review(ctx, req)
+		if callErr != nil {
+			prog.Fail(callErr)
+			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+		}
+		content, usage, format = resp.Content, resp.Usage, cache.FormatPlainText
+	} else {
+		var callErr error
+		content, usage, format, callErr = tryStructuredReview(ctx, prov, req, func() {
+			prog.Soft()
+			prog.Start(cat.T("progress.retrying"))
+		})
+		if callErr != nil {
+			prog.Fail(callErr)
+			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+		}
+	}
+	prog.Finish()
+	prog.Clear()
+	latency := time.Since(start)
+
+	var findings []render.Finding
+	switch format {
+	case cache.FormatJSON:
+		findings, _ = render.ParseFindings(content)
+	case cache.FormatMarkdownFallback:
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), cat.T("review.degraded"))
+	}
+
+	meta := render.Meta{
+		Provider:     prov.Name(),
+		Model:        model,
+		Lang:         app.Lang.Code,
+		Usage:        usage,
+		Cost:         resolvePricing(app.Config, prov, model).Cost(usage),
+		Latency:      latency,
+		Timestamp:    time.Now().UTC(),
+		Files:        parsed.FileCount(),
+		LinesAdded:   parsed.AddedLines(),
+		LinesRemoved: parsed.DeletedLines(),
+		RulesLoaded:  loaded.Source != rules.SourceDefault,
+	}
+
+	if !global.noCache && cacheStore != nil {
+		diffSum := sha256.Sum256([]byte(diffText))
+		promptSum := sha256.Sum256([]byte(p.System))
+		_ = cacheStore.Put(cacheKey, cache.Entry{
+			Key: cache.KeyMeta{
+				DiffHash:         "sha256:" + hex.EncodeToString(diffSum[:]),
+				SystemPromptHash: "sha256:" + hex.EncodeToString(promptSum[:]),
+				Provider:         prov.Name(),
+				Model:            model,
+				Lang:             app.Lang.Code,
+			},
+			Result: cache.Result{
+				Content: content,
+				Format:  format,
+				Tokens: cache.Tokens{
+					Input:  usage.InputTokens,
+					Output: usage.OutputTokens,
+					Cached: usage.CachedInputTokens,
+				},
+			},
+		})
+	}
+
+	if format == cache.FormatPlainText {
+		if err := emitPlainText(cmd, content); err != nil {
+			return err
+		}
+	} else if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
+		return err
+	}
+	handleCopyFlag(cmd, app, findings)
+	return applyFailOn(cmd, app, findings)
 }
 
 // prReviewResult bundles everything one PR review produces that the
