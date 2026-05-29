@@ -8,7 +8,7 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
-## [1.2.1]
+## [1.3.0]
 
 ### Added
 - **New CLI-tool-backed provider: `codex-cli`.** Drives a locally
@@ -19,6 +19,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   (non-interactive, read-only). Like the other CLI providers it is a plain-text emitter —
   no structured findings, so `--json` / `--markdown` / `remote pr` do not
   apply.
+- **SPDX-header CI guard.** `make spdx-check` (`scripts/spdx-check.sh`,
+  folded into `make check` and a dedicated CI job) fails the build if any
+  Go source — tracked or newly added — is missing its
+  `// SPDX-License-Identifier: GPL-3.0-or-later` header, keeping the 100%
+  coverage from regressing (ADR-0012).
+
+## [1.2.1]
 
 ### Fixed
 - **`commitbrief remote pr` no longer mis-places inline comments.**

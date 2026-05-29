@@ -55,3 +55,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/i18n-deadkey-check.sh
+
+  spdx-check:
+    # ADR-0012: every Go source must carry the per-file SPDX header.
+    # This guard fails the build on any new file that drops it, keeping
+    # the 100% coverage reached in v0.9.0 from regressing.
+    name: SPDX header check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/spdx-check.sh
