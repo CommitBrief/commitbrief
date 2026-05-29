@@ -10,6 +10,20 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Fixed
+- **Progress spinner floods on `TERM=dumb` terminals.** Dumb terminals
+  (emacs `M-x shell`, some IDE consoles, bare ptys) report as a TTY but
+  ignore cursor-movement escapes, so the animated renderer appended a new
+  line every frame instead of redrawing in place — a stage like "Searching
+  for changes…" would repeat endlessly. `ColorEnabled` now demotes
+  `TERM=dumb` to plain mode (one line per stage). Workaround on older
+  builds: `--color never` or `NO_COLOR=1`. (`--color always` still
+  overrides for terminals you know handle ANSI.)
+- **`isRetriable` (eval harness) matched HTTP codes as bare substrings.** A
+  non-transient error embedding `500`/`503` in a token count or duration
+  (e.g. "requested 130500 tokens", "1500ms") was wrongly retried as a
+  billable live call. Status codes now match on a digit boundary.
+
 ### Added
 - **`--show-prompt` flag.** Prints the exact system + user prompt that
   would be sent to the model, then exits — no provider call, no cache

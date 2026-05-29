@@ -48,7 +48,7 @@ func TestCorpusComposition(t *testing.T) {
 		t.Errorf("fixtures = %d, want %d (update consts + README/web/CHANGELOG)", len(fixtures), wantFixtures)
 	}
 	if defects != wantPlantedDefects {
-		t.Errorf("planted defects = %d, want %d (README/web say %d)", defects, wantPlantedDefects, wantPlantedDefects)
+		t.Errorf("planted defects = %d, want %d (update consts + README/web/CHANGELOG)", defects, wantPlantedDefects)
 	}
 	if clean != wantCleanControls {
 		t.Errorf("clean controls = %d, want %d", clean, wantCleanControls)
@@ -69,6 +69,13 @@ func TestIsRetriable(t *testing.T) {
 		{"eval: fixture \"x\": review: 401 unauthorized: bad api key", false},
 		{"eval: fixture \"x\": parse findings: unexpected end of JSON input", false},
 		{"eval: fixture \"x\": review: model not found", false},
+		// Boundary guard: a context-length error embeds "500" inside a token
+		// count but is NOT a transient 500 — must not be retried.
+		{"eval: fixture \"x\": review: maximum context length is 128000 tokens, however you requested 130500 tokens", false},
+		// A duration string carrying "1500ms" must not look like a 500.
+		{"eval: fixture \"x\": review: request took 1500ms then was rejected: invalid request", false},
+		// A genuine standalone 503 still retries.
+		{"eval: fixture \"x\": review: provider returned http 503", true},
 	}
 	for _, c := range cases {
 		if got := isRetriable(errors.New(c.msg)); got != c.want {

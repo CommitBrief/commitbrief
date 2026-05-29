@@ -44,6 +44,28 @@ func TestColorEnabledAutoOffOnNonTTY(t *testing.T) {
 	}
 }
 
+func TestColorEnabledDumbTermDemotesAuto(t *testing.T) {
+	// TERM=dumb must force ColorAuto off (the animated renderer would
+	// flood a terminal that can't process cursor escapes). On a non-TTY
+	// buffer auto is already off, so this asserts the guard doesn't error
+	// and stays off; the meaningful regression it locks is the explicit
+	// override below.
+	t.Setenv("TERM", "dumb")
+	if ColorEnabled(&bytes.Buffer{}, ColorAuto) {
+		t.Error("TERM=dumb + ColorAuto must be false")
+	}
+}
+
+func TestColorEnabledAlwaysWinsOverDumbTerm(t *testing.T) {
+	// An explicit --color always still wins over TERM=dumb: the user has
+	// said they know their terminal. Confirms the dumb guard sits after
+	// the ColorAlways short-circuit.
+	t.Setenv("TERM", "dumb")
+	if !ColorEnabled(&bytes.Buffer{}, ColorAlways) {
+		t.Error("--color always must override TERM=dumb")
+	}
+}
+
 func TestColorEnabledRespectsNoColorEnv(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	if ColorEnabled(&bytes.Buffer{}, ColorAlways) {

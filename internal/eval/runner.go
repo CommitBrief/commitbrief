@@ -78,8 +78,8 @@ func isRetriable(err error) bool {
 	if strings.Contains(msg, "parse findings") {
 		return false // a re-run yields the same unparseable output
 	}
+	// Word-shaped transient signals are safe as plain substrings.
 	for _, sig := range []string{
-		"503", "502", "500", "429",
 		"unavailable", "overloaded", "timeout", "deadline",
 		"temporarily", "rate limit", "try again",
 	} {
@@ -87,8 +87,39 @@ func isRetriable(err error) bool {
 			return true
 		}
 	}
+	// HTTP status codes must match on a digit boundary, or a token-count /
+	// byte-size / duration string ("requested 130500 tokens", "1500ms")
+	// would be mistaken for a 500/503 and retried as a billable call — the
+	// exact waste this function exists to prevent.
+	for _, code := range []string{"429", "500", "502", "503"} {
+		if hasStatusToken(msg, code) {
+			return true
+		}
+	}
 	return false
 }
+
+// hasStatusToken reports whether code appears in msg bounded by non-digits
+// (or string edges) on both sides, so "503" matches "error 503," but not
+// "130503".
+func hasStatusToken(msg, code string) bool {
+	for from := 0; ; {
+		i := strings.Index(msg[from:], code)
+		if i < 0 {
+			return false
+		}
+		i += from
+		beforeOK := i == 0 || !isASCIIDigit(msg[i-1])
+		end := i + len(code)
+		afterOK := end >= len(msg) || !isASCIIDigit(msg[end])
+		if beforeOK && afterOK {
+			return true
+		}
+		from = i + 1
+	}
+}
+
+func isASCIIDigit(b byte) bool { return b >= '0' && b <= '9' }
 
 // RunCorpus runs every fixture through the provider and returns a
 // Scorecard. A fixture hitting a transient provider error (isRetriable) is
