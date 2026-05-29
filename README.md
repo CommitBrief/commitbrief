@@ -40,7 +40,7 @@ read on your diff before another human (or your future self) sees it.
 ## Measured review quality
 
 CommitBrief ships an eval harness (`make eval`) that scores real review
-output against a 23-fixture known-answer corpus — 25 planted defects
+output against a 23-fixture known-answer corpus — 23 planted defects
 across security, correctness, concurrency, resource-leak, error-handling
 and performance categories, plus 3 clean controls a good review must stay
 silent on. About a quarter of the corpus is a **held-out slice** that

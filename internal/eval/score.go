@@ -106,12 +106,20 @@ func withinTolerance(f render.Finding, e ExpectedFinding) bool {
 }
 
 // hitsSilence reports whether a produced finding lands on a silence anchor
-// (same file, line within the default tolerance).
+// (same file, line within the default tolerance). A multi-line finding
+// [Line, LineEnd] that spans the anchor counts too — mirroring
+// withinTolerance's range-overlap logic, so a finding whose start is far
+// from the anchor but whose body covers it is still caught as a violation.
 func hitsSilence(f render.Finding, a SilenceAnchor) bool {
 	if filepath.ToSlash(f.File) != filepath.ToSlash(a.File) {
 		return false
 	}
-	return abs(f.Line-a.Line) <= defaultLineTolerance
+	if abs(f.Line-a.Line) <= defaultLineTolerance {
+		return true
+	}
+	return f.LineEnd > f.Line &&
+		a.Line >= f.Line-defaultLineTolerance &&
+		a.Line <= f.LineEnd+defaultLineTolerance
 }
 
 func abs(n int) int {

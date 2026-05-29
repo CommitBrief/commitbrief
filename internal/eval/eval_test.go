@@ -4,6 +4,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -11,6 +12,73 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/provider/mock"
 	"github.com/CommitBrief/commitbrief/internal/render"
 )
+
+// Corpus composition the published docs cite (README "Measured review
+// quality", the web Benchmarks section, CHANGELOG, ADR-0018). These are
+// locked here so a fixture added or annotated without updating the numbers
+// fails CI instead of silently drifting the published figures.
+const (
+	wantFixtures       = 23
+	wantPlantedDefects = 23
+	wantCleanControls  = 3
+	wantHeldOut        = 6
+)
+
+// TestCorpusComposition pins the counts the docs advertise (drift guard
+// requested in dogfooding review). Update both the consts and the docs
+// together when the corpus changes.
+func TestCorpusComposition(t *testing.T) {
+	fixtures, err := LoadCorpus(corpusDir())
+	if err != nil {
+		t.Fatalf("LoadCorpus: %v", err)
+	}
+
+	defects, clean, held := 0, 0, 0
+	for _, fx := range fixtures {
+		defects += len(fx.Expected)
+		if len(fx.Expected) == 0 {
+			clean++
+		}
+		if fx.HeldOut {
+			held++
+		}
+	}
+
+	if len(fixtures) != wantFixtures {
+		t.Errorf("fixtures = %d, want %d (update consts + README/web/CHANGELOG)", len(fixtures), wantFixtures)
+	}
+	if defects != wantPlantedDefects {
+		t.Errorf("planted defects = %d, want %d (README/web say %d)", defects, wantPlantedDefects, wantPlantedDefects)
+	}
+	if clean != wantCleanControls {
+		t.Errorf("clean controls = %d, want %d", clean, wantCleanControls)
+	}
+	if held != wantHeldOut {
+		t.Errorf("held-out fixtures = %d, want %d", held, wantHeldOut)
+	}
+}
+
+func TestIsRetriable(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"eval: fixture \"x\": review: gemini: Error 503, Status: UNAVAILABLE", true},
+		{"eval: fixture \"x\": review: rate limit exceeded (429)", true},
+		{"eval: fixture \"x\": review: context deadline exceeded", true},
+		{"eval: fixture \"x\": review: 401 unauthorized: bad api key", false},
+		{"eval: fixture \"x\": parse findings: unexpected end of JSON input", false},
+		{"eval: fixture \"x\": review: model not found", false},
+	}
+	for _, c := range cases {
+		if got := isRetriable(errors.New(c.msg)); got != c.want {
+			t.Errorf("isRetriable(%q) = %v, want %v", c.msg, got, c.want)
+		}
+	}
+	if isRetriable(nil) {
+		t.Error("isRetriable(nil) must be false")
+	}
+}
 
 func corpusDir() string { return filepath.Join("testdata", "corpus") }
 
@@ -222,6 +290,17 @@ func TestScoreMatching(t *testing.T) {
 		}
 		if got.FalseNegatives != 1 {
 			t.Errorf("got FN=%d, want 1 (the security finding was missed)", got.FalseNegatives)
+		}
+	})
+
+	t.Run("multi-line finding spanning a silence anchor counts", func(t *testing.T) {
+		// Start line 40 is well outside the ±3 window of the anchor at 50,
+		// but the finding's [40,55] range covers it — must still violate.
+		got := Score([]render.Finding{
+			{Severity: render.SeverityMedium, File: "pkg/b.go", Line: 40, LineEnd: 55},
+		}, fx)
+		if got.SilenceViolations != 1 {
+			t.Errorf("got silenceViolations=%d, want 1 (range [40,55] covers anchor at 50)", got.SilenceViolations)
 		}
 	})
 

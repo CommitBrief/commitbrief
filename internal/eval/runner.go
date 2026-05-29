@@ -5,6 +5,7 @@ package eval
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/lang"
@@ -63,9 +64,36 @@ func RunFixture(ctx context.Context, p provider.Provider, fx Fixture, model stri
 // calls RunFixture directly and never hits this path.
 const corpusAttempts = 3
 
+// isRetriable reports whether a fixture error is a transient provider
+// condition worth retrying. Deterministic failures (unparseable response)
+// and anything without a recognized transient signature fail fast — a
+// retry would just re-spend on the live tier. Best-effort string match: the
+// provider packages wrap heterogeneous SDK errors, so there's no single
+// error type to switch on.
+func isRetriable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "parse findings") {
+		return false // a re-run yields the same unparseable output
+	}
+	for _, sig := range []string{
+		"503", "502", "500", "429",
+		"unavailable", "overloaded", "timeout", "deadline",
+		"temporarily", "rate limit", "try again",
+	} {
+		if strings.Contains(msg, sig) {
+			return true
+		}
+	}
+	return false
+}
+
 // RunCorpus runs every fixture through the provider and returns a
-// Scorecard. Each fixture is retried up to corpusAttempts times with
-// linear backoff; if it still fails the error aborts the run.
+// Scorecard. A fixture hitting a transient provider error (isRetriable) is
+// retried up to corpusAttempts times with linear backoff; a non-transient
+// failure aborts the run after the first attempt.
 func RunCorpus(ctx context.Context, p provider.Provider, model string, fixtures []Fixture) (Scorecard, error) {
 	sc := Scorecard{Provider: p.Name(), Model: model}
 	if model == "" {
@@ -81,12 +109,17 @@ func RunCorpus(ctx context.Context, p provider.Provider, model string, fixtures 
 			if err == nil {
 				break
 			}
-			if attempt < corpusAttempts {
-				select {
-				case <-ctx.Done():
-					return Scorecard{}, ctx.Err()
-				case <-time.After(time.Duration(attempt) * 2 * time.Second):
-				}
+			// Only retry transient provider hiccups (503/429/timeout). A hard
+			// failure — auth error, or a deterministically unparseable
+			// response — won't fix itself, and each live-tier retry is a real
+			// billable call, so fail fast instead of burning corpusAttempts.
+			if attempt == corpusAttempts || !isRetriable(err) {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return Scorecard{}, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 2 * time.Second):
 			}
 		}
 		if err != nil {
