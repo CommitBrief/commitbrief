@@ -37,6 +37,40 @@ read on your diff before another human (or your future self) sees it.
   system prompt; per-user `OUTPUT.md` controls how findings are
   formatted.
 
+## Measured review quality
+
+CommitBrief ships an eval harness (`make eval`) that scores real review
+output against a 23-fixture known-answer corpus — 25 planted defects
+across security, correctness, concurrency, resource-leak, error-handling
+and performance categories, plus 3 clean controls a good review must stay
+silent on. Numbers below are from `make eval-live`, captured 2026-05-29
+(mean of *Runs* live runs each):
+
+| Model              | Recall | False-positive rate | Precision | Runs |
+|--------------------|:------:|:-------------------:|:---------:|:----:|
+| Claude Haiku 4.5   | 1.00   | 0.00                | 0.68      | 5    |
+| Claude Sonnet 4.6  | 1.00   | 0.20                | 0.62      | 3    |
+| Claude Opus 4.8    | 0.96   | 0.00                | 0.58      | 3    |
+| Gemini 2.5 Flash   | 0.97   | 0.27                | 0.76      | 3    |
+| OpenAI GPT-4o      | 0.88   | 0.40                | 0.78      | 3    |
+
+- **Recall** — share of planted defects caught. The Claude models catch
+  essentially all of them (even the cheapest, Haiku, misses none); Gemini
+  is close behind; GPT-4o misses about one in eight.
+- **False-positive rate** — findings landing on a clean-control line, i.e.
+  flagging a benign change. Haiku and Opus stay silent on every control;
+  GPT-4o is the noisiest here.
+- **Precision** — a *conservative floor*: it counts any finding outside
+  the answer key as a false positive, but on these small diffs many
+  "extra" findings are legitimate secondary observations (a second panic,
+  an ignored error) rather than noise. The terser models (GPT-4o, Gemini)
+  score higher on precision precisely because they say less — at the cost
+  of recall. Read recall + false-positive rate as the cleaner signals;
+  precision is sensitive to how exhaustively the corpus is annotated.
+
+Reproduce any row locally with `COMMITBRIEF_EVAL_PROVIDER=<name> make
+eval-live` (uses the key already in `~/.commitbrief/config.yml`).
+
 ## Install
 
 ### Homebrew (macOS / Linux)

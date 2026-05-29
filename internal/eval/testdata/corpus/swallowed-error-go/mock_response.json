@@ -1,0 +1,1 @@
+{"findings":[{"severity":"high","file":"internal/save/save.go","line":15,"title":"Write error discarded","description":"The return value of f.Write is assigned to _ and the error is dropped, so a partial or failed write goes unnoticed and Save reports success.","suggestion":"Capture the error: if _, err := f.Write(data); err != nil { return err }."}]}

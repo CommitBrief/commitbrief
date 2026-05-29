@@ -1,0 +1,15 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {
+      "id": "sqli-1",
+      "file": "internal/store/user.go",
+      "line": 14,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "SQL query built by string-concatenating an untrusted name parameter — classic SQL injection. Should use a parameterized query (db.QueryRow(\"... WHERE name = ?\", name))."
+    }
+  ],
+  "must_stay_silent_on": []
+}

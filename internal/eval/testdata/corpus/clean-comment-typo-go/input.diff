@@ -1,0 +1,11 @@
+diff --git a/internal/doc/doc.go b/internal/doc/doc.go
+index 1111111..2222222 100644
+--- a/internal/doc/doc.go
++++ b/internal/doc/doc.go
+@@ -3,5 +3,5 @@ package doc
+ // Render returns the rendered document body.
+-// It recieves the parsed sections in order.
++// It receives the parsed sections in order.
+ func Render(sections []Section) string {
+ 	return join(sections)
+ }

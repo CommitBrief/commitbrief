@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id":"dom-xss-innerhtml","file":"src/render.js","line":4,"line_tol":3,"category":"security","min_severity":"high","summary":"Untrusted userInput is assigned to element.innerHTML, allowing DOM-based XSS; use textContent or sanitize the input before inserting it."}
+  ],
+  "must_stay_silent_on": []
+}

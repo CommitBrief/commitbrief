@@ -1,0 +1,15 @@
+diff --git a/internal/cache/entry.go b/internal/cache/entry.go
+index aaaaaaa..bbbbbbb 100644
+--- a/internal/cache/entry.go
++++ b/internal/cache/entry.go
+@@ -17,3 +17,11 @@ import "time"
+ func (c *Cache) lookup(key string) *Entry {
+ 	return c.entries[key]
+ }
++
++// TouchEntry refreshes the access time of a cached entry.
++func (c *Cache) TouchEntry(key string) {
++	e := c.lookup(key) // returns nil on a cache miss
++	e.AccessedAt = time.Now() // nil-pointer dereference when key is absent
++	c.entries[key] = e
++}

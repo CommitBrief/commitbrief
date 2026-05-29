@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file":"internal/doc/doc.go","line":4,"reason":"The change only fixes a spelling typo (recieves -> receives) inside a // comment; no code or behavior changes."}
+  ]
+}

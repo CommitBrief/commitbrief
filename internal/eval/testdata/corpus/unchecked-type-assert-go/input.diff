@@ -1,0 +1,12 @@
+diff --git a/internal/decode/decode.go b/internal/decode/decode.go
+index 1111111..2222222 100644
+--- a/internal/decode/decode.go
++++ b/internal/decode/decode.go
+@@ -1,5 +1,9 @@
+ package decode
+
++// AsString extracts the string payload from an arbitrary value.
++func AsString(i interface{}) string {
++	v := i.(string)
++	return v
++}

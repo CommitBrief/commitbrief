@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"map-data-race","file":"internal/counter/counter.go","line":12,"line_tol":3,"category":"concurrency","min_severity":"high","summary":"Multiple goroutines write to the shared counts map without synchronization, causing a data race; guard writes with a sync.Mutex or use sync.Map."}
+  ],
+  "must_stay_silent_on": []
+}

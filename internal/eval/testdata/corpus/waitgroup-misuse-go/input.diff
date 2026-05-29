@@ -1,0 +1,19 @@
+diff --git a/internal/worker/pool.go b/internal/worker/pool.go
+index 1111111..2222222 100644
+--- a/internal/worker/pool.go
++++ b/internal/worker/pool.go
+@@ -4,6 +4,14 @@ package worker
+ import "sync"
+
+ func RunAll(tasks []func()) {
+-	return
++	var wg sync.WaitGroup
++	for _, task := range tasks {
++		go func(t func()) {
++			wg.Add(1)
++			defer wg.Done()
++			t()
++		}(task)
++	}
++	wg.Wait()
+ }

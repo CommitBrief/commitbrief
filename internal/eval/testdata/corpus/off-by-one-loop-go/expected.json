@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"off-by-one-loop","file":"internal/scan/scan.go","line":5,"line_tol":3,"category":"correctness","min_severity":"high","summary":"The loop condition i <= len(s) reads s[len(s)] on the final iteration, causing an index-out-of-range panic; use i < len(s)."}
+  ],
+  "must_stay_silent_on": []
+}

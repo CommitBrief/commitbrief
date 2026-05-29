@@ -1,0 +1,14 @@
+diff --git a/internal/auth/hash.go b/internal/auth/hash.go
+index 1111111..2222222 100644
+--- a/internal/auth/hash.go
++++ b/internal/auth/hash.go
+@@ -15,3 +15,9 @@ package auth
+ func existing() {
+ 	_ = "noop"
+ }
++
++// HashPassword derives a stored hash from a plaintext password.
++func HashPassword(password string) string {
++	sum := md5.Sum([]byte(password))
++	return hex.EncodeToString(sum[:])
++}

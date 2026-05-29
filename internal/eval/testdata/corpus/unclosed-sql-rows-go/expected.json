@@ -1,0 +1,8 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"unclosed-sql-rows","file":"internal/store/list.go","line":9,"line_tol":3,"category":"resource-leak","min_severity":"medium","summary":"The *sql.Rows from db.Query is never closed, leaking a database connection; add defer rows.Close() after the error check."},
+    {"id":"ignored-scan-error","file":"internal/store/list.go","line":16,"line_tol":3,"category":"error-handling","min_severity":"medium","summary":"The error from rows.Scan is discarded into _, so a malformed row is silently appended as a zero value; capture and handle the error."}
+  ],
+  "must_stay_silent_on": []
+}

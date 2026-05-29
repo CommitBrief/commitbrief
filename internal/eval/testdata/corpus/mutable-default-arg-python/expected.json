@@ -1,0 +1,7 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {"id":"mutable-default-arg","file":"app/util.py","line":4,"line_tol":3,"category":"correctness","min_severity":"medium","summary":"add_item uses a mutable list as a default argument, so the same list is shared across calls; default to None and create a new list inside the function."}
+  ],
+  "must_stay_silent_on": []
+}

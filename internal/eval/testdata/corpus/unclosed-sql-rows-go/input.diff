@@ -1,0 +1,20 @@
+diff --git a/internal/store/list.go b/internal/store/list.go
+index 1111111..2222222 100644
+--- a/internal/store/list.go
++++ b/internal/store/list.go
+@@ -7,6 +7,14 @@ package store
+
+ func ListNames(db *sql.DB) ([]string, error) {
+-	return nil, nil
++	rows, err := db.Query("SELECT name FROM users")
++	if err != nil {
++		return nil, err
++	}
++	var names []string
++	for rows.Next() {
++		var name string
++		_ = rows.Scan(&name)
++		names = append(names, name)
++	}
++	return names, rows.Err()
+ }

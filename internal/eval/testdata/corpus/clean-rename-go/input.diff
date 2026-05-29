@@ -1,0 +1,12 @@
+diff --git a/internal/util/count.go b/internal/util/count.go
+index ccccccc..ddddddd 100644
+--- a/internal/util/count.go
++++ b/internal/util/count.go
+@@ -3,6 +3,6 @@ package util
+ // CountItems returns how many items the slice holds.
+ func CountItems(items []string) int {
+-	cnt := len(items)
+-	return cnt
++	count := len(items)
++	return count
+ }

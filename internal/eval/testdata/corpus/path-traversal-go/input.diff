@@ -1,0 +1,14 @@
+diff --git a/internal/files/serve.go b/internal/files/serve.go
+index 1111111..2222222 100644
+--- a/internal/files/serve.go
++++ b/internal/files/serve.go
+@@ -20,3 +20,9 @@ package files
+ func existing() {
+ 	_ = "noop"
+ }
++
++// ReadUserFile reads a file under baseDir selected by the caller.
++func ReadUserFile(baseDir, userPath string) ([]byte, error) {
++	p := filepath.Join(baseDir, userPath)
++	return os.ReadFile(p)
++}

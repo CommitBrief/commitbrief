@@ -1,0 +1,13 @@
+diff --git a/internal/save/save.go b/internal/save/save.go
+index 1111111..2222222 100644
+--- a/internal/save/save.go
++++ b/internal/save/save.go
+@@ -10,6 +10,9 @@ func Save(path string, data []byte) error {
+ 	if err != nil {
+ 		return err
+ 	}
+ 	defer f.Close()
++
++	_, _ = f.Write(data)
++	return nil
+ }

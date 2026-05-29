@@ -1,0 +1,14 @@
+diff --git a/internal/exec/run.go b/internal/exec/run.go
+index 1111111..2222222 100644
+--- a/internal/exec/run.go
++++ b/internal/exec/run.go
+@@ -10,3 +10,9 @@ package exec
+ func existing() {
+ 	_ = "noop"
+ }
++
++// RunUserCommand executes a caller-supplied command string.
++func RunUserCommand(userInput string) ([]byte, error) {
++	cmd := exec.Command("sh", "-c", userInput)
++	return cmd.CombinedOutput()
++}

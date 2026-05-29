@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id":"weak-crypto-md5","file":"internal/auth/hash.go","line":21,"line_tol":3,"category":"security","min_severity":"high","summary":"Passwords are hashed with fast, broken MD5 and no salt; use a memory-hard password hash such as bcrypt, scrypt, or Argon2id instead."}
+  ],
+  "must_stay_silent_on": []
+}

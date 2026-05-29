@@ -8,6 +8,50 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [Unreleased]
+
+### Added
+- **Review-quality eval harness (`make eval`).** A maintainer-facing
+  harness that scores actual review output against a curated known-answer
+  corpus and reports precision / recall / false-positive rate (ADR-0018,
+  v1.4.0 "Trust & quality"). The corpus lives at
+  `internal/eval/testdata/corpus/<name>/` — one directory per fixture with
+  `input.diff` (the change under review), `expected.json` (the answer key),
+  and `mock_response.json` (scripted findings for the deterministic tier).
+  Scoring matches produced findings on file + line-tolerance + severity
+  floor and reuses the locked `--json` schema v1 `findings[]` (no new
+  output contract). Two tiers: `make eval` runs the mock provider over the
+  corpus (deterministic, runs in plain `go test ./...`, validates the
+  harness + matcher — part of CI) and `make eval-live` runs a real provider
+  (resolved from `COMMITBRIEF_EVAL_PROVIDER`/`COMMITBRIEF_EVAL_API_KEY` or,
+  with no env vars, the default provider in `~/.commitbrief/config.yml`;
+  behind the `live` build tag, non-deterministic, the source of README
+  quality numbers — never a CI gate). Ships with a 23-fixture seed corpus
+  spanning security (SQL/command/path/SSRF/XSS injection, weak crypto,
+  hardcoded secret), correctness (nil deref, off-by-one, unchecked type
+  assert, mutable default arg), concurrency (data race, WaitGroup misuse),
+  resource leaks (unclosed file/response-body/SQL-rows), error handling
+  (swallowed error, bare except, panic-on-input), a performance case, and
+  three clean controls (rename, comment-typo, added test) that must stay
+  silent. Several fixtures annotate more than one expected finding where the
+  diff genuinely contains secondary defects (e.g. a second panic, an ignored
+  `rows.Scan` error, a truncating fixed-buffer read).
+- **`make eval-dump` diagnostic.** Prints every finding a live provider
+  produces per fixture, tagged `match` / `EXTRA`, to decide whether an
+  EXTRA is a legitimate secondary defect to annotate or genuine noise to
+  leave as a measured false positive.
+- **`COMMITBRIEF_EVAL_PROVIDER` / `COMMITBRIEF_EVAL_MODEL` overrides.**
+  Select the eval provider and model via env while the API key is read
+  from `~/.commitbrief/config.yml`, so one config benchmarks every
+  provider/model without putting a key on the command line. `RunCorpus`
+  retries each fixture (linear backoff) to ride over transient provider
+  503s during a run.
+- **README "Measured review quality" table.** First published scorecard
+  across five models (Haiku 4.5 / Sonnet 4.6 / Opus 4.8 / Gemini 2.5 Flash
+  / GPT-4o, 2026-05-29): recall 0.88–1.00, false-positive rate 0.00–0.40,
+  precision 0.58–0.78 (conservative floor; recall + FPR are the cleaner
+  signals).
+
 ## [1.3.0]
 
 ### Added

@@ -1,0 +1,1 @@
+{"findings":[{"severity":"high","file":"internal/cache/entry.go","line":24,"title":"Possible nil-pointer dereference","description":"lookup() returns nil when the key is absent, but TouchEntry dereferences the returned *Entry (e.AccessedAt) without a nil check, panicking on any cache miss.","suggestion":"Check for nil before use: if e == nil { return }."}]}
