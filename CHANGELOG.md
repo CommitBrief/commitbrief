@@ -28,6 +28,10 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   cache is rebuilt once on upgrade because the system prompt changed; the
   diff component of the cache key is unaffected (the numbered form is a
   deterministic function of the plain diff).
+- **`remote pr` uses the staged-tree progress display.** Pipeline stages
+  (fetch → review → post → submit) now render through the same animated
+  tree the local `review` command uses (one line per stage in non-TTY/CI;
+  suppressed by `--quiet`) instead of flat stderr lines.
 - **`remote pr` suggestion lines are prefixed with `💡`.** The remediation
   line in both inline comments and the review-summary fallback now starts
   with `💡 ` so it reads distinctly from the description. The signature was

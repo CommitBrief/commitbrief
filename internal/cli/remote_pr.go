@@ -19,6 +19,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/remote"
 	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/rules"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
 type remotePRFlags struct {
@@ -103,35 +104,53 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		return errors.New(cat.T("remote.plain_text_provider"))
 	}
 
+	// Same staged-tree progress display the local review uses, so the
+	// remote pipeline reads identically (stages animate on a TTY, degrade
+	// to one line per transition in CI). All progress/warning output goes
+	// through prog while it is live — a raw stderr write would corrupt the
+	// animated redraw.
+	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
+	defer prog.Close()
+
 	if global.failOn != "" {
-		infof("%s", cat.T("remote.fail_on_ignored"))
+		prog.Info(cat.T("remote.fail_on_ignored"))
 	}
 
 	whoami, err := remote.Whoami(ctx, runner)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 
-	infof("%s", cat.T("remote.fetching_pr", prID))
+	prog.Start(cat.T("remote.fetching_pr", prID))
 	meta, err := remote.FetchPRMeta(ctx, runner, prID, f.repo)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 	if strings.EqualFold(meta.AuthorLogin(), whoami) {
-		return errors.New(cat.T("remote.self_pr_blocked"))
+		err := errors.New(cat.T("remote.self_pr_blocked"))
+		prog.Fail(err)
+		return err
 	}
 
 	loaded, err := rules.Load(app.RepoRoot)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 
-	findings, anchors, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, loaded, meta.LastOID())
+	findings, anchors, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, loaded, meta.LastOID(), prog)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 
-	return submitPRReview(ctx, runner, prID, f, meta, oid, findings, anchors, threshold, whoami, app)
+	if err := submitPRReview(ctx, runner, prID, f, meta, oid, findings, anchors, threshold, whoami, app, prog); err != nil {
+		prog.Fail(err)
+		return err
+	}
+	return nil
 }
 
 // reviewPRDiff fetches the PR diff, runs one review, and guards against a
@@ -139,10 +158,9 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 // then aborts (ADR-0016 §7). Returns the findings, the per-file anchor
 // index they map onto, and the OID they were produced against (both used
 // to place inline comments).
-func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, lastOID string) ([]render.Finding, map[string]diff.FileAnchors, string, error) {
+func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, lastOID string, prog *ui.Progress) ([]render.Finding, map[string]diff.FileAnchors, string, error) {
 	for attempt := 0; ; attempt++ {
-		infof("%s", app.Catalog.T("remote.reviewing"))
-		findings, anchors, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, loaded)
+		findings, anchors, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, loaded, prog)
 		if err != nil {
 			return nil, nil, "", err
 		}
@@ -156,7 +174,10 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 		if attempt >= 1 {
 			return nil, nil, "", errors.New(app.Catalog.T("remote.too_volatile"))
 		}
-		infof("%s", app.Catalog.T("remote.race_retry"))
+		// Head moved: neutralize the just-finished review stage (it was
+		// valid work, just superseded) and note the retry before looping.
+		prog.Soft()
+		prog.Info(app.Catalog.T("remote.race_retry"))
 		lastOID = newOID
 	}
 }
@@ -166,7 +187,7 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 // (ADR-0016 §3); the local-config guard and cost preflight are skipped.
 // Returns the findings plus the anchor index of the (filtered) diff the
 // model reviewed, so comments can be pinned to the correct side.
-func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded) ([]render.Finding, map[string]diff.FileAnchors, error) {
+func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, prog *ui.Progress) ([]render.Finding, map[string]diff.FileAnchors, error) {
 	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
 	if err != nil {
 		return nil, nil, err
@@ -182,11 +203,16 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	diffText := parsed.String()
 	anchors := parsed.Anchors()
 
+	// Emit the secret warning before starting the review stage, so it lands
+	// as a note under the (now finished) fetch stage rather than prematurely
+	// terminating the review stage.
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
 		if hits := guard.ScanForSecrets(diffText); len(hits) > 0 {
-			infof("%s", app.Catalog.T("remote.secret_warn", len(hits)))
+			prog.Info(app.Catalog.T("remote.secret_warn", len(hits)))
 		}
 	}
+
+	prog.Start(app.Catalog.T("remote.reviewing"))
 
 	// The model sees the line-numbered diff so it copies line numbers
 	// instead of estimating them (see review.go); anchors above are built
@@ -222,17 +248,18 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 // POST is rejected — are not dropped but appended to the review summary
 // so the signal survives (ADR-0016 §9). Per-comment failures never abort
 // the verdict submission.
-func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, anchors map[string]diff.FileAnchors, threshold render.Severity, whoami string, app *appContext) error {
+func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, anchors map[string]diff.FileAnchors, threshold render.Severity, whoami string, app *appContext, prog *ui.Progress) error {
 	cat := app.Catalog
 	verdict := computeVerdict(findings, threshold)
 	postable := selectPostable(findings, threshold)
 
-	if len(postable) > 0 {
-		infof("%s", cat.T("remote.posting_comments", len(postable)))
-	}
 	slug := meta.BaseSlug()
 	posted, failed := 0, 0
 	var unanchored []render.Finding
+	var failures []string
+	if len(postable) > 0 {
+		prog.Start(cat.T("remote.posting_comments", len(postable)))
+	}
 	for _, fnd := range postable {
 		fa, hasFile := anchors[fnd.File]
 		side, ok := "", false
@@ -257,32 +284,42 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		if err != nil {
 			failed++
 			unanchored = append(unanchored, fnd)
-			infof("%s", cat.T("remote.comment_failed", fnd.PathRef(), err.Error()))
+			// Collect rather than emit mid-loop: prog.Info would terminate
+			// the active posting stage on the first failure.
+			failures = append(failures, cat.T("remote.comment_failed", fnd.PathRef(), err.Error()))
 			continue
 		}
 		posted++
 	}
+	if len(postable) > 0 {
+		prog.Finish() // posting stage done
+	}
+	for _, msg := range failures {
+		prog.Info(msg)
+	}
 	if posted+failed > 0 {
-		infof("%s", cat.T("remote.posted_summary", posted, posted+failed, failed))
+		prog.Info(cat.T("remote.posted_summary", posted, posted+failed, failed))
 	}
 	if len(unanchored) > 0 {
-		infof("%s", cat.T("remote.unanchored_appended", len(unanchored)))
+		prog.Info(cat.T("remote.unanchored_appended", len(unanchored)))
 	}
 
 	body := remote.BuildReviewBody(verdict, whoami)
 	if section := remote.BuildUnanchoredSection(unanchored); section != "" {
 		body += "\n\n---\n\n" + section
 	}
+	prog.Start(cat.T("remote.submitting"))
 	if err := remote.SubmitReview(ctx, runner, prID, f.repo, verdict, body); err != nil {
 		return err
 	}
+	prog.Finish()
 	switch verdict {
 	case remote.VerdictApprove:
-		infof("%s", cat.T("remote.action_approve", meta.Number))
+		prog.Info(cat.T("remote.action_approve", meta.Number))
 	case remote.VerdictRequestChanges:
-		infof("%s", cat.T("remote.action_request_changes", meta.Number))
+		prog.Info(cat.T("remote.action_request_changes", meta.Number))
 	default:
-		infof("%s", cat.T("remote.action_comment", meta.Number))
+		prog.Info(cat.T("remote.action_comment", meta.Number))
 	}
 	return nil
 }

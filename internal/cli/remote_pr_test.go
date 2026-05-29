@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +19,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/remote"
 	"github.com/CommitBrief/commitbrief/internal/render"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
 func TestParseRequestChangesOn(t *testing.T) {
@@ -333,8 +335,9 @@ func TestSubmitPRReviewAnchorsAndFallsBack(t *testing.T) {
 
 	r := &fakeGH{}
 	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
+	prog := ui.NewProgress(io.Discard, ui.ColorNever, true) // silent
 	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
-		findings, anchors, render.SeverityCritical, "tester", app); err != nil {
+		findings, anchors, render.SeverityCritical, "tester", app, prog); err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}
 
