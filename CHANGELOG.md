@@ -11,6 +11,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **`--show-prompt` flag.** Prints the exact system + user prompt that
+  would be sent to the model, then exits — no provider call, no cache
+  lookup, no cost. Reflects every prompt-shaping flag (scope,
+  `--with-context`, `--cli`/`--provider`, `--lang`) and honours `--output`.
+  A transparency inspector for "what exactly leaves my machine?" (v1.4).
+- **`guard.token_preflight` config (opt-in, default false).** When on, a
+  review whose estimated prompt tokens exceed the provider's context
+  window prompts for confirmation (TTY) or aborts (non-TTY) before the
+  paid round-trip, instead of letting the provider reject it with a raw
+  400. Off by default — the estimate is a chars/4 heuristic (ADR-0003, v1.4).
 - **Review-quality eval harness (`make eval`).** A maintainer-facing
   harness that scores actual review output against a curated known-answer
   corpus and reports precision / recall / false-positive rate (ADR-0018,

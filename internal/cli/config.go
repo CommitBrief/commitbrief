@@ -196,8 +196,10 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 		switch parts[1] {
 		case "secret_scan":
 			return strconv.FormatBool(cfg.Guard.SecretScan), nil
+		case "token_preflight":
+			return strconv.FormatBool(cfg.Guard.TokenPreflight), nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight)", parts[1])
 		}
 
 	case "cost":
@@ -339,8 +341,14 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 				return fmt.Errorf("config: guard.secret_scan: %w", err)
 			}
 			cfg.Guard.SecretScan = b
+		case "token_preflight":
+			b, err := parseConfigBool(value)
+			if err != nil {
+				return fmt.Errorf("config: guard.token_preflight: %w", err)
+			}
+			cfg.Guard.TokenPreflight = b
 		default:
-			return fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan)", parts[1])
+			return fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight)", parts[1])
 		}
 		return nil
 

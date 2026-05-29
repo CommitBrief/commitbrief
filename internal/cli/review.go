@@ -220,6 +220,18 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		p = prompt.Build(loaded, app.Lang, numberedDiff)
 	}
 
+	// --show-prompt: emit the exact system + user prompt that would be sent
+	// and stop here. No provider call, no cache lookup, no cost — a pure
+	// transparency inspector that reflects every prompt-shaping flag
+	// (scope, --with-context, --cli/--provider, --lang) because it prints
+	// the already-assembled prompt. Placed after the guard/secret scan so a
+	// secret in what you're about to dump is still surfaced first.
+	if global.showPrompt {
+		prog.Finish()
+		prog.Clear()
+		return showPromptOutput(cmd, p)
+	}
+
 	model := app.Config.Providers[app.Config.Provider].Model
 	if model == "" {
 		model = prov.DefaultModel()
@@ -294,6 +306,20 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	}
 
 	prog.Finish() // Preparing → done
+
+	// Token preflight (ADR-0003, opt-in via guard.token_preflight). We're
+	// past the cache lookup and about to spend tokens; if the estimated
+	// prompt overflows the provider's context window, catch it here with a
+	// friendly confirm/abort instead of letting the provider reject it with
+	// a raw 400. Off by default — the estimate is a chars/4 heuristic and a
+	// false positive shouldn't block a review nobody asked to guard.
+	if app.Config.Guard.TokenPreflight {
+		prog.Pause()
+		if abort := handleTokenPreflight(cmd, app, prov, p, model, stdinReader); abort {
+			return errors.New(app.Catalog.T("guard.tokens.aborted_user"))
+		}
+		prog.Resume()
+	}
 
 	// Cost preflight (11.5.6): we're past the cache lookup and about to
 	// spend real tokens. If the estimated cost exceeds the configured
@@ -479,6 +505,51 @@ func wrapPlainText(content string) string {
 	body = strings.TrimSpace(strings.TrimPrefix(body, plainTextRule))
 	body = strings.TrimSpace(strings.TrimSuffix(body, plainTextRule))
 	return plainTextRule + "\n\n" + body + "\n\n" + plainTextRule + "\n\n"
+}
+
+// showPromptOutput writes the assembled system + user prompt to the output
+// sink (stdout, or --output FILE) and is the terminal step of a
+// --show-prompt run. The markers are deliberately fixed English (debug-
+// grade, like the dry-run columns) so the dump is greppable and stable
+// regardless of --lang. No trailing provider call happens after this.
+func showPromptOutput(cmd *cobra.Command, p prompt.Prompt) error {
+	w, closer, err := openOutput(cmd)
+	if err != nil {
+		return err
+	}
+	defer closer()
+	if _, err := fmt.Fprintf(w, "===== SYSTEM PROMPT =====\n%s\n\n===== USER PROMPT =====\n%s\n", p.System, p.User); err != nil {
+		return fmt.Errorf("show-prompt: write: %w", err)
+	}
+	return nil
+}
+
+// handleTokenPreflight warns when the estimated prompt overflows the
+// provider's context window and asks the user to confirm. Returns true when
+// the caller should abort. Only reached when guard.token_preflight is on.
+// Mirrors handleCostPreflight: confirm on a TTY, abort non-interactively.
+// The estimate is the chars/4 heuristic shared with dry-run; a provider
+// that reports a non-positive window (ExceedsContext guards this) never
+// triggers the prompt.
+func handleTokenPreflight(cmd *cobra.Command, app *appContext, prov provider.Provider, p prompt.Prompt, model string, stdin *bufio.Reader) bool {
+	window := prov.ContextWindow(model)
+	if !p.ExceedsContext(window) {
+		return false
+	}
+
+	w := cmd.ErrOrStderr()
+	_, _ = fmt.Fprintln(w, app.Catalog.T("guard.tokens.exceeds", p.EstimatedTokens(), prov.Name(), window))
+	if !ui.IsStdinTTY(os.Stdin) {
+		_, _ = fmt.Fprintln(w, app.Catalog.T("guard.tokens.aborted_non_interactive"))
+		return true
+	}
+
+	_, _ = fmt.Fprint(w, app.Catalog.T("guard.tokens.confirm_prompt"))
+	answer, err := readPromptLine(stdin)
+	if err != nil || answer == "" {
+		return true
+	}
+	return !ui.AcceptsYes(answer, app.Catalog)
 }
 
 // suggestCommitMessage runs a second, free-form provider call (ADR-0015)

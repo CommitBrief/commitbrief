@@ -231,7 +231,9 @@ CLI-tool-backed providers; mutually exclusive with `--json` /
 `--markdown`), `--with-context` (CLI providers only — let the host CLI
 read project files beyond the diff to ground the review; see below),
 `--allow-secrets` (acknowledge a flagged credential in
-the diff), `--no-cost-check` (skip cost preflight), `--color`. See
+the diff), `--no-cost-check` (skip cost preflight),
+`--show-prompt` (print the exact system + user prompt that would be sent,
+then exit — no provider call, no cost; honours `--output`), `--color`. See
 `commitbrief --help`.
 
 ### `--with-context` (CLI providers only)
@@ -395,6 +397,9 @@ cache:
   enabled: true
   ttl_days: 7
   max_size_mb: 0                   # 0 = unlimited; >0 evicts oldest entries past the cap
+guard:
+  secret_scan: true                # scan diff + rules for credential patterns before sending
+  token_preflight: false           # opt-in: confirm/abort when the prompt overflows the model's context window
 command:
   default: ""                      # args applied to a bare `commitbrief`; empty = `--staged`
 ```

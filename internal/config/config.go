@@ -42,8 +42,16 @@ type CostConfig struct {
 // v0.8.0 (ADR-0007 follow-up); leaving it true is the safe default,
 // false disables it entirely for users who pipeline outputs through a
 // secrets manager and don't want the prompt.
+//
+// TokenPreflight is an opt-in (default false) guard (ADR-0003): when on,
+// a review whose estimated prompt tokens exceed the provider's context
+// window prompts for confirmation (TTY) or aborts (non-TTY) before the
+// paid round-trip, instead of letting the provider reject it with a raw
+// 400. Off by default because the estimate is a chars/4 heuristic and a
+// false positive shouldn't block a review nobody asked to guard.
 type GuardConfig struct {
-	SecretScan bool `yaml:"secret_scan"`
+	SecretScan     bool `yaml:"secret_scan"`
+	TokenPreflight bool `yaml:"token_preflight"`
 }
 
 type ProviderConfig struct {
