@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/i18n"
 )
@@ -41,6 +42,67 @@ func TestColorEnabledAlwaysWinsOverNonTTY(t *testing.T) {
 func TestColorEnabledAutoOffOnNonTTY(t *testing.T) {
 	if ColorEnabled(&bytes.Buffer{}, ColorAuto) {
 		t.Error("ColorAuto on a non-TTY writer should be false")
+	}
+}
+
+func TestClip(t *testing.T) {
+	cases := []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"hello", 0, "hello"},  // 0 = no limit (width unknown)
+		{"hello", -1, "hello"}, // negative = no limit
+		{"hello", 10, "hello"}, // fits
+		{"hello", 5, "hello"},  // exact
+		{"hello world", 5, "hell…"},
+		{"abcdef", 3, "ab…"},
+		{"hi", 1, "…"},
+	}
+	for _, c := range cases {
+		if got := clip(c.in, c.max); got != c.want {
+			t.Errorf("clip(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
+	}
+}
+
+func TestFormatElapsed(t *testing.T) {
+	cases := map[time.Duration]string{
+		0:                         "0s",
+		3 * time.Second:           "3s",
+		59 * time.Second:          "59s",
+		60 * time.Second:          "1:00",
+		83 * time.Second:          "1:23",
+		(10*60 + 5) * time.Second: "10:05",
+	}
+	for d, want := range cases {
+		if got := formatElapsed(d); got != want {
+			t.Errorf("formatElapsed(%s) = %q, want %q", d, got, want)
+		}
+	}
+}
+
+func TestRedrawShowsElapsedOnActiveStage(t *testing.T) {
+	// Drive redraw directly (no animation goroutine) so the assertion is
+	// deterministic. An active stage older than elapsedShowAfter must carry
+	// its elapsed counter; a freshly-started one must not.
+	var buf bytes.Buffer
+	p := &Progress{w: &buf, mode: progressAnimated, frame: 1}
+	p.stages = []stage{{label: "Thinking...", state: stageActive}}
+	p.activeSince = time.Now().Add(-83 * time.Second)
+	p.redraw()
+	if got := buf.String(); !strings.Contains(got, "Thinking...") ||
+		!strings.Contains(got, "1:23") || !strings.Contains(got, stageTimerColor) {
+		t.Errorf("active stage redraw should show label + elapsed 1:23; got:\n%q", got)
+	}
+
+	buf.Reset()
+	p2 := &Progress{w: &buf, mode: progressAnimated, frame: 1}
+	p2.stages = []stage{{label: "Searching...", state: stageActive}}
+	p2.activeSince = time.Now() // just started → below elapsedShowAfter
+	p2.redraw()
+	if got := buf.String(); strings.Contains(got, stageTimerColor) {
+		t.Errorf("just-started stage must not show a timer yet; got:\n%q", got)
 	}
 }
 

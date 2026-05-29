@@ -5,10 +5,13 @@ package ui
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/term"
 )
 
 // Progress is the staged-spinner driving the review pipeline's
@@ -35,17 +38,19 @@ import (
 // single goroutine driving the pipeline. The animation lives in its
 // own goroutine that reads the stage list under a mutex.
 type Progress struct {
-	w       io.Writer
-	mode    progressMode
-	mu      sync.Mutex
-	stages  []stage
-	stop    chan struct{}
-	done    chan struct{}
-	active  atomic.Bool
-	closed  atomic.Bool
-	paused  atomic.Bool
-	frame   int
-	prevLen int // number of stage lines drawn last render; tracked so we can `cursor up N` on next redraw
+	w           io.Writer
+	mode        progressMode
+	mu          sync.Mutex
+	stages      []stage
+	stop        chan struct{}
+	done        chan struct{}
+	active      atomic.Bool
+	closed      atomic.Bool
+	paused      atomic.Bool
+	frame       int
+	prevLen     int       // number of stage lines drawn last render; tracked so we can `cursor up N` on next redraw
+	width       int       // terminal columns; 0 = unknown (no truncation). Lines are clipped to this so they never wrap — a wrapped line would occupy more physical rows than prevLen counts, desyncing the cursor-up redraw and flooding the screen.
+	activeSince time.Time // when the current active stage started; drives the live elapsed-time counter shown on slow stages (e.g. "Thinking… 0:42") so a long agent call reads as working, not frozen.
 }
 
 // stage is one entry in the tree.
@@ -87,6 +92,14 @@ func NewProgress(w io.Writer, mode ColorMode, quiet bool) *Progress {
 		p.mode = progressAnimated
 		p.stop = make(chan struct{})
 		p.done = make(chan struct{})
+		// Capture terminal width so redraw can clip lines and never wrap.
+		// Animated mode implies a TTY writer, so GetSize normally succeeds;
+		// a failure leaves width 0 (clipping disabled — best-effort).
+		if f, ok := w.(*os.File); ok {
+			if cols, _, err := term.GetSize(int(f.Fd())); err == nil {
+				p.width = cols
+			}
+		}
 	default:
 		p.mode = progressPlain
 	}
@@ -124,6 +137,7 @@ func (p *Progress) Start(label string) {
 		p.stages[n-1].state = stageDone
 	}
 	p.stages = append(p.stages, stage{label: label, state: stageActive})
+	p.activeSince = time.Now()
 	p.mu.Unlock()
 
 	p.kickAnimation()
@@ -342,6 +356,16 @@ func (p *Progress) redraw() {
 	if frame < 0 {
 		frame = 0 // final frame: use the "settled" appearance of the active dot
 	}
+	// Clip budgets so no rendered line wraps (see Progress.width). A label
+	// line is "├─ ⏺ " (5 cols) + label; an error line is "   " (3 cols) +
+	// text. A zero budget means "width unknown" → no clipping.
+	labelBudget, errBudget := 0, 0
+	if p.width > 5 {
+		labelBudget = p.width - 5
+	}
+	if p.width > 3 {
+		errBudget = p.width - 3
+	}
 	for i, st := range p.stages {
 		isLast := i == len(p.stages)-1
 		connector := "├─ "
@@ -362,12 +386,31 @@ func (p *Progress) redraw() {
 			buf.WriteString(stageInfoLeader)
 		}
 		buf.WriteString(" ")
-		buf.WriteString(st.label)
+		// Live elapsed-time counter on the active stage (only once it's run
+		// long enough to be worth showing, so fast stages stay clean). Its
+		// visible width is reserved out of the label budget so the line
+		// still never wraps.
+		budget := labelBudget
+		var timer string
+		if st.state == stageActive && p.frame >= 0 {
+			if d := time.Since(p.activeSince); d >= elapsedShowAfter {
+				timer = formatElapsed(d)
+			}
+		}
+		if timer != "" && budget > 0 {
+			if budget -= len([]rune(timer)) + 1; budget < 1 {
+				budget = 1
+			}
+		}
+		buf.WriteString(clip(st.label, budget))
+		if timer != "" {
+			buf.WriteString(" " + stageTimerColor + timer + "\033[0m")
+		}
 		buf.WriteString("\033[K\n") // clear to end-of-line + newline
 		// Error line under a failed stage.
 		if st.state == stageFail && st.err != nil {
 			buf.WriteString("   ")
-			buf.WriteString(stageFailErrorLine(st.err.Error()))
+			buf.WriteString(stageFailErrorLine(clip(st.err.Error(), errBudget)))
 			buf.WriteString("\033[K\n")
 		}
 		// Trunk separator between adjacent stages — gives each line
@@ -416,6 +459,24 @@ func (p *Progress) clearArea() {
 
 const progressFrameInterval = 180 * time.Millisecond
 
+// elapsedShowAfter is how long a stage must run before its live timer
+// appears. Below this, fast stages (searching, preparing) stay clean
+// instead of flickering "0s".
+const elapsedShowAfter = time.Second
+
+// stageTimerColor is the muted gray (#5b6273, ink-300) the elapsed-time
+// counter renders in, so it sits quietly beside the active stage label.
+const stageTimerColor = "\033[38;2;91;98;115m"
+
+// formatElapsed renders a duration as "42s" under a minute, "1:23" beyond.
+func formatElapsed(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	return fmt.Sprintf("%d:%02d", s/60, s%60)
+}
+
 // breathing color stops, cards.go palette aligned. 6-frame cycle:
 //
 //	0: muted (#3a3f4f) → 1: mid-1 (#4f5563) → 2: mid-2 (#6b7280)
@@ -437,6 +498,25 @@ const (
 	stageSoftDot    = "\033[38;2;156;163;175m⏺\033[0m" // #9CA3AF
 	stageInfoLeader = " "                              // bare space (no glyph for info lines)
 )
+
+// clip truncates s to at most max display columns (rune count, a good
+// enough proxy here), appending "…" when it cuts. max <= 0 means "no
+// limit" (terminal width unknown). Keeping rendered lines within the
+// terminal width is what prevents wrapping, which would otherwise desync
+// the cursor-up redraw and flood the screen.
+func clip(s string, max int) string {
+	if max <= 0 {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	if max == 1 {
+		return "…"
+	}
+	return string(r[:max-1]) + "…"
+}
 
 func animatedDotColor(frame int) string {
 	return breathingColors[frame%len(breathingColors)] + "⏺\033[0m"

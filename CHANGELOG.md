@@ -11,20 +11,29 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Fixed
-- **Progress spinner floods on `TERM=dumb` terminals.** Dumb terminals
-  (emacs `M-x shell`, some IDE consoles, bare ptys) report as a TTY but
-  ignore cursor-movement escapes, so the animated renderer appended a new
-  line every frame instead of redrawing in place — a stage like "Searching
-  for changes…" would repeat endlessly. `ColorEnabled` now demotes
-  `TERM=dumb` to plain mode (one line per stage). Workaround on older
-  builds: `--color never` or `NO_COLOR=1`. (`--color always` still
-  overrides for terminals you know handle ANSI.)
+- **Progress spinner floods the screen (repeats a stage line every frame).**
+  The animated renderer redraws in place by moving the cursor up
+  `prevLen` *logical* lines, but a stage line longer than the terminal
+  width wraps to multiple *physical* rows — so the cursor-up under-counted,
+  the tree marched downward, and the top line (e.g. "Searching for
+  changes…") was left behind on every frame. The long `--with-context`
+  security-warning line triggered this on normal-width terminals. Rendered
+  lines are now clipped to the terminal width so they never wrap, keeping
+  the in-place redraw exact. Additionally, `TERM=dumb` terminals (emacs
+  `M-x shell`, some IDE consoles) — which report as a TTY but ignore
+  cursor-movement escapes — now fall back to plain mode. Workaround on
+  older builds: `--color never` or `NO_COLOR=1`.
 - **`isRetriable` (eval harness) matched HTTP codes as bare substrings.** A
   non-transient error embedding `500`/`503` in a token count or duration
   (e.g. "requested 130500 tokens", "1500ms") was wrongly retried as a
   billable live call. Status codes now match on a digit boundary.
 
 ### Added
+- **Live elapsed-time counter on the active progress stage.** Once a stage
+  has run for more than a second, the animated tree shows a muted timer
+  beside it (e.g. `Thinking… 0:42`), so a slow `--with-context` agent call
+  reads as working rather than frozen. Fast stages stay clean; the timer's
+  width is reserved out of the line budget so it never causes wrapping.
 - **`--show-prompt` flag.** Prints the exact system + user prompt that
   would be sent to the model, then exits — no provider call, no cache
   lookup, no cost. Reflects every prompt-shaping flag (scope,
