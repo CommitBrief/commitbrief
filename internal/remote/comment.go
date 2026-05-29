@@ -16,17 +16,22 @@ import (
 // auto-link it to an issue (ADR-0016 §10).
 const signature = "by #CommitBrief"
 
+// suggestionPrefix marks the remediation line in GitHub-posted text so it
+// stands out from the description. Kept here (not in i18n) because all
+// GitHub text is fixed English (ADR-0016 §10).
+const suggestionPrefix = "💡 "
+
 // BuildCommentBody renders one finding as an inline review comment body.
 // Fixed English (ADR-0016 §10):
 //
 //	[SEVERITY] - Title
 //	Description
-//	Suggestion @whoami by #CommitBrief
+//	💡 Suggestion @whoami by #CommitBrief
 func BuildCommentBody(f render.Finding, whoami string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s] - %s\n", strings.ToUpper(string(f.Severity)), f.Title)
 	fmt.Fprintf(&b, "%s\n", f.Description)
-	fmt.Fprintf(&b, "%s @%s %s", f.Suggestion, whoami, signature)
+	fmt.Fprintf(&b, "%s%s @%s %s", suggestionPrefix, f.Suggestion, whoami, signature)
 	return b.String()
 }
 
@@ -91,6 +96,7 @@ func BuildUnanchoredSection(findings []render.Finding) string {
 		fmt.Fprintf(&b, "[%s] %s\n", strings.ToUpper(string(f.Severity)), f.PathRef())
 		fmt.Fprintf(&b, "%s\n", f.Title)
 		fmt.Fprintf(&b, "%s\n", f.Description)
+		b.WriteString(suggestionPrefix)
 		b.WriteString(f.Suggestion)
 	}
 	return b.String()

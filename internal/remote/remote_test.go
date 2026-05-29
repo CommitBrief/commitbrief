@@ -70,7 +70,7 @@ func TestBuildCommentBody(t *testing.T) {
 	got := BuildCommentBody(f, "octocat")
 	want := "[HIGH] - Unvalidated input\n" +
 		"The handler trusts the query param.\n" +
-		"Validate and bound the id before use. @octocat by #CommitBrief"
+		"💡 Validate and bound the id before use. @octocat by #CommitBrief"
 	if got != want {
 		t.Fatalf("comment body mismatch:\n got: %q\nwant: %q", got, want)
 	}
@@ -170,7 +170,7 @@ func TestBuildUnanchoredSection(t *testing.T) {
 		"[CRITICAL] app/x.go:42",
 		"Hardcoded secret",
 		"A token is committed in source.",
-		"Move it to an env var.",
+		"💡 Move it to an env var.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("section missing %q\n--- got ---\n%s", want, got)
