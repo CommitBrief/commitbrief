@@ -294,6 +294,30 @@ func TestVerboseFooterOmitsEmptyFields(t *testing.T) {
 	}
 }
 
+func TestExportedLineWrappers(t *testing.T) {
+	// HeaderLine / StatusLine / FooterLine must produce the same content
+	// the Cards renderer embeds, so non-card surfaces (remote pr) print
+	// identical context lines.
+	m := Meta{
+		Provider: "anthropic", Model: "claude-opus-4-7",
+		Files: 3, LinesAdded: 42, LinesRemoved: 7,
+		Usage: provider.Usage{InputTokens: 1000, OutputTokens: 840},
+		Cost:  0.0042,
+	}
+	if got := stripANSI(HeaderLine(m)); !strings.Contains(got, "commitbrief") || !strings.Contains(got, "anthropic/claude-opus-4-7") {
+		t.Errorf("HeaderLine missing expected segments; got %q", got)
+	}
+	if got := stripANSI(StatusLine(m)); !strings.Contains(got, "3 files") || !strings.Contains(got, "42 added") {
+		t.Errorf("StatusLine missing expected segments; got %q", got)
+	}
+	if got := stripANSI(StatusLine(Meta{})); got != "" {
+		t.Errorf("StatusLine with no stats should be empty; got %q", got)
+	}
+	if got := stripANSI(FooterLine(m, []Finding{{Severity: SeverityHigh}})); !strings.Contains(got, "Done in") || !strings.Contains(got, "1 finding") {
+		t.Errorf("FooterLine missing expected segments; got %q", got)
+	}
+}
+
 func TestCardsHeader(t *testing.T) {
 	var w bytes.Buffer
 	if err := Cards(&w, samplePayload()); err != nil {

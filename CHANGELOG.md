@@ -8,6 +8,48 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [1.2.1]
+
+### Fixed
+- **`commitbrief remote pr` no longer mis-places inline comments.**
+  Comments are now anchored to the diff side each finding's line lives on
+  — `RIGHT` (new file) for added/context lines, `LEFT` (old file) for
+  removed lines — instead of unconditionally posting `side=RIGHT`. A
+  finding whose line falls outside the diff (or whose POST GitHub rejects)
+  is appended to the review summary under a "Findings that could not be
+  attached to a specific line" heading rather than being silently dropped.
+### Changed
+- **Line-numbered diffs for more accurate finding locations.** Every
+  review (local and `remote pr`) now sends the model a diff with each
+  changed line prefixed by the line number a comment would anchor to
+  (`<n>| <marker><text>`), so the model copies line numbers instead of
+  counting them from the `@@` hunk header. This sharply reduces findings
+  landing on the wrong line (closing braces, blank lines). The on-disk
+  cache is rebuilt once on upgrade because the system prompt changed; the
+  diff component of the cache key is unaffected (the numbered form is a
+  deterministic function of the plain diff).
+- **`remote pr` prints the standard review context lines.** The same
+  header (`commitbrief vX · provider · cache`), `analyzing N files · …`
+  status line, and `✓ Done in … · N findings · tokens · $cost` footer the
+  local `review` shows now surround the remote run too, so the
+  informational lines are consistent across every review command type.
+  They are exposed as reusable `render.HeaderLine` / `StatusLine` /
+  `FooterLine` to keep one implementation.
+- **Staged-tree progress display extended to `remote pr`, `compress`, and
+  `providers test`.** All long-running/stepped operations now render
+  through the same animated tree the local `review` command uses (one line
+  per stage in non-TTY/CI; suppressed by `--quiet`) instead of flat stderr
+  lines — `remote pr` shows fetch → review → post → submit. The finished
+  tree stays on screen (it is not cleared) for these commands since no
+  rich card output replaces it.
+- **Startup banner tweaks.** The footer links now point to the repo
+  **Issues** page (replacing the GitHub link) and drop the Author link;
+  the license tag reads `GNU GPL v3` instead of `GNU-GPL3.0`.
+- **`remote pr` suggestion lines are prefixed with `💡`.** The remediation
+  line in both inline comments and the review-summary fallback now starts
+  with `💡 ` so it reads distinctly from the description. The signature was
+  also lowercased to `by #commitbrief`.
+
 ## [1.2.0]
 
 ### Fixed

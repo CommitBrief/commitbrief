@@ -3,8 +3,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,8 +15,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/git"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/remote"
 	"github.com/CommitBrief/commitbrief/internal/render"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
 func TestParseRequestChangesOn(t *testing.T) {
@@ -289,6 +295,38 @@ func TestRemotePRApproveFlowPostsCommentThenApproves(t *testing.T) {
 	}
 }
 
+func TestRemotePRPrintsHeaderAndFooter(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	r := &fakeGH{
+		whoami:     "tester",
+		prMeta:     prMetaJSON("contributor", "stable"),
+		commitsSeq: []string{`{"commits":[{"oid":"stable"}]}`},
+		diff:       sampleDiff,
+	}
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(e.repoRoot)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	var errBuf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetErr(&errBuf)
+	if err := runRemotePR(cmd, "42", remotePRFlags{requestChangesOn: "critical"}, r); err != nil {
+		t.Fatalf("remote pr: %v", err)
+	}
+
+	// Segments are contiguous inside any lipgloss ANSI wrappers, so a raw
+	// substring search is robust to the color profile.
+	out := errBuf.String()
+	// Header (above the tree), status (tree info line), footer (below).
+	for _, want := range []string{"commitbrief", "provider:", "analyzing 1 file", "Done in"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected standard review line %q in remote output; got:\n%s", want, out)
+		}
+	}
+}
+
 func TestRemotePRAbortsOnDoubleRace(t *testing.T) {
 	e := newCLIEnv(t)
 	stubGHOnPath(t)
@@ -306,5 +344,50 @@ func TestRemotePRAbortsOnDoubleRace(t *testing.T) {
 	}
 	if r.callCount("review") != 0 {
 		t.Errorf("no verdict on double race; calls=%v", r.calls)
+	}
+}
+
+func TestSubmitPRReviewAnchorsAndFallsBack(t *testing.T) {
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &appContext{Catalog: cat}
+	parsed, err := diff.Parse(git.Diff{Content: sampleDiff, Origin: git.OriginDiff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	anchors := parsed.Anchors()
+
+	findings := []render.Finding{
+		// Line 1 (context `package mock`) is a valid RIGHT position → posted.
+		{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "anchored", Description: "d", Suggestion: "s"},
+		// Line 999 is outside every hunk → falls back to the summary body.
+		{Severity: render.SeverityInfo, File: "mock.go", Line: 999, Title: "floating", Description: "d", Suggestion: "s"},
+	}
+
+	r := &fakeGH{}
+	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
+	prog := ui.NewProgress(io.Discard, ui.ColorNever, true) // silent
+	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
+		findings, anchors, render.SeverityCritical, "tester", app, prog); err != nil {
+		t.Fatalf("submitPRReview: %v", err)
+	}
+
+	if got := r.callCount("/comments"); got != 1 {
+		t.Errorf("want exactly 1 inline comment (only the anchored finding), got %d; calls=%v", got, r.calls)
+	}
+	// The unanchored finding must survive in the review body.
+	var reviewBody string
+	for _, c := range r.calls {
+		if strings.Contains(c, "review") {
+			reviewBody = c
+		}
+	}
+	if !strings.Contains(reviewBody, "Findings that could not be attached") {
+		t.Errorf("unanchored finding not appended to review body; review call=%q", reviewBody)
+	}
+	if !strings.Contains(reviewBody, "floating") {
+		t.Errorf("unanchored finding title missing from body; review call=%q", reviewBody)
 	}
 }

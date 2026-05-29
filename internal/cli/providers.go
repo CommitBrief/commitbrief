@@ -13,6 +13,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/setup"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
 // newProvidersCmd is the `commitbrief providers` subtree. It exposes
@@ -162,11 +163,21 @@ func newProvidersTestCmd() *cobra.Command {
 				return errors.New(app.Catalog.T("providers.test.unknown", name, provider.Names()))
 			}
 			pc := app.Config.Providers[name]
+			// Single network step, shown through the shared staged-tree
+			// progress (a spinner while the ping is in flight). Close keeps
+			// the finished stage line above the stdout success summary.
+			prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
+			defer prog.Close()
+			prog.Start(app.Catalog.T("providers.test.pinging", name))
 			start := time.Now()
 			if err := setup.TestConnection(cmd.Context(), name, pc); err != nil {
-				return errors.New(app.Catalog.T("providers.test.failed", name, err.Error()))
+				e := errors.New(app.Catalog.T("providers.test.failed", name, err.Error()))
+				prog.Fail(e)
+				return e
 			}
 			elapsed := time.Since(start)
+			prog.Finish()
+			prog.Close()
 			if _, err := fmt.Fprintln(cmd.OutOrStdout(), app.Catalog.T("providers.test.success", name, elapsed.Round(time.Millisecond).String())); err != nil {
 				return err
 			}

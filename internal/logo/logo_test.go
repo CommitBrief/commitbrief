@@ -23,7 +23,7 @@ func TestPrintEmbedsSuppliedVersion(t *testing.T) {
 	if !strings.Contains(out, "commitbrief") {
 		t.Errorf("output missing wordmark; got first 400 bytes:\n%s", truncate(out, 400))
 	}
-	if !strings.Contains(out, "© GNU-GPL3.0") {
+	if !strings.Contains(out, "© GNU GPL v3") {
 		t.Errorf("output missing license tag; got first 400 bytes:\n%s", truncate(out, 400))
 	}
 }
@@ -65,6 +65,21 @@ func TestPrintIncludesHomepageHyperlink(t *testing.T) {
 	Print(&buf, "dev")
 	if !strings.Contains(buf.String(), "https://commitbrief.com") {
 		t.Errorf("expected homepage URL inside the OSC 8 hyperlink escape")
+	}
+}
+
+func TestPrintLinksIssuesNotAuthor(t *testing.T) {
+	var buf bytes.Buffer
+	Print(&buf, "dev")
+	out := buf.String()
+	if !strings.Contains(out, "https://github.com/CommitBrief/commitbrief/issues") {
+		t.Errorf("expected the Issues link in the footer")
+	}
+	if !strings.Contains(out, "Issues") {
+		t.Errorf("expected the Issues label in the footer")
+	}
+	if strings.Contains(out, "muhammetsafak.com.tr") || strings.Contains(out, "Author") {
+		t.Errorf("Author link should have been removed from the footer")
 	}
 }
 

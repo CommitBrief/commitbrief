@@ -182,6 +182,20 @@ const clearEOL = "\x1b[0m\x1b[49m\x1b[K"
 // off-screen.
 const cardContentWidth = 96
 
+// HeaderLine, StatusLine, and FooterLine expose the three context lines
+// the Cards renderer wraps around its body, so non-card review surfaces
+// (e.g. `remote pr`, whose findings go to GitHub) can print the exact
+// same informational lines to the terminal. Keeping one implementation
+// guarantees they stay identical across every review command type.
+func HeaderLine(m Meta) string { return cardsHeader(m) }
+
+// StatusLine returns the "analyzing N files · …" line, or "" when no
+// diff stats are populated.
+func StatusLine(m Meta) string { return cardsStatus(m) }
+
+// FooterLine returns the "✓ Done in … · … tokens · $cost" line.
+func FooterLine(m Meta, findings []Finding) string { return cardsFooter(m, findings) }
+
 // cardsHeader: "commitbrief vX.Y.Z · provider: name/model · cache: hit"
 // Each segment is colored independently; bullets stay quiet.
 func cardsHeader(m Meta) string {

@@ -5,8 +5,10 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/remote"
 	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/rules"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
 type remotePRFlags struct {
@@ -102,60 +105,117 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 	if _, plain := prov.(provider.PlainTextEmitter); plain {
 		return errors.New(cat.T("remote.plain_text_provider"))
 	}
+	model := app.Config.Providers[app.Config.Provider].Model
+	if model == "" {
+		model = prov.DefaultModel()
+	}
+
+	// Standard review header line ("commitbrief vX · provider · cache"),
+	// printed above the progress tree exactly as the local review shows
+	// it. remote pr does not consult the local cache, so it reports a
+	// miss. Honors --quiet.
+	if !global.quiet {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.HeaderLine(render.Meta{Provider: prov.Name(), Model: model}))
+	}
+
+	// Same staged-tree progress display the local review uses, so the
+	// remote pipeline reads identically (stages animate on a TTY, degrade
+	// to one line per transition in CI). All progress/warning output goes
+	// through prog while it is live — a raw stderr write would corrupt the
+	// animated redraw.
+	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
+	defer prog.Close()
 
 	if global.failOn != "" {
-		infof("%s", cat.T("remote.fail_on_ignored"))
+		prog.Info(cat.T("remote.fail_on_ignored"))
 	}
 
 	whoami, err := remote.Whoami(ctx, runner)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 
-	infof("%s", cat.T("remote.fetching_pr", prID))
+	prog.Start(cat.T("remote.fetching_pr", prID))
 	meta, err := remote.FetchPRMeta(ctx, runner, prID, f.repo)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 	if strings.EqualFold(meta.AuthorLogin(), whoami) {
-		return errors.New(cat.T("remote.self_pr_blocked"))
+		err := errors.New(cat.T("remote.self_pr_blocked"))
+		prog.Fail(err)
+		return err
 	}
 
 	loaded, err := rules.Load(app.RepoRoot)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 
-	findings, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, loaded, meta.LastOID())
+	res, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, model, loaded, meta.LastOID(), prog)
 	if err != nil {
+		prog.Fail(err)
 		return err
 	}
 
-	return submitPRReview(ctx, runner, prID, f, meta, oid, findings, threshold, whoami, app)
+	if err := submitPRReview(ctx, runner, prID, f, meta, oid, res.findings, res.anchors, threshold, whoami, app, prog); err != nil {
+		prog.Fail(err)
+		return err
+	}
+
+	// Standard review footer line ("✓ Done in … · N findings · tokens ·
+	// $cost"), printed below the now-finished tree (Close, not Clear, so the
+	// tree stays on screen). Honors --quiet.
+	prog.Close()
+	if !global.quiet {
+		footerMeta := render.Meta{
+			Provider: prov.Name(),
+			Model:    model,
+			Usage:    res.usage,
+			Cost:     resolvePricing(app.Config, prov, model).Cost(res.usage),
+			Latency:  res.latency,
+		}
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.FooterLine(footerMeta, res.findings))
+	}
+	return nil
+}
+
+// prReviewResult bundles everything one PR review produces that the
+// caller needs downstream: the findings, the anchor index to place them,
+// and the provider usage + latency that feed the terminal footer line.
+type prReviewResult struct {
+	findings []render.Finding
+	anchors  map[string]diff.FileAnchors
+	usage    provider.Usage
+	latency  time.Duration
 }
 
 // reviewPRDiff fetches the PR diff, runs one review, and guards against a
 // race: if the PR head OID changed during the review it retries once,
-// then aborts (ADR-0016 §7). Returns the findings plus the OID they were
-// produced against (used to anchor inline comments).
-func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, lastOID string) ([]render.Finding, string, error) {
+// then aborts (ADR-0016 §7). Returns the review result plus the OID it
+// was produced against (used to anchor inline comments).
+func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, lastOID string, prog *ui.Progress) (prReviewResult, string, error) {
 	for attempt := 0; ; attempt++ {
-		infof("%s", app.Catalog.T("remote.reviewing"))
-		findings, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, loaded)
+		res, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, model, loaded, prog)
 		if err != nil {
-			return nil, "", err
+			return prReviewResult{}, "", err
 		}
 		newOID, err := remote.FetchLastOID(ctx, runner, prID, f.repo)
 		if err != nil {
-			return nil, "", err
+			return prReviewResult{}, "", err
 		}
 		if newOID == lastOID {
-			return findings, lastOID, nil
+			return res, lastOID, nil
 		}
 		if attempt >= 1 {
-			return nil, "", errors.New(app.Catalog.T("remote.too_volatile"))
+			return prReviewResult{}, "", errors.New(app.Catalog.T("remote.too_volatile"))
 		}
-		infof("%s", app.Catalog.T("remote.race_retry"))
+		// Head moved: neutralize the just-finished review stage (it was
+		// valid work, just superseded) and note the retry before looping.
+		prog.Soft()
+		prog.Info(app.Catalog.T("remote.race_retry"))
 		lastOID = newOID
 	}
 }
@@ -163,67 +223,97 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 // reviewOnePRDiff runs the structured review pipeline once against the
 // PR's current diff. Bot-mode: the secret scanner warns but never aborts
 // (ADR-0016 §3); the local-config guard and cost preflight are skipped.
-func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded) ([]render.Finding, error) {
+func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, prog *ui.Progress) (prReviewResult, error) {
 	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
 	if err != nil {
-		return nil, err
+		return prReviewResult{}, err
 	}
 	parsed, err := diff.Parse(git.Diff{Content: rawDiff, Origin: git.OriginDiff})
 	if err != nil {
-		return nil, err
+		return prReviewResult{}, err
 	}
 	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
 	if parsed.Empty() {
-		return []render.Finding{}, nil
+		return prReviewResult{findings: []render.Finding{}, anchors: map[string]diff.FileAnchors{}}, nil
 	}
 	diffText := parsed.String()
+	anchors := parsed.Anchors()
 
+	// "analyzing N files · X added · Y removed [· COMMITBRIEF.md loaded]" —
+	// the same status line the local review renders, emitted here as a tree
+	// info note. It also finishes the active fetch stage (info auto-finishes
+	// the stage above it), mirroring local review's diff-stats line.
+	prog.Info(render.StatusLine(render.Meta{
+		Files:        parsed.FileCount(),
+		LinesAdded:   parsed.AddedLines(),
+		LinesRemoved: parsed.DeletedLines(),
+		RulesLoaded:  loaded.Source != rules.SourceDefault,
+	}))
+
+	// Emit the secret warning before starting the review stage, so it lands
+	// as a note rather than prematurely terminating the review stage.
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
 		if hits := guard.ScanForSecrets(diffText); len(hits) > 0 {
-			infof("%s", app.Catalog.T("remote.secret_warn", len(hits)))
+			prog.Info(app.Catalog.T("remote.secret_warn", len(hits)))
 		}
 	}
 
-	p := prompt.Build(loaded, app.Lang, diffText)
-	model := app.Config.Providers[app.Config.Provider].Model
-	if model == "" {
-		model = prov.DefaultModel()
-	}
+	prog.Start(app.Catalog.T("remote.reviewing"))
+
+	// The model sees the line-numbered diff so it copies line numbers
+	// instead of estimating them (see review.go); anchors above are built
+	// from the same parsed diff.
+	p := prompt.Build(loaded, app.Lang, parsed.NumberedString())
 	req := provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,
 		UserPrompt:   p.User,
 		Lang:         app.Lang.Code,
 	}
-	content, _, format, err := tryStructuredReview(ctx, prov, req, func() {})
+	start := time.Now()
+	content, usage, format, err := tryStructuredReview(ctx, prov, req, func() {})
 	if err != nil {
-		return nil, err
+		return prReviewResult{}, err
 	}
+	latency := time.Since(start)
 	if format != cache.FormatJSON {
-		return nil, errors.New(app.Catalog.T("remote.degraded"))
+		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
 	findings, err := render.ParseFindings(content)
 	if err != nil {
-		return nil, errors.New(app.Catalog.T("remote.degraded"))
+		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
-	return findings, nil
+	return prReviewResult{findings: findings, anchors: anchors, usage: usage, latency: latency}, nil
 }
 
 // submitPRReview posts the selected inline comments and the review-level
-// verdict. Per-comment failures are logged and counted but never abort
-// the verdict submission (ADR-0016 §9).
-func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, threshold render.Severity, whoami string, app *appContext) error {
+// verdict. Each finding is anchored to the side (RIGHT/LEFT) its line
+// actually lives on; findings whose line is outside the diff — or whose
+// POST is rejected — are not dropped but appended to the review summary
+// so the signal survives (ADR-0016 §9). Per-comment failures never abort
+// the verdict submission.
+func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, anchors map[string]diff.FileAnchors, threshold render.Severity, whoami string, app *appContext, prog *ui.Progress) error {
 	cat := app.Catalog
 	verdict := computeVerdict(findings, threshold)
 	postable := selectPostable(findings, threshold)
 
-	if len(postable) > 0 {
-		infof("%s", cat.T("remote.posting_comments", len(postable)))
-	}
 	slug := meta.BaseSlug()
 	posted, failed := 0, 0
+	var unanchored []render.Finding
+	var failures []string
+	if len(postable) > 0 {
+		prog.Start(cat.T("remote.posting_comments", len(postable)))
+	}
 	for _, fnd := range postable {
-		if fnd.Line <= 0 {
+		fa, hasFile := anchors[fnd.File]
+		side, ok := "", false
+		if hasFile {
+			side, ok = fa.Resolve(fnd.Line, preferLeftSide(fnd))
+		}
+		if !ok {
+			// Line is not a postable position in the diff — a GitHub POST
+			// would 422. Keep it for the summary instead of losing it.
+			unanchored = append(unanchored, fnd)
 			continue
 		}
 		err := remote.PostComment(ctx, runner, remote.CommentRequest{
@@ -232,32 +322,71 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 			CommitID: oid,
 			Path:     fnd.File,
 			Line:     fnd.Line,
+			Side:     side,
 			Body:     remote.BuildCommentBody(fnd, whoami),
 		})
 		if err != nil {
 			failed++
-			infof("%s", cat.T("remote.comment_failed", fnd.PathRef(), err.Error()))
+			unanchored = append(unanchored, fnd)
+			// Collect rather than emit mid-loop: prog.Info would terminate
+			// the active posting stage on the first failure.
+			failures = append(failures, cat.T("remote.comment_failed", fnd.PathRef(), err.Error()))
 			continue
 		}
 		posted++
 	}
+	if len(postable) > 0 {
+		prog.Finish() // posting stage done
+	}
+	for _, msg := range failures {
+		prog.Info(msg)
+	}
 	if posted+failed > 0 {
-		infof("%s", cat.T("remote.posted_summary", posted, posted+failed, failed))
+		prog.Info(cat.T("remote.posted_summary", posted, posted+failed, failed))
+	}
+	if len(unanchored) > 0 {
+		prog.Info(cat.T("remote.unanchored_appended", len(unanchored)))
 	}
 
 	body := remote.BuildReviewBody(verdict, whoami)
+	if section := remote.BuildUnanchoredSection(unanchored); section != "" {
+		body += "\n\n---\n\n" + section
+	}
+	prog.Start(cat.T("remote.submitting"))
 	if err := remote.SubmitReview(ctx, runner, prID, f.repo, verdict, body); err != nil {
 		return err
 	}
+	prog.Finish()
 	switch verdict {
 	case remote.VerdictApprove:
-		infof("%s", cat.T("remote.action_approve", meta.Number))
+		prog.Info(cat.T("remote.action_approve", meta.Number))
 	case remote.VerdictRequestChanges:
-		infof("%s", cat.T("remote.action_request_changes", meta.Number))
+		prog.Info(cat.T("remote.action_request_changes", meta.Number))
 	default:
-		infof("%s", cat.T("remote.action_comment", meta.Number))
+		prog.Info(cat.T("remote.action_comment", meta.Number))
 	}
 	return nil
+}
+
+// preferLeftSide reports whether a finding reads as being about removed
+// code, so a line number that is valid on both diff sides resolves to
+// LEFT instead of RIGHT. Heuristic: the snippet carries at least one
+// removed ("-") line and no added ("+") line. With no snippet we keep
+// the RIGHT-first default — the common case is a finding about new code.
+func preferLeftSide(f render.Finding) bool {
+	if f.Snippet == "" {
+		return false
+	}
+	minus, plus := 0, 0
+	for _, ln := range strings.Split(f.Snippet, "\n") {
+		switch {
+		case strings.HasPrefix(ln, "-"):
+			minus++
+		case strings.HasPrefix(ln, "+"):
+			plus++
+		}
+	}
+	return minus > 0 && plus == 0
 }
 
 // computeVerdict maps findings + threshold to a GitHub review verdict

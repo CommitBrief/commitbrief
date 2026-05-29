@@ -70,7 +70,7 @@ func TestBuildCommentBody(t *testing.T) {
 	got := BuildCommentBody(f, "octocat")
 	want := "[HIGH] - Unvalidated input\n" +
 		"The handler trusts the query param.\n" +
-		"Validate and bound the id before use. @octocat by #CommitBrief"
+		"💡 Validate and bound the id before use. @octocat by #commitbrief"
 	if got != want {
 		t.Fatalf("comment body mismatch:\n got: %q\nwant: %q", got, want)
 	}
@@ -78,9 +78,9 @@ func TestBuildCommentBody(t *testing.T) {
 
 func TestBuildReviewBody(t *testing.T) {
 	cases := map[Verdict]string{
-		VerdictApprove:        "@octocat by #CommitBrief",
-		VerdictComment:        "It must be checked by the human eye. @octocat by #CommitBrief",
-		VerdictRequestChanges: "We can revisit it after we've solved the problems. @octocat by #CommitBrief",
+		VerdictApprove:        "@octocat by #commitbrief",
+		VerdictComment:        "It must be checked by the human eye. @octocat by #commitbrief",
+		VerdictRequestChanges: "We can revisit it after we've solved the problems. @octocat by #commitbrief",
 	}
 	for v, want := range cases {
 		if got := BuildReviewBody(v, "octocat"); got != want {
@@ -135,6 +135,46 @@ func TestPostCommentSendsSideRight(t *testing.T) {
 	}
 	if !argsContain(args, "commit_id=deadbeef") {
 		t.Errorf("missing commit_id in %v", args)
+	}
+}
+
+func TestPostCommentSendsSideLeft(t *testing.T) {
+	fr := &fakeRunner{}
+	c := CommentRequest{
+		RepoSlug: "octo/demo", PRNumber: 7,
+		CommitID: "deadbeef", Path: "main.go", Line: 12, Side: "LEFT", Body: "x",
+	}
+	if err := PostComment(context.Background(), fr, c); err != nil {
+		t.Fatalf("PostComment: %v", err)
+	}
+	if !argsContain(fr.lastCall(), "side=LEFT") {
+		t.Errorf("explicit Side=LEFT not propagated in %v", fr.lastCall())
+	}
+}
+
+func TestBuildUnanchoredSection(t *testing.T) {
+	if got := BuildUnanchoredSection(nil); got != "" {
+		t.Errorf("empty input must yield empty section, got %q", got)
+	}
+	findings := []render.Finding{{
+		Severity:    render.SeverityCritical,
+		File:        "app/x.go",
+		Line:        42,
+		Title:       "Hardcoded secret",
+		Description: "A token is committed in source.",
+		Suggestion:  "Move it to an env var.",
+	}}
+	got := BuildUnanchoredSection(findings)
+	for _, want := range []string{
+		unanchoredHeading,
+		"[CRITICAL] app/x.go:42",
+		"Hardcoded secret",
+		"A token is committed in source.",
+		"💡 Move it to an env var.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("section missing %q\n--- got ---\n%s", want, got)
+		}
 	}
 }
 

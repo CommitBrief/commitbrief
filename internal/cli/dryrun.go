@@ -66,7 +66,10 @@ func newDryRunCmd() *cobra.Command {
 			// need it and Diff.String() rewalks the file tree on
 			// every call.
 			diffText := parsed.String()
-			p := prompt.Build(loaded, app.Lang, diffText)
+			// Estimate against the line-numbered diff the review will
+			// actually send (see review.go); the cache key still keys on
+			// the plain diffText so dry-run and the real run collide.
+			p := prompt.Build(loaded, app.Lang, parsed.NumberedString())
 
 			// UC-19: surface output-tokens / context-window / cost
 			// alongside the input-tokens estimate so dry-run answers

@@ -191,11 +191,16 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// guarantees unreliable. See ADR-0009 supersession note and the
 	// clireview package.
 	_, plainText := prov.(provider.PlainTextEmitter)
+	// The model sees the line-numbered diff so it can copy line numbers
+	// instead of counting them; the cache key and secret scan keep using
+	// the plain diffText (numberedDiff is a deterministic function of it,
+	// so the cache identity is unchanged).
+	numberedDiff := parsed.NumberedString()
 	var p prompt.Prompt
 	if plainText {
-		p = prompt.BuildPlainText(loaded, app.Lang, diffText)
+		p = prompt.BuildPlainText(loaded, app.Lang, numberedDiff)
 	} else {
-		p = prompt.Build(loaded, app.Lang, diffText)
+		p = prompt.Build(loaded, app.Lang, numberedDiff)
 	}
 
 	model := app.Config.Providers[app.Config.Provider].Model
