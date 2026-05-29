@@ -174,6 +174,8 @@ commitbrief list                             # command reference
 # Cache maintenance
 commitbrief cache clear                    # wipe every cached LLM response for this repo
 commitbrief cache prune [flags]            # bounded cleanup; defaults --keep-last 500 --older-than 7d
+commitbrief cache stats                    # entry count, size, age range, per-provider breakdown
+commitbrief cache inspect <key>            # one entry's metadata (add --show-content for the body)
 ```
 
 Global flags: `--json`, `--markdown`, `--output <file>`, `--copy`,
@@ -320,6 +322,7 @@ output:
 cache:
   enabled: true
   ttl_days: 7
+  max_size_mb: 0                   # 0 = unlimited; >0 evicts oldest entries past the cap
 ```
 
 Review content lives in two files:
@@ -400,7 +403,10 @@ removed.
 **When does the cache invalidate?**
 The cache key is a SHA-256 of `diff + system prompt + provider + model
 + lang + schema version`. Change any of those and you get a fresh
-review. Default TTL is 7 days; configurable via `cache.ttl_days`.
+review. Default TTL is 7 days; configurable via `cache.ttl_days`. Set
+`cache.max_size_mb` (>0) to bound the on-disk cache: writes that push it
+past the limit evict the oldest entries first (the entry just written is
+never evicted). Inspect it with `cache stats` / `cache inspect <key>`.
 
 **Can I run it in CI?**
 The primary target is the developer's terminal, but the CI-friendly

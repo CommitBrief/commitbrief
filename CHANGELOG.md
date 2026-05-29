@@ -24,6 +24,20 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   Go source — tracked or newly added — is missing its
   `// SPDX-License-Identifier: GPL-3.0-or-later` header, keeping the 100%
   coverage from regressing (ADR-0012).
+- **`cache stats` subcommand.** Summarizes the local response cache:
+  entry count, total size, oldest/newest entry timestamps, the configured
+  size limit, and a per-provider/model breakdown. Read-only (ADR-0008).
+- **`cache inspect <key>` subcommand.** Dumps a single cache entry's
+  metadata (provider, model, language, created-at, TTL + freshness, token
+  counts, on-disk size) by its cache key — the SHA-256 shown by
+  `--verbose` / `dry-run`, with or without the `.json` suffix. The cached
+  review body is shown only with `--show-content` (ADR-0008).
+- **Size-bounded cache eviction.** New `cache.max_size_mb` config key:
+  when set (>0), each cache write that pushes the directory over the limit
+  evicts the oldest entries first until it fits; the just-written entry is
+  never evicted. Default `0` keeps the cache unlimited (`cache prune`
+  remains the manual stand-in). This is a fresh key with real Put-path
+  enforcement, not a revival of the v0.9.1-removed dead field (ADR-0008).
 
 ## [1.2.1]
 

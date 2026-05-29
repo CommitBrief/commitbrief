@@ -60,7 +60,15 @@ type OutputConfig struct {
 	Color  string `yaml:"color"`
 }
 
+// CacheConfig controls the local response cache (ADR-0008). MaxSizeMB
+// bounds the on-disk cache: after each write, if the cache directory
+// exceeds this many mebibytes the oldest entries are evicted oldest-first
+// until it fits (the just-written entry is never evicted). Zero — the
+// default — disables eviction; `cache prune` stays the manual stand-in.
+// A new key rather than the v0.9.1-removed `max_size_mb` revival: this
+// one is actually read on the Put path.
 type CacheConfig struct {
-	Enabled bool `yaml:"enabled"`
-	TTLDays int  `yaml:"ttl_days"`
+	Enabled   bool `yaml:"enabled"`
+	TTLDays   int  `yaml:"ttl_days"`
+	MaxSizeMB int  `yaml:"max_size_mb"`
 }

@@ -618,10 +618,18 @@ func openCache(repoRoot string, cfg config.CacheConfig) (*cache.Cache, error) {
 	if cfg.TTLDays > 0 {
 		ttl = time.Duration(cfg.TTLDays) * 24 * time.Hour
 	}
+	// cache.max_size_mb bounds the on-disk cache (ADR-0008 size-bounded
+	// eviction); <=0 means unlimited. MiB so a "50" in config matches the
+	// human-readable byte formatting used by cache stats / clear / prune.
+	var maxBytes int64
+	if cfg.MaxSizeMB > 0 {
+		maxBytes = int64(cfg.MaxSizeMB) * 1024 * 1024
+	}
 	return cache.Open(cache.Options{
-		Dir:      filepath.Join(repoRoot, ".commitbrief", "cache"),
-		RepoRoot: repoRoot,
-		TTL:      ttl,
+		Dir:          filepath.Join(repoRoot, ".commitbrief", "cache"),
+		RepoRoot:     repoRoot,
+		TTL:          ttl,
+		MaxSizeBytes: maxBytes,
 	})
 }
 

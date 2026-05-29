@@ -13,11 +13,12 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
-// newCacheCmd is the `commitbrief cache` subtree. Currently exposes a
-// single `clear` child that deletes the repo-local response cache at
-// <repoRoot>/.commitbrief/cache/. The parent exists as a namespace so
-// future inspection helpers (e.g. `cache stats`, `cache inspect`) can
-// slot in without re-flattening the CLI surface.
+// newCacheCmd is the `commitbrief cache` subtree over the repo-local
+// response cache at <repoRoot>/.commitbrief/cache/:
+//   - clear   — delete every cached entry
+//   - prune   — drop old/excess entries by keep-last + age windows
+//   - stats   — count, size, age range, per-provider/model breakdown
+//   - inspect — dump one entry's metadata by key
 func newCacheCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cache",
@@ -26,6 +27,8 @@ func newCacheCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newCacheClearCmd())
 	cmd.AddCommand(newCachePruneCmd())
+	cmd.AddCommand(newCacheStatsCmd())
+	cmd.AddCommand(newCacheInspectCmd())
 	return cmd
 }
 
