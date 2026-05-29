@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -291,6 +292,38 @@ func TestRemotePRApproveFlowPostsCommentThenApproves(t *testing.T) {
 	}
 	if r.callCount("--approve") != 1 {
 		t.Errorf("want a --approve verdict, calls=%v", r.calls)
+	}
+}
+
+func TestRemotePRPrintsHeaderAndFooter(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	r := &fakeGH{
+		whoami:     "tester",
+		prMeta:     prMetaJSON("contributor", "stable"),
+		commitsSeq: []string{`{"commits":[{"oid":"stable"}]}`},
+		diff:       sampleDiff,
+	}
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(e.repoRoot)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	var errBuf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetErr(&errBuf)
+	if err := runRemotePR(cmd, "42", remotePRFlags{requestChangesOn: "critical"}, r); err != nil {
+		t.Fatalf("remote pr: %v", err)
+	}
+
+	// Segments are contiguous inside any lipgloss ANSI wrappers, so a raw
+	// substring search is robust to the color profile.
+	out := errBuf.String()
+	// Header (above the tree), status (tree info line), footer (below).
+	for _, want := range []string{"commitbrief", "provider:", "analyzing 1 file", "Done in"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected standard review line %q in remote output; got:\n%s", want, out)
+		}
 	}
 }
 

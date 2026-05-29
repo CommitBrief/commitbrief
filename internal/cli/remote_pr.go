@@ -5,8 +5,10 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -103,6 +105,18 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 	if _, plain := prov.(provider.PlainTextEmitter); plain {
 		return errors.New(cat.T("remote.plain_text_provider"))
 	}
+	model := app.Config.Providers[app.Config.Provider].Model
+	if model == "" {
+		model = prov.DefaultModel()
+	}
+
+	// Standard review header line ("commitbrief vX · provider · cache"),
+	// printed above the progress tree exactly as the local review shows
+	// it. remote pr does not consult the local cache, so it reports a
+	// miss. Honors --quiet.
+	if !global.quiet {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.HeaderLine(render.Meta{Provider: prov.Name(), Model: model}))
+	}
 
 	// Same staged-tree progress display the local review uses, so the
 	// remote pipeline reads identically (stages animate on a TTY, degrade
@@ -140,39 +154,63 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		return err
 	}
 
-	findings, anchors, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, loaded, meta.LastOID(), prog)
+	res, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, model, loaded, meta.LastOID(), prog)
 	if err != nil {
 		prog.Fail(err)
 		return err
 	}
 
-	if err := submitPRReview(ctx, runner, prID, f, meta, oid, findings, anchors, threshold, whoami, app, prog); err != nil {
+	if err := submitPRReview(ctx, runner, prID, f, meta, oid, res.findings, res.anchors, threshold, whoami, app, prog); err != nil {
 		prog.Fail(err)
 		return err
+	}
+
+	// Standard review footer line ("✓ Done in … · N findings · tokens ·
+	// $cost"), printed below the now-finished tree (Close, not Clear, so the
+	// tree stays on screen). Honors --quiet.
+	prog.Close()
+	if !global.quiet {
+		footerMeta := render.Meta{
+			Provider: prov.Name(),
+			Model:    model,
+			Usage:    res.usage,
+			Cost:     resolvePricing(app.Config, prov, model).Cost(res.usage),
+			Latency:  res.latency,
+		}
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.FooterLine(footerMeta, res.findings))
 	}
 	return nil
 }
 
+// prReviewResult bundles everything one PR review produces that the
+// caller needs downstream: the findings, the anchor index to place them,
+// and the provider usage + latency that feed the terminal footer line.
+type prReviewResult struct {
+	findings []render.Finding
+	anchors  map[string]diff.FileAnchors
+	usage    provider.Usage
+	latency  time.Duration
+}
+
 // reviewPRDiff fetches the PR diff, runs one review, and guards against a
 // race: if the PR head OID changed during the review it retries once,
-// then aborts (ADR-0016 §7). Returns the findings, the per-file anchor
-// index they map onto, and the OID they were produced against (both used
-// to place inline comments).
-func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, lastOID string, prog *ui.Progress) ([]render.Finding, map[string]diff.FileAnchors, string, error) {
+// then aborts (ADR-0016 §7). Returns the review result plus the OID it
+// was produced against (used to anchor inline comments).
+func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, lastOID string, prog *ui.Progress) (prReviewResult, string, error) {
 	for attempt := 0; ; attempt++ {
-		findings, anchors, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, loaded, prog)
+		res, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, model, loaded, prog)
 		if err != nil {
-			return nil, nil, "", err
+			return prReviewResult{}, "", err
 		}
 		newOID, err := remote.FetchLastOID(ctx, runner, prID, f.repo)
 		if err != nil {
-			return nil, nil, "", err
+			return prReviewResult{}, "", err
 		}
 		if newOID == lastOID {
-			return findings, anchors, lastOID, nil
+			return res, lastOID, nil
 		}
 		if attempt >= 1 {
-			return nil, nil, "", errors.New(app.Catalog.T("remote.too_volatile"))
+			return prReviewResult{}, "", errors.New(app.Catalog.T("remote.too_volatile"))
 		}
 		// Head moved: neutralize the just-finished review stage (it was
 		// valid work, just superseded) and note the retry before looping.
@@ -185,27 +223,35 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 // reviewOnePRDiff runs the structured review pipeline once against the
 // PR's current diff. Bot-mode: the secret scanner warns but never aborts
 // (ADR-0016 §3); the local-config guard and cost preflight are skipped.
-// Returns the findings plus the anchor index of the (filtered) diff the
-// model reviewed, so comments can be pinned to the correct side.
-func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, prog *ui.Progress) ([]render.Finding, map[string]diff.FileAnchors, error) {
+func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, prog *ui.Progress) (prReviewResult, error) {
 	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
 	if err != nil {
-		return nil, nil, err
+		return prReviewResult{}, err
 	}
 	parsed, err := diff.Parse(git.Diff{Content: rawDiff, Origin: git.OriginDiff})
 	if err != nil {
-		return nil, nil, err
+		return prReviewResult{}, err
 	}
 	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
 	if parsed.Empty() {
-		return []render.Finding{}, map[string]diff.FileAnchors{}, nil
+		return prReviewResult{findings: []render.Finding{}, anchors: map[string]diff.FileAnchors{}}, nil
 	}
 	diffText := parsed.String()
 	anchors := parsed.Anchors()
 
+	// "analyzing N files · X added · Y removed [· COMMITBRIEF.md loaded]" —
+	// the same status line the local review renders, emitted here as a tree
+	// info note. It also finishes the active fetch stage (info auto-finishes
+	// the stage above it), mirroring local review's diff-stats line.
+	prog.Info(render.StatusLine(render.Meta{
+		Files:        parsed.FileCount(),
+		LinesAdded:   parsed.AddedLines(),
+		LinesRemoved: parsed.DeletedLines(),
+		RulesLoaded:  loaded.Source != rules.SourceDefault,
+	}))
+
 	// Emit the secret warning before starting the review stage, so it lands
-	// as a note under the (now finished) fetch stage rather than prematurely
-	// terminating the review stage.
+	// as a note rather than prematurely terminating the review stage.
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
 		if hits := guard.ScanForSecrets(diffText); len(hits) > 0 {
 			prog.Info(app.Catalog.T("remote.secret_warn", len(hits)))
@@ -218,28 +264,26 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	// instead of estimating them (see review.go); anchors above are built
 	// from the same parsed diff.
 	p := prompt.Build(loaded, app.Lang, parsed.NumberedString())
-	model := app.Config.Providers[app.Config.Provider].Model
-	if model == "" {
-		model = prov.DefaultModel()
-	}
 	req := provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,
 		UserPrompt:   p.User,
 		Lang:         app.Lang.Code,
 	}
-	content, _, format, err := tryStructuredReview(ctx, prov, req, func() {})
+	start := time.Now()
+	content, usage, format, err := tryStructuredReview(ctx, prov, req, func() {})
 	if err != nil {
-		return nil, nil, err
+		return prReviewResult{}, err
 	}
+	latency := time.Since(start)
 	if format != cache.FormatJSON {
-		return nil, nil, errors.New(app.Catalog.T("remote.degraded"))
+		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
 	findings, err := render.ParseFindings(content)
 	if err != nil {
-		return nil, nil, errors.New(app.Catalog.T("remote.degraded"))
+		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
-	return findings, anchors, nil
+	return prReviewResult{findings: findings, anchors: anchors, usage: usage, latency: latency}, nil
 }
 
 // submitPRReview posts the selected inline comments and the review-level

@@ -28,6 +28,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   cache is rebuilt once on upgrade because the system prompt changed; the
   diff component of the cache key is unaffected (the numbered form is a
   deterministic function of the plain diff).
+- **`remote pr` prints the standard review context lines.** The same
+  header (`commitbrief vX · provider · cache`), `analyzing N files · …`
+  status line, and `✓ Done in … · N findings · tokens · $cost` footer the
+  local `review` shows now surround the remote run too, so the
+  informational lines are consistent across every review command type.
+  They are exposed as reusable `render.HeaderLine` / `StatusLine` /
+  `FooterLine` to keep one implementation.
 - **Staged-tree progress display extended to `remote pr`, `compress`, and
   `providers test`.** All long-running/stepped operations now render
   through the same animated tree the local `review` command uses (one line
