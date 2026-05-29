@@ -50,6 +50,9 @@ cache.stats.limit.unlimited: "Boyut sınırı: sınırsız (sınırlamak için c
 cache.stats.limit.bounded: "Boyut sınırı: %s (cache.max_size_mb=%d)."
 cache.inspect.notfound: "%q anahtarlı önbellek girdisi yok (%s konumuna bakıldı)."
 
+context.cli_only: "--with-context yalnızca CLI tabanlı bir sağlayıcıyla çalışır (claude-cli, gemini-cli, codex-cli). API sağlayıcısının okuyacağı bir dosya sistemi yok. --cli claude|gemini|codex ile birini seçin."
+context.warning: "⚠  --with-context: CLI ajanı diff dışındaki dosyaları (izlenmeyen sırlar dahil) okuyabilir; gönderim öncesi sır taraması yalnızca diff'i kapsar."
+
 clipboard.copied: "%d bulgu panoya kopyalandı (%s) — istediğin yere yapıştırabilirsin"
 clipboard.empty: "Kopyalanacak bir şey yok: review 0 bulgu çıkardı."
 clipboard.failed: "Panoya kopyalanamadı (OSC 52 destekleyen terminal yok ve native araç bulunamadı)."

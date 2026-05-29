@@ -67,7 +67,7 @@ func TestBackendReviewStreamsStdoutToContent(t *testing.T) {
 	b := New(Spec{
 		Name:   "fake-cli",
 		Binary: "fake-cli",
-		PromptArgs: func(prompt string) []string {
+		PromptArgs: func(prompt string, _ bool) []string {
 			return []string{"-p", prompt}
 		},
 		Timeout: 5 * time.Second,
@@ -87,6 +87,68 @@ func TestBackendReviewStreamsStdoutToContent(t *testing.T) {
 	}
 }
 
+func TestBackendReviewContextOptionsPlumbing(t *testing.T) {
+	// Deterministic end-to-end of the --with-context plumbing (ADR-0017),
+	// no model/network: a fake binary echoes its cwd + argv. With
+	// ContextOptions{Enabled:true, RepoRoot}, the Backend must (1) pass
+	// withContext=true to PromptArgs (so the adapter's read flags land in
+	// argv) and (2) run the subprocess in RepoRoot.
+	scriptPath(t, "fake-cli", `printf 'CWD=%s ARGS=%s' "$(pwd)" "$*"`)
+
+	spec := Spec{
+		Name:   "fake-cli",
+		Binary: "fake-cli",
+		PromptArgs: func(prompt string, withContext bool) []string {
+			args := []string{"-p", prompt}
+			if withContext {
+				args = append(args, "--ctx-flag")
+			}
+			return args
+		},
+		Timeout: 5 * time.Second,
+	}
+	b := New(spec)
+
+	repoRoot := t.TempDir()
+	// The shell's `pwd` reports the logical path (matching cmd.Dir as set),
+	// but on macOS /tmp symlinks to /private/tmp, so accept either form.
+	resolved, _ := filepath.EvalSymlinks(repoRoot)
+	ranInRepoRoot := func(content string) bool {
+		return strings.Contains(content, "CWD="+repoRoot) ||
+			(resolved != "" && strings.Contains(content, "CWD="+resolved))
+	}
+
+	// Context enabled: read flag present, cwd pinned to repoRoot.
+	respOn, err := b.Review(context.Background(), provider.Request{
+		UserPrompt:   "x",
+		ProviderOpts: provider.ContextOptions{Enabled: true, RepoRoot: repoRoot},
+	})
+	if err != nil {
+		t.Fatalf("Review (context on): %v", err)
+	}
+	if !strings.Contains(respOn.Content, "--ctx-flag") {
+		t.Errorf("context-on argv must carry the read flag; got %q", respOn.Content)
+	}
+	if !ranInRepoRoot(respOn.Content) {
+		t.Errorf("context-on must run in repoRoot %q; got %q", repoRoot, respOn.Content)
+	}
+
+	// Context disabled: no read flag, cwd NOT forced to repoRoot.
+	respOff, err := b.Review(context.Background(), provider.Request{
+		UserPrompt:   "x",
+		ProviderOpts: provider.ContextOptions{Enabled: false, RepoRoot: repoRoot},
+	})
+	if err != nil {
+		t.Fatalf("Review (context off): %v", err)
+	}
+	if strings.Contains(respOff.Content, "--ctx-flag") {
+		t.Errorf("context-off argv must NOT carry the read flag; got %q", respOff.Content)
+	}
+	if ranInRepoRoot(respOff.Content) {
+		t.Errorf("context-off must not pin cwd to repoRoot; got %q", respOff.Content)
+	}
+}
+
 func TestBackendReviewSurfacesNonZeroExit(t *testing.T) {
 	// Non-zero exit from the host CLI should bubble up as an error
 	// containing whatever the host wrote to stderr (e.g. "401
@@ -96,7 +158,7 @@ func TestBackendReviewSurfacesNonZeroExit(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{"-p", p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
 		Timeout:    5 * time.Second,
 	})
 	_, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"})
@@ -117,7 +179,7 @@ func TestBackendReviewEmptyOutputIsError(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{"-p", p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
 		Timeout:    5 * time.Second,
 	})
 	_, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"})
@@ -137,7 +199,7 @@ func TestBackendReviewRespectsContextCancel(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{p} },
 		Timeout:    10 * time.Second,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -157,7 +219,7 @@ func TestBackendReviewTimeoutMessageMentionsLimit(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{p} },
 		Timeout:    100 * time.Millisecond,
 	})
 	_, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"})
@@ -238,7 +300,7 @@ func TestBackendReviewCombinesSystemAndUserPrompts(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{"-p", p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
 		Timeout:    5 * time.Second,
 	})
 	resp, err := b.Review(context.Background(), provider.Request{
@@ -266,7 +328,7 @@ func TestBackendReviewUseStdinPipesPromptViaStdin(t *testing.T) {
 		Binary: "stdin-cli",
 		// When stdin mode is active the prompt arg is always empty —
 		// adapter returns only the flag combo to read from stdin.
-		PromptArgs: func(p string) []string {
+		PromptArgs: func(p string, _ bool) []string {
 			if p != "" {
 				t.Errorf("PromptArgs received non-empty prompt %q under UseStdin=true", p)
 			}
@@ -308,7 +370,7 @@ func TestBackendDefaultModelMemoisesVersionCall(t *testing.T) {
 	b := New(Spec{
 		Name:        "memo-cli",
 		Binary:      "memo-cli",
-		PromptArgs:  func(p string) []string { return []string{"-p", p} },
+		PromptArgs:  func(p string, _ bool) []string { return []string{"-p", p} },
 		VersionArgs: []string{"--version"},
 	})
 	for i := 0; i < 5; i++ {

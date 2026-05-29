@@ -3,6 +3,7 @@
 package codexcli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
@@ -23,5 +24,23 @@ func TestRegistersAsPlainTextProvider(t *testing.T) {
 	}
 	if _, ok := p.(provider.PlainTextEmitter); !ok {
 		t.Errorf("%s must implement provider.PlainTextEmitter", Name)
+	}
+}
+
+// TestPromptArgsContextInvariant: codex permits reads under its read-only
+// sandbox, so --with-context (ADR-0017) must NOT change the argv. Both
+// modes keep the read-only sandbox and never grant writes.
+func TestPromptArgsContextInvariant(t *testing.T) {
+	off := promptArgs("PROMPT", false)
+	on := promptArgs("PROMPT", true)
+	if strings.Join(off, " ") != strings.Join(on, " ") {
+		t.Errorf("context must not change codex argv:\n off=%v\n on =%v", off, on)
+	}
+	joined := strings.Join(on, " ")
+	if !strings.Contains(joined, "--sandbox read-only") {
+		t.Errorf("argv must pin read-only sandbox; got %q", joined)
+	}
+	if strings.Contains(joined, "workspace-write") || strings.Contains(joined, "danger") {
+		t.Errorf("argv must never grant writes; got %q", joined)
 	}
 }

@@ -52,6 +52,27 @@ func TestBuildSystemContainsRulesAndContract(t *testing.T) {
 	}
 }
 
+func TestBuildPlainTextContextGating(t *testing.T) {
+	r := rules.Loaded{Content: "rules"}
+	langRes := lang.Resolution{Code: "en", Name: "English"}
+
+	off := BuildPlainText(r, langRes, "diff", false)
+	if strings.Contains(off.System, "PROJECT CONTEXT ACCESS") {
+		t.Error("diff-only plain-text prompt must NOT include the context section")
+	}
+
+	on := BuildPlainText(r, langRes, "diff", true)
+	if !strings.Contains(on.System, "PROJECT CONTEXT ACCESS") {
+		t.Error("context plain-text prompt must include the context section")
+	}
+	// The context section must keep the diff as the subject and forbid writes.
+	for _, want := range []string{"ONLY the changes", "untrusted data", "Do not modify"} {
+		if !strings.Contains(on.System, want) {
+			t.Errorf("context section missing guard phrase %q", want)
+		}
+	}
+}
+
 func TestBuildUserContainsDiff(t *testing.T) {
 	r := rules.Loaded{Content: "rules"}
 	langRes := lang.Resolution{Code: "en", Name: "English"}

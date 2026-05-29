@@ -38,6 +38,18 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   never evicted. Default `0` keeps the cache unlimited (`cache prune`
   remains the manual stand-in). This is a fresh key with real Put-path
   enforcement, not a revival of the v0.9.1-removed dead field (ADR-0008).
+- **`--with-context` flag for CLI-backed providers.** Opt-in: lets the
+  agentic host CLI (`claude-cli` / `gemini-cli` / `codex-cli`) read
+  project files beyond the diff — callers, type definitions, sibling
+  modules, conventions — to ground the review, while the subject of the
+  review stays the diff. CLI providers only (API providers have no
+  filesystem and error with a clear message). Runs the host CLI read-only
+  in the repo root; per-CLI flags: `claude --allowedTools Read,Grep,Glob`,
+  `gemini --approval-mode plan --skip-trust`, `codex` already permits
+  reads under its read-only sandbox. Emits a one-line caution every run:
+  the agent may read files outside the diff (including untracked secrets)
+  and the pre-send secret scan covers the diff only. Context and diff-only
+  runs cache under distinct keys (ADR-0017).
 
 ## [1.2.1]
 

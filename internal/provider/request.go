@@ -25,6 +25,24 @@ type Request struct {
 	ProviderOpts any
 }
 
+// ContextOptions carries the --with-context signal (ADR-0017) to the
+// CLI-backed providers via Request.ProviderOpts. It lives in the neutral
+// provider package so the CLI layer can set it without importing a
+// concrete provider subpackage, and the clireview backend reads it via a
+// type assertion. API providers ignore ProviderOpts entirely, so a
+// ContextOptions value is inert for them.
+type ContextOptions struct {
+	// Enabled is true when --with-context was passed. When false the CLI
+	// provider behaves exactly as before (diff-only, no extra read tools,
+	// inherited working directory).
+	Enabled bool
+
+	// RepoRoot is the repository root the host CLI should run in, so its
+	// relative file reads resolve deterministically. Set as the
+	// subprocess working directory only when Enabled.
+	RepoRoot string
+}
+
 type Response struct {
 	Content string
 	Model   string

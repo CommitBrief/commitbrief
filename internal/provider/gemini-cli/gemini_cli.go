@@ -33,16 +33,29 @@ func init() {
 			// invocation. The output is plain text by default; no
 			// extra flag needed.
 			//
-			// UC-24 note: gemini-cli does not yet expose a documented
-			// `-p -` stdin shorthand the way Claude Code does, so we
-			// stay on argv until upstream confirms a stable stdin
-			// transport. Users hitting ARG_MAX on huge diffs should
-			// prefer claude-cli for now.
-			PromptArgs: func(prompt string) []string {
-				return []string{"-p", prompt}
-			},
+			PromptArgs:  promptArgs,
 			VersionArgs: []string{"--version"},
 			Timeout:     5 * time.Minute,
 		}), nil
 	})
+}
+
+// promptArgs builds Gemini CLI's one-shot argv.
+//
+// UC-24 note: gemini-cli does not yet expose a documented `-p -` stdin
+// shorthand the way Claude Code does, so we stay on argv until upstream
+// confirms a stable stdin transport. Users hitting ARG_MAX on huge diffs
+// should prefer claude-cli for now.
+//
+// --with-context (ADR-0017): context mode needs BOTH `--approval-mode
+// plan` (Gemini's read-only mode) AND `--skip-trust`. Without --skip-trust
+// Gemini refuses to act in an "untrusted" directory and silently
+// downgrades plan→default, blocking reads — the analogue of codex's
+// --skip-git-repo-check. plan mode permits reads but not writes, exactly
+// what a review needs.
+func promptArgs(prompt string, withContext bool) []string {
+	if withContext {
+		return []string{"--approval-mode", "plan", "--skip-trust", "-p", prompt}
+	}
+	return []string{"-p", prompt}
 }
