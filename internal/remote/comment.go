@@ -11,10 +11,10 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/render"
 )
 
-// signature is appended to every GitHub-posted message. `#CommitBrief`
+// signature is appended to every GitHub-posted message. `#commitbrief`
 // is literal text — the leading `#` is non-numeric so GitHub does not
 // auto-link it to an issue (ADR-0016 §10).
-const signature = "by #CommitBrief"
+const signature = "by #commitbrief"
 
 // suggestionPrefix marks the remediation line in GitHub-posted text so it
 // stands out from the description. Kept here (not in i18n) because all
@@ -26,7 +26,7 @@ const suggestionPrefix = "💡 "
 //
 //	[SEVERITY] - Title
 //	Description
-//	💡 Suggestion @whoami by #CommitBrief
+//	💡 Suggestion @whoami by #commitbrief
 func BuildCommentBody(f render.Finding, whoami string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s] - %s\n", strings.ToUpper(string(f.Severity)), f.Title)

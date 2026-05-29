@@ -70,7 +70,7 @@ func TestBuildCommentBody(t *testing.T) {
 	got := BuildCommentBody(f, "octocat")
 	want := "[HIGH] - Unvalidated input\n" +
 		"The handler trusts the query param.\n" +
-		"💡 Validate and bound the id before use. @octocat by #CommitBrief"
+		"💡 Validate and bound the id before use. @octocat by #commitbrief"
 	if got != want {
 		t.Fatalf("comment body mismatch:\n got: %q\nwant: %q", got, want)
 	}
@@ -78,9 +78,9 @@ func TestBuildCommentBody(t *testing.T) {
 
 func TestBuildReviewBody(t *testing.T) {
 	cases := map[Verdict]string{
-		VerdictApprove:        "@octocat by #CommitBrief",
-		VerdictComment:        "It must be checked by the human eye. @octocat by #CommitBrief",
-		VerdictRequestChanges: "We can revisit it after we've solved the problems. @octocat by #CommitBrief",
+		VerdictApprove:        "@octocat by #commitbrief",
+		VerdictComment:        "It must be checked by the human eye. @octocat by #commitbrief",
+		VerdictRequestChanges: "We can revisit it after we've solved the problems. @octocat by #commitbrief",
 	}
 	for v, want := range cases {
 		if got := BuildReviewBody(v, "octocat"); got != want {

@@ -30,7 +30,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   deterministic function of the plain diff).
 - **`remote pr` suggestion lines are prefixed with `💡`.** The remediation
   line in both inline comments and the review-summary fallback now starts
-  with `💡 ` so it reads distinctly from the description.
+  with `💡 ` so it reads distinctly from the description. The signature was
+  also lowercased to `by #commitbrief`.
 
 ## [1.2.0]
 
