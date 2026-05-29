@@ -242,9 +242,10 @@ subscription and don't want to manage a second API key.
 
 Adding a provider is one new package under `internal/provider/<name>/`.
 
-> The `remote pr` subcommand (below) requires an **API provider** —
-> `claude-cli` / `gemini-cli` / `codex-cli` are incompatible because they
-> don't produce structured findings.
+> The `remote pr` subcommand (below) requires an **API provider** when it
+> posts to GitHub — `claude-cli` / `gemini-cli` / `codex-cli` don't
+> produce structured findings to anchor comments. (In `--no-post` mode it
+> only prints locally, so CLI providers work there.)
 
 ## Reviewing pull requests from the terminal
 
@@ -258,6 +259,8 @@ auth.
 commitbrief remote pr 42                       # PR #42 in the current repo
 commitbrief remote pr CommitBrief/web#10       # cross-repo (owner/repo#N)
 commitbrief remote pr 42 --request-changes-on=high
+commitbrief remote pr 42 --no-post             # review locally, write nothing to GitHub
+commitbrief remote pr 42 --no-post --output review.md   # …or --json / --cli gemini, etc.
 ```
 
 `--request-changes-on=<critical|high|medium|low>` (default `critical`)
@@ -265,6 +268,15 @@ sets the severity at or above which the verdict becomes request-changes;
 `--repo owner/repo` overrides git-context repo discovery. Requires an API
 provider. `--fail-on` is ignored here — the GitHub verdict replaces the
 exit-code gate.
+
+**`--no-post`** turns `remote pr` into a read-only review: it fetches the
+PR diff via `gh` and renders the result to your terminal exactly like a
+local review, **writing nothing to GitHub** (no comments, no verdict).
+Because the output is local, the flags posting mode rejects all apply —
+`--json`, `--markdown`, `--output`, `--copy`, `--compact`, `--cli`, and
+`--fail-on` — and there's no self-PR restriction (you can review your own
+PR). Results are cached like any local review. Handy for triaging a PR,
+piping findings into another tool, or reviewing with a CLI provider.
 
 Each comment is anchored to the diff side its line lives on — `RIGHT`
 (new file) for added/context lines, `LEFT` (old file) for removed ones.

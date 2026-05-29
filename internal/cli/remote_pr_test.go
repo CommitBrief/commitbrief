@@ -327,6 +327,45 @@ func TestRemotePRPrintsHeaderAndFooter(t *testing.T) {
 	}
 }
 
+func TestRemotePRNoPostRendersLocallyWithoutWrites(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	// --no-post fetches the diff but performs NO GitHub writes. whoami /
+	// prMeta are deliberately left set to the SAME login to prove the
+	// self-PR block does not apply in this read-only mode (it never calls
+	// whoami / pr view at all).
+	r := &fakeGH{whoami: "tester", prMeta: prMetaJSON("tester", "stable"), diff: sampleDiff}
+
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(e.repoRoot)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	var out, errBuf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+
+	if err := runRemotePR(cmd, "42", remotePRFlags{noPost: true, requestChangesOn: "critical"}, r); err != nil {
+		t.Fatalf("--no-post: %v", err)
+	}
+
+	// The diff is still fetched...
+	if r.callCount("diff") == 0 {
+		t.Errorf("--no-post should fetch the PR diff; calls=%v", r.calls)
+	}
+	// ...but nothing is written to GitHub.
+	for _, write := range []string{"/comments", "review", "--approve", "--request-changes", "--comment"} {
+		if n := r.callCount(write); n != 0 {
+			t.Errorf("--no-post must not write to GitHub (%q seen %d times); calls=%v", write, n, r.calls)
+		}
+	}
+	// And the review is rendered locally to stdout.
+	if out.Len() == 0 {
+		t.Errorf("--no-post should render the review to stdout; stderr=%s", errBuf.String())
+	}
+}
+
 func TestRemotePRAbortsOnDoubleRace(t *testing.T) {
 	e := newCLIEnv(t)
 	stubGHOnPath(t)
