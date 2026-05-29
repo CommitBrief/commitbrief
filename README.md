@@ -188,9 +188,29 @@ with `--json`/`--markdown`/`--output`), `--compact`, `--no-cache`,
 `-d/--dir` (repeatable), `--yes`, `--verbose`, `--quiet`, `--lang`,
 `--provider`, `--model`, `--cli <claude|gemini|codex>` (shorthand for the
 CLI-tool-backed providers; mutually exclusive with `--json` /
-`--markdown`), `--allow-secrets` (acknowledge a flagged credential in
+`--markdown`), `--with-context` (CLI providers only — let the host CLI
+read project files beyond the diff to ground the review; see below),
+`--allow-secrets` (acknowledge a flagged credential in
 the diff), `--no-cost-check` (skip cost preflight), `--color`. See
 `commitbrief --help`.
+
+### `--with-context` (CLI providers only)
+
+By default a review sees only the diff. With `--with-context`, a
+CLI-backed provider (`--cli claude|gemini|codex`) is allowed to read
+other files in the repo — callers of the changed code, type definitions,
+sibling modules, project conventions — to ground its review in the wider
+codebase. The diff stays the subject of the review; the rest is context.
+The host CLI runs **read-only** (it never modifies your tree) in the
+repository root. API providers can't read files, so the flag errors for
+them.
+
+> ⚠ **Security:** with `--with-context` the agent decides which files to
+> read, so file contents **beyond the diff** — including untracked
+> secrets (`.env`, key files) — can reach the provider's backend. The
+> pre-send secret scan covers the **diff only**, not files the agent
+> reads on its own. CommitBrief prints this caution on every
+> `--with-context` run. Use it on repositories you trust.
 
 ## Providers and pricing
 
