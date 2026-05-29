@@ -3,8 +3,11 @@
 package cache
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +77,40 @@ func TestComputeKeyLengthIsSHA256Hex(t *testing.T) {
 	k := Compute(ComputeArgs{})
 	if len(k) != 64 {
 		t.Errorf("key length = %d, want 64 (sha256 hex)", len(k))
+	}
+}
+
+// TestComputeWithContextMarker: a --with-context run (ADR-0017) must not
+// alias a diff-only run on the same diff, and — critically — WithContext:
+// false must keep the pre-ADR-0017 key byte-for-byte so the upgrade does
+// not mass-invalidate existing caches. The expected non-context key is
+// recomputed here from the documented formula, independent of Compute, so
+// any accidental change to the non-context hashing is caught.
+func TestComputeWithContextMarker(t *testing.T) {
+	args := ComputeArgs{Diff: "d", SystemPrompt: "s", Provider: "claude-cli", Model: "m", Lang: "en"}
+
+	noCtx := Compute(args)
+	withCtx := Compute(ComputeArgs{Diff: "d", SystemPrompt: "s", Provider: "claude-cli", Model: "m", Lang: "en", WithContext: true})
+	if noCtx == withCtx {
+		t.Error("context and diff-only runs must produce different cache keys")
+	}
+
+	// Independent recomputation of the pre-ADR-0017 formula.
+	h := sha256.New()
+	h.Write([]byte("d"))
+	h.Write([]byte("::"))
+	h.Write([]byte("s"))
+	h.Write([]byte("::"))
+	h.Write([]byte("claude-cli"))
+	h.Write([]byte(":"))
+	h.Write([]byte("m"))
+	h.Write([]byte(":"))
+	h.Write([]byte("en"))
+	h.Write([]byte(":"))
+	h.Write([]byte(strconv.Itoa(SchemaVersion)))
+	want := hex.EncodeToString(h.Sum(nil))
+	if noCtx != want {
+		t.Errorf("non-context key changed (would invalidate every cache):\n got  %s\n want %s", noCtx, want)
 	}
 }
 
