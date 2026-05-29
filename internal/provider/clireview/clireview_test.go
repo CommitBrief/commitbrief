@@ -67,7 +67,7 @@ func TestBackendReviewStreamsStdoutToContent(t *testing.T) {
 	b := New(Spec{
 		Name:   "fake-cli",
 		Binary: "fake-cli",
-		PromptArgs: func(prompt string) []string {
+		PromptArgs: func(prompt string, _ bool) []string {
 			return []string{"-p", prompt}
 		},
 		Timeout: 5 * time.Second,
@@ -96,7 +96,7 @@ func TestBackendReviewSurfacesNonZeroExit(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{"-p", p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
 		Timeout:    5 * time.Second,
 	})
 	_, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"})
@@ -117,7 +117,7 @@ func TestBackendReviewEmptyOutputIsError(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{"-p", p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
 		Timeout:    5 * time.Second,
 	})
 	_, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"})
@@ -137,7 +137,7 @@ func TestBackendReviewRespectsContextCancel(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{p} },
 		Timeout:    10 * time.Second,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -157,7 +157,7 @@ func TestBackendReviewTimeoutMessageMentionsLimit(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{p} },
 		Timeout:    100 * time.Millisecond,
 	})
 	_, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"})
@@ -238,7 +238,7 @@ func TestBackendReviewCombinesSystemAndUserPrompts(t *testing.T) {
 	b := New(Spec{
 		Name:       "fake-cli",
 		Binary:     "fake-cli",
-		PromptArgs: func(p string) []string { return []string{"-p", p} },
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
 		Timeout:    5 * time.Second,
 	})
 	resp, err := b.Review(context.Background(), provider.Request{
@@ -266,7 +266,7 @@ func TestBackendReviewUseStdinPipesPromptViaStdin(t *testing.T) {
 		Binary: "stdin-cli",
 		// When stdin mode is active the prompt arg is always empty —
 		// adapter returns only the flag combo to read from stdin.
-		PromptArgs: func(p string) []string {
+		PromptArgs: func(p string, _ bool) []string {
 			if p != "" {
 				t.Errorf("PromptArgs received non-empty prompt %q under UseStdin=true", p)
 			}
@@ -308,7 +308,7 @@ func TestBackendDefaultModelMemoisesVersionCall(t *testing.T) {
 	b := New(Spec{
 		Name:        "memo-cli",
 		Binary:      "memo-cli",
-		PromptArgs:  func(p string) []string { return []string{"-p", p} },
+		PromptArgs:  func(p string, _ bool) []string { return []string{"-p", p} },
 		VersionArgs: []string{"--version"},
 	})
 	for i := 0; i < 5; i++ {

@@ -39,8 +39,20 @@ func init() {
 			// embedded in argv. This sidesteps the platform ARG_MAX
 			// limit that previously surfaced as
 			// `argument list too long` on large diffs + rules.
-			PromptArgs: func(_ string) []string {
-				return []string{"-p", "-", "--output-format", "text"}
+			//
+			// --with-context (ADR-0017): `-p` mode runs with no tool
+			// permissions by default and cannot answer an interactive
+			// permission prompt, so context mode must explicitly allow the
+			// read-only tools. The list is COMMA-separated on purpose:
+			// `--allowedTools` is variadic, and a space-separated list
+			// would swallow a following positional arg. Write tools are
+			// deliberately omitted — a review never mutates the tree.
+			PromptArgs: func(_ string, withContext bool) []string {
+				args := []string{"-p", "-", "--output-format", "text"}
+				if withContext {
+					args = append(args, "--allowedTools", "Read,Grep,Glob")
+				}
+				return args
 			},
 			UseStdin:    true,
 			VersionArgs: []string{"--version"},

@@ -68,7 +68,16 @@ type Spec struct {
 	// makes the host CLI read its prompt from stdin (e.g. claude's
 	// `-p -`). The Backend then pipes the combined prompt into the
 	// subprocess's stdin instead of embedding it in argv.
-	PromptArgs func(prompt string) []string
+	//
+	// withContext is the --with-context signal (ADR-0017). When true the
+	// adapter appends the minimal read-only capability flags its host CLI
+	// needs to read project files beyond the diff (e.g. claude's
+	// `--allowedTools Read,Grep,Glob`, gemini's `--approval-mode plan
+	// --skip-trust`); codex already permits reads under its read-only
+	// sandbox and adds nothing. When false the adapter returns exactly the
+	// diff-only argv it always has, so existing behavior is unchanged.
+	// Write/network-mutation capability is never granted either way.
+	PromptArgs func(prompt string, withContext bool) []string
 
 	// UseStdin selects the stdin transport for the prompt. UC-24 in
 	// PATCH_ROADMAP: large prompts (mid-size diffs + rules) exceed the
@@ -207,6 +216,17 @@ func (b *Backend) Review(ctx context.Context, req provider.Request) (provider.Re
 		defer cancel()
 	}
 
+	// --with-context (ADR-0017): the CLI layer passes a ContextOptions via
+	// ProviderOpts. Enabled grants the adapter's read-permission flags and
+	// pins the subprocess to the repo root so relative reads resolve.
+	// Absent or wrong-typed ProviderOpts → diff-only (today's behavior).
+	var withContext bool
+	var repoRoot string
+	if opts, ok := req.ProviderOpts.(provider.ContextOptions); ok && opts.Enabled {
+		withContext = true
+		repoRoot = opts.RepoRoot
+	}
+
 	// UC-24: when the spec opted into stdin transport, build argv
 	// without the prompt and pipe the combined prompt to the
 	// subprocess's stdin. This sidesteps the platform ARG_MAX limit
@@ -214,11 +234,16 @@ func (b *Backend) Review(ctx context.Context, req provider.Request) (provider.Re
 	// the kitchen-sink size class.
 	var args []string
 	if b.spec.UseStdin {
-		args = b.spec.PromptArgs("")
+		args = b.spec.PromptArgs("", withContext)
 	} else {
-		args = b.spec.PromptArgs(combined)
+		args = b.spec.PromptArgs(combined, withContext)
 	}
 	cmd := exec.CommandContext(cctx, b.spec.Binary, args...)
+	if withContext && repoRoot != "" {
+		// Run the agent in the repository root so its relative file reads
+		// resolve there rather than against commitbrief's inherited cwd.
+		cmd.Dir = repoRoot
+	}
 	if b.spec.UseStdin {
 		cmd.Stdin = strings.NewReader(combined)
 	}

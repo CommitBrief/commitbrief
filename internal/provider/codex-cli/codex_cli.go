@@ -59,7 +59,10 @@ func init() {
 			// than stdin until a stdin transport for `codex exec` is
 			// confirmed stable; users hitting ARG_MAX on very large diffs
 			// should prefer claude-cli for now.
-			PromptArgs: func(prompt string) []string {
+			// withContext is ignored: `--sandbox read-only` already permits
+			// the agent to read project files, so context mode needs no
+			// extra flag here (ADR-0017). Writes stay blocked by the sandbox.
+			PromptArgs: func(prompt string, _ bool) []string {
 				return []string{"exec", "--sandbox", "read-only", "--skip-git-repo-check", prompt}
 			},
 			VersionArgs: []string{"--version"},

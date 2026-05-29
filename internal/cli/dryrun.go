@@ -100,6 +100,7 @@ func newDryRunCmd() *cobra.Command {
 				Provider:     app.Config.Provider,
 				Model:        modelName,
 				Lang:         app.Lang.Code,
+				WithContext:  global.withContext,
 			})
 
 			w := cmd.OutOrStdout()

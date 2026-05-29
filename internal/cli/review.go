@@ -224,6 +224,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		Provider:     prov.Name(),
 		Model:        model,
 		Lang:         app.Lang.Code,
+		WithContext:  global.withContext,
 	})
 
 	cacheStore, err := openCache(app.RepoRoot, app.Config.Cache)
@@ -314,6 +315,14 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		SystemPrompt: p.System,
 		UserPrompt:   p.User,
 		Lang:         app.Lang.Code,
+		// --with-context (ADR-0017): inert for API providers (they ignore
+		// ProviderOpts); the clireview backend reads it to grant read tools
+		// and run in the repo root. Only meaningful when plainText is true,
+		// which the validation above already guaranteed for withContext.
+		ProviderOpts: provider.ContextOptions{
+			Enabled:  global.withContext,
+			RepoRoot: app.RepoRoot,
+		},
 	}
 	var (
 		content string
