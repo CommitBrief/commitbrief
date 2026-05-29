@@ -211,12 +211,23 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return "", fmt.Errorf("config: unknown field %q in cost (allowed: warn_threshold_usd)", parts[1])
 		}
 
+	case "command":
+		if len(parts) != 2 {
+			return "", fmt.Errorf("config: %q must be command.<field>", path)
+		}
+		switch parts[1] {
+		case "default":
+			return cfg.Command.Default, nil
+		default:
+			return "", fmt.Errorf("config: unknown field %q in command (allowed: default)", parts[1])
+		}
+
 	case "version":
 		// Read-only via get; explicitly rejected by configFieldSet.
 		return strconv.Itoa(cfg.Version), nil
 
 	default:
-		return "", fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, version)", parts[0])
+		return "", fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*, version)", parts[0])
 	}
 }
 
@@ -352,11 +363,25 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 		}
 		return nil
 
+	case "command":
+		if len(parts) != 2 {
+			return fmt.Errorf("config: %q must be command.<field>", path)
+		}
+		switch parts[1] {
+		case "default":
+			// Free-form argument string applied to a bare `commitbrief`.
+			// Stored verbatim; tokenization happens at invocation time.
+			cfg.Command.Default = value
+		default:
+			return fmt.Errorf("config: unknown field %q in command (allowed: default)", parts[1])
+		}
+		return nil
+
 	case "version":
 		return errors.New("config: version is managed by migrations and cannot be set manually")
 
 	default:
-		return fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*)", parts[0])
+		return fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*)", parts[0])
 	}
 }
 

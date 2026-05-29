@@ -118,6 +118,28 @@ func TestConfigGetMaxSizeMBDefaultsToZero(t *testing.T) {
 	}
 }
 
+func TestConfigCommandDefaultRoundTrips(t *testing.T) {
+	e := newCLIEnv(t)
+	// Default is empty until set.
+	if err := e.run("config", "get", "command.default"); err != nil {
+		t.Fatalf("config get command.default: %v", err)
+	}
+	if got := strings.TrimSpace(e.out.String()); got != "" {
+		t.Errorf("command.default default = %q, want empty", got)
+	}
+
+	// `--` stops cobra flag parsing so the value (which starts with `--`)
+	// reaches `config set` as a positional rather than being mistaken for
+	// flags. Real shell usage quotes it: `config set command.default "--unstaged ..."`.
+	if err := e.run("config", "set", "--", "command.default", "--unstaged --cli gemini"); err != nil {
+		t.Fatalf("config set command.default: %v", err)
+	}
+	cfg := loadCfg(t, e.homeDir)
+	if cfg.Command.Default != "--unstaged --cli gemini" {
+		t.Errorf("command.default = %q, want %q", cfg.Command.Default, "--unstaged --cli gemini")
+	}
+}
+
 func TestConfigSetMaxSizeMBRoundTrips(t *testing.T) {
 	e := newCLIEnv(t)
 	if err := e.run("config", "set", "cache.max_size_mb", "200"); err != nil {

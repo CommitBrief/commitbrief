@@ -12,6 +12,19 @@ type Config struct {
 	Cache     CacheConfig               `yaml:"cache"`
 	Guard     GuardConfig               `yaml:"guard"`
 	Cost      CostConfig                `yaml:"cost"`
+	Command   CommandConfig             `yaml:"command"`
+}
+
+// CommandConfig customizes the bare `commitbrief` invocation. Default is
+// the argument string applied when `commitbrief` is run with NO arguments
+// at all — e.g. "--unstaged --cli gemini" makes a bare `commitbrief`
+// behave like `commitbrief --unstaged --cli gemini`. Empty (the default)
+// preserves the built-in behavior, `commitbrief` == `commitbrief --staged`.
+// It only fires for the truly bare invocation; passing any flag or
+// subcommand bypasses it entirely (the user is being explicit). Tokens are
+// whitespace-split; shell quoting is not interpreted.
+type CommandConfig struct {
+	Default string `yaml:"default"`
 }
 
 // CostConfig controls the pre-send cost preflight added in v0.8.0.

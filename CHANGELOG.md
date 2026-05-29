@@ -50,6 +50,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   the agent may read files outside the diff (including untracked secrets)
   and the pre-send secret scan covers the diff only. Context and diff-only
   runs cache under distinct keys (ADR-0017).
+- **`command.default` config key — customize bare `commitbrief`.** Set
+  it to an argument string (e.g. `--unstaged --cli gemini`) and a bare
+  `commitbrief` behaves as if you typed those args. Empty/unset keeps the
+  built-in `commitbrief` == `commitbrief --staged`. Applies **only** to
+  the truly bare invocation — any explicit flag or subcommand bypasses it.
+  Expanded git-alias style before argument parsing (ADR-0005). Set via
+  `config set -- command.default "…"` or by editing `config.yml`.
 
 ## [1.2.1]
 
