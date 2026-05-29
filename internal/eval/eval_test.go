@@ -5,6 +5,7 @@ package eval
 import (
 	"context"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/CommitBrief/commitbrief/internal/provider/mock"
@@ -90,6 +91,67 @@ func TestLoadCorpusSorted(t *testing.T) {
 			t.Errorf("fixtures not sorted: %q before %q", fixtures[i-1].Name, fixtures[i].Name)
 		}
 	}
+}
+
+// TestHeldOutSlice guards the Goodhart protection (ADR-0018 §Goodhart): the
+// corpus must keep a non-trivial, representative held-out slice that prompt
+// and corpus tuning never inspect. If someone moves every fixture into the
+// tunable dev slice (so "the eval always passes"), this fails.
+func TestHeldOutSlice(t *testing.T) {
+	fixtures, err := LoadCorpus(corpusDir())
+	if err != nil {
+		t.Fatalf("LoadCorpus: %v", err)
+	}
+
+	var held, dev []Fixture
+	for _, fx := range fixtures {
+		if fx.HeldOut {
+			held = append(held, fx)
+		} else {
+			dev = append(dev, fx)
+		}
+	}
+
+	if len(held) == 0 {
+		t.Fatal("held-out slice is empty — Goodhart protection is disabled")
+	}
+	if len(dev) == 0 {
+		t.Fatal("dev slice is empty — nothing left to tune against")
+	}
+	if len(dev) < len(held) {
+		t.Errorf("dev slice (%d) should be larger than the held-out slice (%d)", len(dev), len(held))
+	}
+
+	frac := float64(len(held)) / float64(len(fixtures))
+	if frac < 0.15 || frac > 0.40 {
+		t.Errorf("held-out fraction %.2f is outside [0.15, 0.40] (%d/%d) — re-balance the slice", frac, len(held), len(fixtures))
+	}
+
+	// Representativeness: the held-out slice must span several categories and
+	// include a clean control, or its generalization estimate is biased.
+	catSet := map[string]struct{}{}
+	clean := false
+	for _, fx := range held {
+		for _, c := range fx.Categories() {
+			catSet[c] = struct{}{}
+			if c == "clean" {
+				clean = true
+			}
+		}
+	}
+	cats := make([]string, 0, len(catSet))
+	for c := range catSet {
+		cats = append(cats, c)
+	}
+	sort.Strings(cats)
+
+	if len(cats) < 3 {
+		t.Errorf("held-out slice spans only %d categories %v; needs >=3 for a fair generalization estimate", len(cats), cats)
+	}
+	if !clean {
+		t.Error("held-out slice has no clean control; cannot measure held-out false-positive behavior")
+	}
+	t.Logf("held-out slice: %d/%d fixtures (%.0f%%), categories=%v", len(held), len(fixtures), frac*100, cats)
 }
 
 func TestScoreMatching(t *testing.T) {

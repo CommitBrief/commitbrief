@@ -40,6 +40,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   produces per fixture, tagged `match` / `EXTRA`, to decide whether an
   EXTRA is a legitimate secondary defect to annotate or genuine noise to
   leave as a measured false positive.
+- **Held-out slice (Goodhart protection).** A fixture can set
+  `"held_out": true`; ~26% of the corpus (6/23, spanning all defect
+  categories + a clean control) is held out from any prompt/corpus tuning.
+  `make eval-live` reports FULL / DEV / HELD-OUT scorecards separately, and
+  the deterministic `TestHeldOutSlice` fails if the slice is emptied,
+  drops below 15%, or stops being representative — so the protection
+  cannot be silently disabled (ADR-0018 §Goodhart).
 - **`COMMITBRIEF_EVAL_PROVIDER` / `COMMITBRIEF_EVAL_MODEL` overrides.**
   Select the eval provider and model via env while the API key is read
   from `~/.commitbrief/config.yml`, so one config benchmarks every
@@ -48,9 +55,10 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   503s during a run.
 - **README "Measured review quality" table.** First published scorecard
   across five models (Haiku 4.5 / Sonnet 4.6 / Opus 4.8 / Gemini 2.5 Flash
-  / GPT-4o, 2026-05-29): recall 0.88–1.00, false-positive rate 0.00–0.40,
-  precision 0.58–0.78 (conservative floor; recall + FPR are the cleaner
-  signals).
+  / GPT-4o, 2026-05-29), each cell reported as `dev · held` (tunable slice
+  vs held-out generalization slice). Every model recalls the full held-out
+  slice; precision 0.48–0.84 is a conservative floor (recall + FP-rate are
+  the cleaner signals).
 
 ## [1.3.0]
 

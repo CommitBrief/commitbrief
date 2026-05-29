@@ -1,4 +1,5 @@
 {
+  "held_out": true,
   "language": "go",
   "expected_findings": [],
   "must_stay_silent_on": [

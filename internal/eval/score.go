@@ -33,6 +33,7 @@ func severityRank(s render.Severity) int {
 // against the answer key.
 type FixtureScore struct {
 	Fixture string
+	HeldOut bool // mirrors Fixture.HeldOut so a Scorecard can be split
 
 	TruePositives  int // expected findings that were matched
 	FalseNegatives int // expected findings that were missed
@@ -127,6 +128,7 @@ func abs(n int) int {
 func Score(produced []render.Finding, fx Fixture) FixtureScore {
 	score := FixtureScore{
 		Fixture:          fx.Name,
+		HeldOut:          fx.HeldOut,
 		SilenceAnchors:   len(fx.MustStaySilentOn),
 		CaughtByCategory: map[string]int{},
 		MissedByCategory: map[string]int{},
@@ -215,6 +217,25 @@ func (sc Scorecard) FalsePositiveRate() float64 {
 	}
 	return float64(sv) / float64(sa)
 }
+
+// slice returns a Scorecard containing only the fixtures whose HeldOut flag
+// equals heldOut, preserving provider/model.
+func (sc Scorecard) slice(heldOut bool) Scorecard {
+	out := Scorecard{Provider: sc.Provider, Model: sc.Model}
+	for _, f := range sc.Fixtures {
+		if f.HeldOut == heldOut {
+			out.Fixtures = append(out.Fixtures, f)
+		}
+	}
+	return out
+}
+
+// Dev returns the tunable slice (fixtures the prompt/corpus may be tuned
+// against). HeldOut returns the generalization-only slice (ADR-0018
+// §Goodhart). A change is overfitting when Dev recall rises but HeldOut
+// recall does not.
+func (sc Scorecard) Dev() Scorecard     { return sc.slice(false) }
+func (sc Scorecard) HeldOut() Scorecard { return sc.slice(true) }
 
 // CategoryRecall is per-category recall for one expected-finding category.
 type CategoryRecall struct {

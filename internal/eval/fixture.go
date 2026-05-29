@@ -55,6 +55,14 @@ type answerKey struct {
 	Language         string            `json:"language"`
 	ExpectedFindings []ExpectedFinding `json:"expected_findings"`
 	MustStaySilentOn []SilenceAnchor   `json:"must_stay_silent_on"`
+
+	// HeldOut marks a fixture as part of the held-out slice (ADR-0018
+	// §Goodhart). Held-out fixtures must never be inspected while tuning
+	// the prompt or the corpus; they exist only to give an unbiased
+	// generalization estimate. If dev-slice recall improves but held-out
+	// recall does not, the change overfit the corpus rather than improving
+	// reviews. Default false → the fixture is in the tunable dev slice.
+	HeldOut bool `json:"held_out,omitempty"`
 }
 
 // Fixture is one known-answer corpus entry: a diff plus its answer key.
@@ -68,6 +76,30 @@ type Fixture struct {
 	Expected         []ExpectedFinding
 	MustStaySilentOn []SilenceAnchor
 	MockResponse     string
+
+	// HeldOut marks the fixture as part of the generalization-only slice;
+	// see answerKey.HeldOut.
+	HeldOut bool
+}
+
+// Categories returns the distinct categories a fixture exercises: the
+// category of each expected finding, or "clean" for a clean control (no
+// expected findings). Used to check that the held-out slice is
+// representative rather than concentrated in one category.
+func (fx Fixture) Categories() []string {
+	if len(fx.Expected) == 0 {
+		return []string{"clean"}
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, e := range fx.Expected {
+		if _, ok := seen[e.Category]; ok {
+			continue
+		}
+		seen[e.Category] = struct{}{}
+		out = append(out, e.Category)
+	}
+	return out
 }
 
 // LoadFixture reads a single corpus directory: input.diff + expected.json
@@ -110,6 +142,7 @@ func LoadFixture(dir string) (Fixture, error) {
 		Expected:         key.ExpectedFindings,
 		MustStaySilentOn: key.MustStaySilentOn,
 		MockResponse:     string(mockResp),
+		HeldOut:          key.HeldOut,
 	}, nil
 }
 

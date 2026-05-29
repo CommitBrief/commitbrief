@@ -51,16 +51,30 @@ func TestEvalLive(t *testing.T) {
 		t.Fatalf("RunCorpus: %v", err)
 	}
 
-	t.Logf("eval scorecard — provider=%s model=%s (%d fixtures)", sc.Provider, sc.Model, len(sc.Fixtures))
+	logScorecard(t, "FULL", sc, true)
+	// Report the dev and held-out slices separately so overfitting is
+	// visible at a glance (ADR-0018 §Goodhart): a prompt change that lifts
+	// DEV recall but not HELD-OUT recall has overfit the corpus.
+	logScorecard(t, "DEV (tunable)", sc.Dev(), false)
+	logScorecard(t, "HELD-OUT (generalization)", sc.HeldOut(), false)
+}
+
+// logScorecard prints a scorecard's per-fixture lines, totals, and (when
+// withCategories) the per-category recall breakdown.
+func logScorecard(t *testing.T, label string, sc Scorecard, withCategories bool) {
+	t.Helper()
+	t.Logf("── %s — provider=%s model=%s (%d fixtures) ──", label, sc.Provider, sc.Model, len(sc.Fixtures))
 	for _, f := range sc.Fixtures {
-		t.Logf("  %-26s TP=%d FN=%d FP=%d  precision=%.2f recall=%.2f fpr=%.2f",
+		t.Logf("   %-26s TP=%d FN=%d FP=%d  P=%.2f R=%.2f FPR=%.2f",
 			f.Fixture, f.TruePositives, f.FalseNegatives, f.FalsePositives,
 			f.Precision(), f.Recall(), f.FalsePositiveRate())
 	}
-	t.Logf("  TOTAL  precision=%.2f recall=%.2f false-positive-rate=%.2f",
+	t.Logf("   TOTAL  precision=%.2f recall=%.2f false-positive-rate=%.2f",
 		sc.Precision(), sc.Recall(), sc.FalsePositiveRate())
-	for _, cr := range sc.CategoryRecall() {
-		t.Logf("  category %-16s recall=%d/%d", cr.Category, cr.Caught, cr.Total)
+	if withCategories {
+		for _, cr := range sc.CategoryRecall() {
+			t.Logf("   category %-16s recall=%d/%d", cr.Category, cr.Caught, cr.Total)
+		}
 	}
 }
 

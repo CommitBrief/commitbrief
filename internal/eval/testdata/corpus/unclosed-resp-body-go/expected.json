@@ -1,4 +1,5 @@
 {
+  "held_out": true,
   "language": "go",
   "expected_findings": [
     {"id":"unclosed-resp-body","file":"internal/http/fetch.go","line":8,"line_tol":3,"category":"resource-leak","min_severity":"medium","summary":"resp.Body from http.Get is never closed, leaking the connection; add defer resp.Body.Close() after the error check."}

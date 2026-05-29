@@ -1,4 +1,5 @@
 {
+  "held_out": true,
   "language": "python",
   "expected_findings": [
     {"id":"bare-except-pass","file":"app/task.py","line":9,"line_tol":3,"category":"error-handling","min_severity":"medium","summary":"A bare except: pass swallows every exception silently; catch specific exceptions and log or re-raise."}

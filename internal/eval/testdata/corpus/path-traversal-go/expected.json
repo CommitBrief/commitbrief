@@ -1,4 +1,5 @@
 {
+  "held_out": true,
   "language": "go",
   "expected_findings": [
     {"id":"path-traversal","file":"internal/files/serve.go","line":26,"line_tol":3,"category":"security","min_severity":"high","summary":"userPath is joined to baseDir without cleaning or containment checks, so ../ sequences escape baseDir; clean the path and verify it stays within baseDir before reading."}
