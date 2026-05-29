@@ -51,6 +51,7 @@ cache.stats.limit.bounded: "Size limit: %s (cache.max_size_mb=%d)."
 cache.inspect.notfound: "No cache entry with key %q (looked in %s)."
 
 context.cli_only: "--with-context only works with a CLI-backed provider (claude-cli, gemini-cli, codex-cli). An API provider has no filesystem to read. Select one with --cli claude|gemini|codex."
+context.warning: "⚠  --with-context: the CLI agent may read files beyond the diff (including untracked secrets); the pre-send secret scan covers the diff only."
 
 clipboard.copied: "%d findings copied to clipboard (%s) — paste anywhere"
 clipboard.empty: "Nothing to copy: review found 0 findings."

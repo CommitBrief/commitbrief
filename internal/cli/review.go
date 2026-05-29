@@ -201,6 +201,13 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		prog.Fail(ctxErr)
 		return ctxErr
 	}
+	// Security caution (ADR-0017): the flag is the user's consent, but
+	// surface — on every context run, TTY or not — that the agent may read
+	// files beyond the diff (incl. untracked secrets) and that the pre-send
+	// secret scan covers the diff only. Not a blocking prompt.
+	if global.withContext {
+		prog.Info(app.Catalog.T("context.warning"))
+	}
 	// The model sees the line-numbered diff so it can copy line numbers
 	// instead of counting them; the cache key and secret scan keep using
 	// the plain diffText (numberedDiff is a deterministic function of it,
