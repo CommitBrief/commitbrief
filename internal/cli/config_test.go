@@ -105,29 +105,41 @@ func TestConfigGetUnknownKey(t *testing.T) {
 	}
 }
 
-func TestConfigGetMaxSizeMBNoLongerSupported(t *testing.T) {
-	// UC-02 cleanup: cache.max_size_mb was dead config — defined in
-	// the struct but never read anywhere. It is gone in v0.9.1, so
-	// `config get cache.max_size_mb` must now error with the standard
-	// "unknown field" message rather than silently returning a number.
+func TestConfigGetMaxSizeMBDefaultsToZero(t *testing.T) {
+	// v1.3.0: cache.max_size_mb is a real key again (size-bounded
+	// eviction, ADR-0008). Unlike the v0.9.1-removed dead field, this one
+	// is read on the Put path. The default is 0 (unlimited).
 	e := newCLIEnv(t)
-	err := e.run("config", "get", "cache.max_size_mb")
-	if err == nil {
-		t.Fatalf("max_size_mb should error after removal; got success: %s", e.out.String())
+	if err := e.run("config", "get", "cache.max_size_mb"); err != nil {
+		t.Fatalf("config get cache.max_size_mb: %v", err)
 	}
-	if !strings.Contains(err.Error(), "max_size_mb") || !strings.Contains(err.Error(), "unknown field") {
-		t.Errorf("error %q should name the offending field as unknown", err.Error())
+	if got := strings.TrimSpace(e.out.String()); got != "0" {
+		t.Errorf("cache.max_size_mb = %q, want %q (unlimited default)", got, "0")
 	}
 }
 
-func TestConfigSetMaxSizeMBNoLongerSupported(t *testing.T) {
+func TestConfigSetMaxSizeMBRoundTrips(t *testing.T) {
 	e := newCLIEnv(t)
-	err := e.run("config", "set", "cache.max_size_mb", "200")
-	if err == nil {
-		t.Fatal("max_size_mb set should error after removal")
+	if err := e.run("config", "set", "cache.max_size_mb", "200"); err != nil {
+		t.Fatalf("config set cache.max_size_mb 200: %v", err)
 	}
-	if !strings.Contains(err.Error(), "max_size_mb") || !strings.Contains(err.Error(), "unknown field") {
-		t.Errorf("error %q should name the offending field as unknown", err.Error())
+	cfg := loadCfg(t, e.homeDir)
+	if cfg.Cache.MaxSizeMB != 200 {
+		t.Errorf("cache.max_size_mb = %d, want 200", cfg.Cache.MaxSizeMB)
+	}
+}
+
+func TestConfigSetMaxSizeMBRejectsNegative(t *testing.T) {
+	e := newCLIEnv(t)
+	// `--` stops cobra flag parsing so the negative value reaches the
+	// validation branch as a positional rather than being mistaken for a
+	// shorthand flag.
+	err := e.run("config", "set", "--", "cache.max_size_mb", "-5")
+	if err == nil {
+		t.Fatal("want error for negative max_size_mb, got nil")
+	}
+	if !strings.Contains(err.Error(), "negative") {
+		t.Errorf("error %q should mention it cannot be negative", err.Error())
 	}
 }
 

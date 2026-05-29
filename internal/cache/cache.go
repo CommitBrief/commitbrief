@@ -65,10 +65,11 @@ const (
 )
 
 type Cache struct {
-	dir      string
-	ttl      time.Duration
-	repoRoot string
-	now      func() time.Time
+	dir          string
+	ttl          time.Duration
+	repoRoot     string
+	maxSizeBytes int64
+	now          func() time.Time
 }
 
 type Options struct {
@@ -81,6 +82,15 @@ type Options struct {
 	// TTL controls how long an entry is considered fresh. Zero falls back
 	// to DefaultTTL (7 days).
 	TTL time.Duration
+
+	// MaxSizeBytes bounds the on-disk cache size. After each successful
+	// Put, if the cache directory exceeds this many bytes, the oldest
+	// entries (by CreatedAt, mtime fallback) are evicted oldest-first
+	// until the total fits — see eviction.go. Zero or negative disables
+	// eviction (unlimited; the manual `cache prune` stays the stand-in).
+	// The just-written entry is never evicted, so a single entry larger
+	// than the cap survives.
+	MaxSizeBytes int64
 
 	// Now overrides time.Now (test injection); production callers leave it nil.
 	Now func() time.Time
@@ -99,10 +109,11 @@ func Open(opts Options) (*Cache, error) {
 		now = time.Now
 	}
 	return &Cache{
-		dir:      opts.Dir,
-		ttl:      ttl,
-		repoRoot: opts.RepoRoot,
-		now:      now,
+		dir:          opts.Dir,
+		ttl:          ttl,
+		repoRoot:     opts.RepoRoot,
+		maxSizeBytes: opts.MaxSizeBytes,
+		now:          now,
 	}, nil
 }
 
@@ -157,6 +168,16 @@ func (c *Cache) Put(key string, entry Entry) error {
 			// written. Return the error so callers can log or surface it.
 			return fmt.Errorf("cache: entry written but %w", err)
 		}
+	}
+
+	// Size-bounded eviction runs after the write so the just-stored entry
+	// counts toward the total and is protected from eviction. Failures
+	// here are best-effort cleanup — the entry is already persisted and a
+	// disk-pressure sweep that couldn't complete is not worth failing the
+	// surrounding review over, so we deliberately swallow the error.
+	if c.maxSizeBytes > 0 {
+		keep := filepath.Base(c.entryPath(key))
+		_, _, _ = enforceSizeLimit(c.dir, c.maxSizeBytes, keep)
 	}
 	return nil
 }

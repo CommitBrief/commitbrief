@@ -183,8 +183,10 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return strconv.FormatBool(cfg.Cache.Enabled), nil
 		case "ttl_days":
 			return strconv.Itoa(cfg.Cache.TTLDays), nil
+		case "max_size_mb":
+			return strconv.Itoa(cfg.Cache.MaxSizeMB), nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in cache (allowed: enabled, ttl_days)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in cache (allowed: enabled, ttl_days, max_size_mb)", parts[1])
 		}
 
 	case "guard":
@@ -301,8 +303,17 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 				return errors.New("config: cache.ttl_days cannot be negative")
 			}
 			cfg.Cache.TTLDays = i
+		case "max_size_mb":
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return fmt.Errorf("config: cache.max_size_mb must be an integer; got %q", value)
+			}
+			if i < 0 {
+				return errors.New("config: cache.max_size_mb cannot be negative")
+			}
+			cfg.Cache.MaxSizeMB = i
 		default:
-			return fmt.Errorf("config: unknown field %q in cache (allowed: enabled, ttl_days)", parts[1])
+			return fmt.Errorf("config: unknown field %q in cache (allowed: enabled, ttl_days, max_size_mb)", parts[1])
 		}
 		return nil
 
