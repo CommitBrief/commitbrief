@@ -6,10 +6,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 
+	"github.com/CommitBrief/commitbrief/internal/config"
+	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/logo"
 	"github.com/CommitBrief/commitbrief/internal/ui"
@@ -163,6 +166,15 @@ func Execute() {
 	defer cancel()
 
 	root := newRootCmd()
+	// Default-command expansion: a truly bare `commitbrief` (no args) is
+	// rewritten to the configured `command.default` token list, so a user
+	// can make `commitbrief` mean e.g. `--unstaged --cli gemini`. Any
+	// explicit flag or subcommand bypasses this — the user is being
+	// explicit. Empty/unset default leaves the built-in `--staged` behavior
+	// untouched. See config.CommandConfig.
+	if expanded, ok := expandDefault(os.Args[1:], loadDefaultCommand()); ok {
+		root.SetArgs(expanded)
+	}
 	if err := root.ExecuteContext(ctx); err != nil {
 		// Best-effort error-prefix translation. appContext isn't built at
 		// this layer (cobra surfaces errors from RunE before/instead of
@@ -172,6 +184,41 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, cat.T("common.error_prefix"), err)
 		os.Exit(1)
 	}
+}
+
+// expandDefault decides the args cobra should run for a bare invocation.
+// When rawArgs is empty AND defaultCmd has at least one token, it returns
+// the whitespace-split default and true. Otherwise it returns rawArgs
+// unchanged and false (so any explicit flag/subcommand, or an empty
+// default, leaves behavior exactly as before). Kept pure for testing —
+// the config load lives in loadDefaultCommand.
+func expandDefault(rawArgs []string, defaultCmd string) ([]string, bool) {
+	if len(rawArgs) > 0 {
+		return rawArgs, false
+	}
+	tokens := strings.Fields(defaultCmd)
+	if len(tokens) == 0 {
+		return rawArgs, false
+	}
+	return tokens, true
+}
+
+// loadDefaultCommand best-effort reads config.command.default for the
+// pre-parse expansion. It loads the same global+repo config layers as
+// resolveContext but swallows errors and returns "" — a malformed config
+// must not break a bare `commitbrief`; resolveContext will surface the
+// real error once the command actually runs.
+func loadDefaultCommand() string {
+	repoRoot := ""
+	if root, err := git.FindRepo(""); err == nil {
+		repoRoot = root
+	}
+	globalPath, repoPath := configFilePaths(repoRoot)
+	cfg, err := config.Load(globalPath, repoPath)
+	if err != nil {
+		return ""
+	}
+	return cfg.Command.Default
 }
 
 // pickErrorCatalog returns the i18n catalog used for the top-level "Error:"

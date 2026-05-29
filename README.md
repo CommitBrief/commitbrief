@@ -343,7 +343,26 @@ cache:
   enabled: true
   ttl_days: 7
   max_size_mb: 0                   # 0 = unlimited; >0 evicts oldest entries past the cap
+command:
+  default: ""                      # args applied to a bare `commitbrief`; empty = `--staged`
 ```
+
+### Default command (`command.default`)
+
+A bare `commitbrief` reviews staged changes (`commitbrief --staged`). To
+change that default, set `command.default` to the argument string you'd
+otherwise type:
+
+```yaml
+command:
+  default: --unstaged --cli gemini   # now `commitbrief` == `commitbrief --unstaged --cli gemini`
+```
+
+It applies **only** to the truly bare invocation. The moment you pass any
+flag or subcommand — `commitbrief --staged`, `commitbrief --json`,
+`commitbrief dry-run` — the default is bypassed and you get exactly what
+you typed. Empty/unset keeps the built-in `--staged`. Tokens are
+whitespace-split (no shell quoting).
 
 Review content lives in two files:
 

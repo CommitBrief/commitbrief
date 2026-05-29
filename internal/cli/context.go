@@ -46,16 +46,7 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 		}
 	}
 
-	globalPath := os.Getenv("COMMITBRIEF_CONFIG")
-	if globalPath == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			globalPath = home + "/.commitbrief/config.yml"
-		}
-	}
-	repoPath := ""
-	if repoRoot != "" {
-		repoPath = repoRoot + "/.commitbrief/config.yml"
-	}
+	globalPath, repoPath := configFilePaths(repoRoot)
 
 	cfg, err := config.Load(globalPath, repoPath)
 	if err != nil {
@@ -124,4 +115,22 @@ func userHome() string {
 		return ""
 	}
 	return home
+}
+
+// configFilePaths resolves the global and repo config.yml paths used by
+// config.Load. globalPath honors $COMMITBRIEF_CONFIG, else
+// ~/.commitbrief/config.yml; repoPath is <repoRoot>/.commitbrief/config.yml
+// when repoRoot is non-empty (else ""). Shared by resolveContext and the
+// pre-parse default-command expansion in Execute so the two never drift.
+func configFilePaths(repoRoot string) (globalPath, repoPath string) {
+	globalPath = os.Getenv("COMMITBRIEF_CONFIG")
+	if globalPath == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			globalPath = home + "/.commitbrief/config.yml"
+		}
+	}
+	if repoRoot != "" {
+		repoPath = repoRoot + "/.commitbrief/config.yml"
+	}
+	return globalPath, repoPath
 }
