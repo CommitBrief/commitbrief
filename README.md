@@ -242,6 +242,11 @@ sets the severity at or above which the verdict becomes request-changes;
 provider. `--fail-on` is ignored here — the GitHub verdict replaces the
 exit-code gate.
 
+Each comment is anchored to the diff side its line lives on — `RIGHT`
+(new file) for added/context lines, `LEFT` (old file) for removed ones.
+A finding whose line falls outside the diff (or whose POST is rejected)
+is not dropped: it is appended to the review summary so nothing is lost.
+
 ## Continuous integration
 
 Run CommitBrief on pull requests with the **[CommitBrief Review GitHub

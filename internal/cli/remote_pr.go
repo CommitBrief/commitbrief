@@ -126,34 +126,35 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		return err
 	}
 
-	findings, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, loaded, meta.LastOID())
+	findings, anchors, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, loaded, meta.LastOID())
 	if err != nil {
 		return err
 	}
 
-	return submitPRReview(ctx, runner, prID, f, meta, oid, findings, threshold, whoami, app)
+	return submitPRReview(ctx, runner, prID, f, meta, oid, findings, anchors, threshold, whoami, app)
 }
 
 // reviewPRDiff fetches the PR diff, runs one review, and guards against a
 // race: if the PR head OID changed during the review it retries once,
-// then aborts (ADR-0016 §7). Returns the findings plus the OID they were
-// produced against (used to anchor inline comments).
-func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, lastOID string) ([]render.Finding, string, error) {
+// then aborts (ADR-0016 §7). Returns the findings, the per-file anchor
+// index they map onto, and the OID they were produced against (both used
+// to place inline comments).
+func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded, lastOID string) ([]render.Finding, map[string]diff.FileAnchors, string, error) {
 	for attempt := 0; ; attempt++ {
 		infof("%s", app.Catalog.T("remote.reviewing"))
-		findings, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, loaded)
+		findings, anchors, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, loaded)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, "", err
 		}
 		newOID, err := remote.FetchLastOID(ctx, runner, prID, f.repo)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, "", err
 		}
 		if newOID == lastOID {
-			return findings, lastOID, nil
+			return findings, anchors, lastOID, nil
 		}
 		if attempt >= 1 {
-			return nil, "", errors.New(app.Catalog.T("remote.too_volatile"))
+			return nil, nil, "", errors.New(app.Catalog.T("remote.too_volatile"))
 		}
 		infof("%s", app.Catalog.T("remote.race_retry"))
 		lastOID = newOID
@@ -163,20 +164,23 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 // reviewOnePRDiff runs the structured review pipeline once against the
 // PR's current diff. Bot-mode: the secret scanner warns but never aborts
 // (ADR-0016 §3); the local-config guard and cost preflight are skipped.
-func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded) ([]render.Finding, error) {
+// Returns the findings plus the anchor index of the (filtered) diff the
+// model reviewed, so comments can be pinned to the correct side.
+func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, loaded rules.Loaded) ([]render.Finding, map[string]diff.FileAnchors, error) {
 	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	parsed, err := diff.Parse(git.Diff{Content: rawDiff, Origin: git.OriginDiff})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
 	if parsed.Empty() {
-		return []render.Finding{}, nil
+		return []render.Finding{}, map[string]diff.FileAnchors{}, nil
 	}
 	diffText := parsed.String()
+	anchors := parsed.Anchors()
 
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
 		if hits := guard.ScanForSecrets(diffText); len(hits) > 0 {
@@ -184,7 +188,10 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 		}
 	}
 
-	p := prompt.Build(loaded, app.Lang, diffText)
+	// The model sees the line-numbered diff so it copies line numbers
+	// instead of estimating them (see review.go); anchors above are built
+	// from the same parsed diff.
+	p := prompt.Build(loaded, app.Lang, parsed.NumberedString())
 	model := app.Config.Providers[app.Config.Provider].Model
 	if model == "" {
 		model = prov.DefaultModel()
@@ -197,22 +204,25 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	}
 	content, _, format, err := tryStructuredReview(ctx, prov, req, func() {})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if format != cache.FormatJSON {
-		return nil, errors.New(app.Catalog.T("remote.degraded"))
+		return nil, nil, errors.New(app.Catalog.T("remote.degraded"))
 	}
 	findings, err := render.ParseFindings(content)
 	if err != nil {
-		return nil, errors.New(app.Catalog.T("remote.degraded"))
+		return nil, nil, errors.New(app.Catalog.T("remote.degraded"))
 	}
-	return findings, nil
+	return findings, anchors, nil
 }
 
 // submitPRReview posts the selected inline comments and the review-level
-// verdict. Per-comment failures are logged and counted but never abort
-// the verdict submission (ADR-0016 §9).
-func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, threshold render.Severity, whoami string, app *appContext) error {
+// verdict. Each finding is anchored to the side (RIGHT/LEFT) its line
+// actually lives on; findings whose line is outside the diff — or whose
+// POST is rejected — are not dropped but appended to the review summary
+// so the signal survives (ADR-0016 §9). Per-comment failures never abort
+// the verdict submission.
+func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, anchors map[string]diff.FileAnchors, threshold render.Severity, whoami string, app *appContext) error {
 	cat := app.Catalog
 	verdict := computeVerdict(findings, threshold)
 	postable := selectPostable(findings, threshold)
@@ -222,8 +232,17 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 	}
 	slug := meta.BaseSlug()
 	posted, failed := 0, 0
+	var unanchored []render.Finding
 	for _, fnd := range postable {
-		if fnd.Line <= 0 {
+		fa, hasFile := anchors[fnd.File]
+		side, ok := "", false
+		if hasFile {
+			side, ok = fa.Resolve(fnd.Line, preferLeftSide(fnd))
+		}
+		if !ok {
+			// Line is not a postable position in the diff — a GitHub POST
+			// would 422. Keep it for the summary instead of losing it.
+			unanchored = append(unanchored, fnd)
 			continue
 		}
 		err := remote.PostComment(ctx, runner, remote.CommentRequest{
@@ -232,10 +251,12 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 			CommitID: oid,
 			Path:     fnd.File,
 			Line:     fnd.Line,
+			Side:     side,
 			Body:     remote.BuildCommentBody(fnd, whoami),
 		})
 		if err != nil {
 			failed++
+			unanchored = append(unanchored, fnd)
 			infof("%s", cat.T("remote.comment_failed", fnd.PathRef(), err.Error()))
 			continue
 		}
@@ -244,8 +265,14 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 	if posted+failed > 0 {
 		infof("%s", cat.T("remote.posted_summary", posted, posted+failed, failed))
 	}
+	if len(unanchored) > 0 {
+		infof("%s", cat.T("remote.unanchored_appended", len(unanchored)))
+	}
 
 	body := remote.BuildReviewBody(verdict, whoami)
+	if section := remote.BuildUnanchoredSection(unanchored); section != "" {
+		body += "\n\n---\n\n" + section
+	}
 	if err := remote.SubmitReview(ctx, runner, prID, f.repo, verdict, body); err != nil {
 		return err
 	}
@@ -258,6 +285,27 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		infof("%s", cat.T("remote.action_comment", meta.Number))
 	}
 	return nil
+}
+
+// preferLeftSide reports whether a finding reads as being about removed
+// code, so a line number that is valid on both diff sides resolves to
+// LEFT instead of RIGHT. Heuristic: the snippet carries at least one
+// removed ("-") line and no added ("+") line. With no snippet we keep
+// the RIGHT-first default — the common case is a finding about new code.
+func preferLeftSide(f render.Finding) bool {
+	if f.Snippet == "" {
+		return false
+	}
+	minus, plus := 0, 0
+	for _, ln := range strings.Split(f.Snippet, "\n") {
+		switch {
+		case strings.HasPrefix(ln, "-"):
+			minus++
+		case strings.HasPrefix(ln, "+"):
+			plus++
+		}
+	}
+	return minus > 0 && plus == 0
 }
 
 // computeVerdict maps findings + threshold to a GitHub review verdict

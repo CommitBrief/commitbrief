@@ -138,6 +138,46 @@ func TestPostCommentSendsSideRight(t *testing.T) {
 	}
 }
 
+func TestPostCommentSendsSideLeft(t *testing.T) {
+	fr := &fakeRunner{}
+	c := CommentRequest{
+		RepoSlug: "octo/demo", PRNumber: 7,
+		CommitID: "deadbeef", Path: "main.go", Line: 12, Side: "LEFT", Body: "x",
+	}
+	if err := PostComment(context.Background(), fr, c); err != nil {
+		t.Fatalf("PostComment: %v", err)
+	}
+	if !argsContain(fr.lastCall(), "side=LEFT") {
+		t.Errorf("explicit Side=LEFT not propagated in %v", fr.lastCall())
+	}
+}
+
+func TestBuildUnanchoredSection(t *testing.T) {
+	if got := BuildUnanchoredSection(nil); got != "" {
+		t.Errorf("empty input must yield empty section, got %q", got)
+	}
+	findings := []render.Finding{{
+		Severity:    render.SeverityCritical,
+		File:        "app/x.go",
+		Line:        42,
+		Title:       "Hardcoded secret",
+		Description: "A token is committed in source.",
+		Suggestion:  "Move it to an env var.",
+	}}
+	got := BuildUnanchoredSection(findings)
+	for _, want := range []string{
+		unanchoredHeading,
+		"[CRITICAL] app/x.go:42",
+		"Hardcoded secret",
+		"A token is committed in source.",
+		"Move it to an env var.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("section missing %q\n--- got ---\n%s", want, got)
+		}
+	}
+}
+
 func TestPostCommentPropagatesError(t *testing.T) {
 	fr := &fakeRunner{errs: []error{errors.New("422 Unprocessable Entity")}}
 	err := PostComment(context.Background(), fr, CommentRequest{RepoSlug: "o/r", PRNumber: 1, Path: "f", Line: 1})

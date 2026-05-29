@@ -9,7 +9,10 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/lang"
 )
 
-const userTemplate = "Diff to review:\n```diff\n%s\n```"
+const userTemplate = "Diff to review: each changed line is prefixed with " +
+	"`<line-number>| ` and then the usual diff marker (`+` added, `-` removed, " +
+	"space for context). Use that leading number as the `line` value of any " +
+	"finding on that line.\n```diff\n%s\n```"
 
 // severityRubric is the fixed severity vocabulary the LLM must use in every
 // finding. It lives in the prompt builder (not in default.md) so that a
@@ -38,8 +41,8 @@ const jsonContract = `Return a single JSON object matching this exact schema. Ou
     {
       "severity": "critical | high | medium | low | info",
       "file": "<path relative to repo root>",
-      "line": <integer line number, 1-based, where the finding starts>,
-      "line_end": <integer line number, optional, where the finding ends>,
+      "line": <the line-number prefix (the integer before "|") of the diff line where the finding starts>,
+      "line_end": <line-number prefix where the finding ends, optional>,
       "title": "<one-sentence summary of the issue>",
       "description": "<1-3 sentences explaining the issue and its impact>",
       "suggestion": "<2-3 sentence concrete fix recommendation>",
@@ -50,6 +53,11 @@ const jsonContract = `Return a single JSON object matching this exact schema. Ou
 }
 
 Required fields per finding: severity, file, line, title, description, suggestion.
+
+The "line" field MUST be the number printed before "|" at the start of the
+relevant diff line — copy it, do not count or estimate. For findings about
+removed code, use the number shown on the "-" line; for added or context
+code, the number on the "+" or unmarked line.
 
 The "suggestion" field is REQUIRED and carries the actionable remediation:
   - 2-3 sentences explaining what the developer should change and why.
@@ -70,9 +78,10 @@ Optional fields:
       1. Copy lines VERBATIM from the diff supplied above — do not
          paraphrase, summarise, edit, or invent code.
       2. Max 6 lines.
-      3. Use exactly the diff prefixes: "- " for removed, "+ " for added,
-         two spaces for context. No other prefixes.
-      4. NO hunk headers ("@@ ..."), NO line numbers, NO file headers.
+      3. Strip the leading "<number>| " prefix from each line you copy.
+         Then use exactly the diff prefixes: "- " for removed, "+ " for
+         added, two spaces for context. No other prefixes.
+      4. NO hunk headers ("@@ ..."), NO line-number prefixes, NO file headers.
       5. Include snippet ONLY when a code excerpt materially clarifies
          the finding. When in doubt, omit — an unhelpful snippet is
          worse than no snippet.
@@ -112,7 +121,8 @@ Rules:
 - icon is one of: 💥 (critical), 🚨 (high), ⚡ (medium), 📌 (low), 💡 (info).
 - SEVERITY is the uppercase severity name (CRITICAL, HIGH, MEDIUM, LOW, INFO).
 - path is the file path relative to repo root.
-- line is the 1-based line number where the finding starts. For multi-line
+- line is the number printed before "|" at the start of the diff line where
+  the finding starts — copy it, do not count or estimate. For multi-line
   findings spanning multiple lines, write "line-end_line" (e.g. "142-158")
   instead of a single number. Single-line findings use just "line".
 - Title is a one-sentence summary of the issue.

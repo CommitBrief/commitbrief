@@ -13,6 +13,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/git"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/remote"
 	"github.com/CommitBrief/commitbrief/internal/render"
 )
@@ -306,5 +309,49 @@ func TestRemotePRAbortsOnDoubleRace(t *testing.T) {
 	}
 	if r.callCount("review") != 0 {
 		t.Errorf("no verdict on double race; calls=%v", r.calls)
+	}
+}
+
+func TestSubmitPRReviewAnchorsAndFallsBack(t *testing.T) {
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &appContext{Catalog: cat}
+	parsed, err := diff.Parse(git.Diff{Content: sampleDiff, Origin: git.OriginDiff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	anchors := parsed.Anchors()
+
+	findings := []render.Finding{
+		// Line 1 (context `package mock`) is a valid RIGHT position → posted.
+		{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "anchored", Description: "d", Suggestion: "s"},
+		// Line 999 is outside every hunk → falls back to the summary body.
+		{Severity: render.SeverityInfo, File: "mock.go", Line: 999, Title: "floating", Description: "d", Suggestion: "s"},
+	}
+
+	r := &fakeGH{}
+	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
+	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
+		findings, anchors, render.SeverityCritical, "tester", app); err != nil {
+		t.Fatalf("submitPRReview: %v", err)
+	}
+
+	if got := r.callCount("/comments"); got != 1 {
+		t.Errorf("want exactly 1 inline comment (only the anchored finding), got %d; calls=%v", got, r.calls)
+	}
+	// The unanchored finding must survive in the review body.
+	var reviewBody string
+	for _, c := range r.calls {
+		if strings.Contains(c, "review") {
+			reviewBody = c
+		}
+	}
+	if !strings.Contains(reviewBody, "Findings that could not be attached") {
+		t.Errorf("unanchored finding not appended to review body; review call=%q", reviewBody)
+	}
+	if !strings.Contains(reviewBody, "floating") {
+		t.Errorf("unanchored finding title missing from body; review call=%q", reviewBody)
 	}
 }

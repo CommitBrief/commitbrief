@@ -140,6 +140,7 @@ remote.race_retry: "Review sırasında PR head değişti; bir kez yeniden deneni
 remote.posting_comments: "%d satır içi yorum gönderiliyor…"
 remote.comment_failed: "⚠  %s için yorum gönderilemedi (%s)"
 remote.posted_summary: "%d/%d yorum gönderildi, %d başarısız."
+remote.unanchored_appended: "%d bulgu bir diff satırına sabitlenemedi; review özetine eklendi."
 remote.action_approve: "PR #%d onaylandı."
 remote.action_comment: "PR #%d yalnızca yorum olarak gönderildi."
 remote.action_request_changes: "PR #%d için değişiklik talep edildi."

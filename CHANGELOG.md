@@ -8,6 +8,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [1.2.1]
+
+### Fixed
+- **`commitbrief remote pr` no longer mis-places inline comments.**
+  Comments are now anchored to the diff side each finding's line lives on
+  — `RIGHT` (new file) for added/context lines, `LEFT` (old file) for
+  removed lines — instead of unconditionally posting `side=RIGHT`. A
+  finding whose line falls outside the diff (or whose POST GitHub rejects)
+  is appended to the review summary under a "Findings that could not be
+  attached to a specific line" heading rather than being silently dropped.
+### Changed
+- **Line-numbered diffs for more accurate finding locations.** Every
+  review (local and `remote pr`) now sends the model a diff with each
+  changed line prefixed by the line number a comment would anchor to
+  (`<n>| <marker><text>`), so the model copies line numbers instead of
+  counting them from the `@@` hunk header. This sharply reduces findings
+  landing on the wrong line (closing braces, blank lines). The on-disk
+  cache is rebuilt once on upgrade because the system prompt changed; the
+  diff component of the cache key is unaffected (the numbered form is a
+  deterministic function of the plain diff).
+
 ## [1.2.0]
 
 ### Fixed
