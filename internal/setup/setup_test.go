@@ -122,6 +122,37 @@ func TestApplyPreservesExistingKeys(t *testing.T) {
 	}
 }
 
+// TestApplyKeepsKeyWhenReconfiguringSameProvider guards the wizard's
+// "leave blank to keep the existing key" behavior: re-running setup for a
+// provider that already has a key, submitting an empty key but a new model,
+// must preserve the stored key and update only the model. This is the
+// contract the promptAPIKey existing-key branch relies on.
+func TestApplyKeepsKeyWhenReconfiguringSameProvider(t *testing.T) {
+	base := config.Default()
+	base.Providers["anthropic"] = config.ProviderConfig{
+		APIKey:  "sk-ant-existing",
+		Model:   "claude-opus-4-8",
+		BaseURL: "https://api.anthropic.com",
+	}
+	base.Provider = "anthropic"
+
+	// Empty APIKey (user left the prompt blank), new model only.
+	cfg := Apply(base, Choices{
+		Provider: "anthropic",
+		Model:    "claude-sonnet-4-6",
+	})
+
+	if got := cfg.Providers["anthropic"].APIKey; got != "sk-ant-existing" {
+		t.Errorf("APIKey not preserved on empty input: got %q, want sk-ant-existing", got)
+	}
+	if got := cfg.Providers["anthropic"].Model; got != "claude-sonnet-4-6" {
+		t.Errorf("Model not updated: got %q, want claude-sonnet-4-6", got)
+	}
+	if got := cfg.Providers["anthropic"].BaseURL; got != "https://api.anthropic.com" {
+		t.Errorf("BaseURL lost: got %q", got)
+	}
+}
+
 func TestApplyFirstRunStartsFromDefault(t *testing.T) {
 	// Passing nil base mimics first-time setup: result must be a clean
 	// Default config with the choices layered on, no leftover state.

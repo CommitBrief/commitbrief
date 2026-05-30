@@ -10,6 +10,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **`setup` no longer forces an API-key re-entry when one already exists.**
+  Re-running `commitbrief setup` for a provider that already has a key in the
+  target config now lets you leave the key prompt blank to keep the stored
+  key, so switching only the active provider/model doesn't require retyping
+  credentials. First-time configuration (no existing key) still requires a
+  non-empty key. For a non-interactive path, `providers use <name>` switches
+  the active provider and `config set providers.<name>.model <model>` changes
+  the model — both leave API keys untouched.
+
 ### Added
 - **OpenAI: GPT-5 family support — `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.5-pro`.**
   All three are selectable in `commitbrief setup` and carry correct context
