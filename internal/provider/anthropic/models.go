@@ -5,15 +5,15 @@ package anthropic
 const (
 	Name = "anthropic"
 
-	ModelOpus47   = "claude-opus-4-7"
+	ModelOpus48   = "claude-opus-4-8"
 	ModelSonnet46 = "claude-sonnet-4-6"
 	ModelHaiku45  = "claude-haiku-4-5-20251001"
 
-	DefaultModel = ModelOpus47
+	DefaultModel = ModelOpus48
 )
 
 var supportedModels = []string{
-	ModelOpus47,
+	ModelOpus48,
 	ModelSonnet46,
 	ModelHaiku45,
 }

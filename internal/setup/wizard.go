@@ -44,7 +44,7 @@ var DefaultSpecs = []ProviderSpec{
 		Name:       "anthropic",
 		Label:      "Anthropic (Claude)",
 		NeedsKey:   true,
-		Models:     []string{"claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"},
+		Models:     []string{"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"},
 		APIKeyHelp: "Get an API key from https://console.anthropic.com/",
 	},
 	{

@@ -29,6 +29,11 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   windows updated; `gemini-3.1-pro-preview` carries tiered pricing (the
   ≤200K-token base tier is snapshotted). Configs pinning a removed 2.x/1.5
   model should switch to a 3.x ID.
+- **Anthropic: `claude-opus-4-7` → `claude-opus-4-8`.** Opus 4.8 is now the
+  default Anthropic model. Its built-in pricing ($5 input / $25 output / $0.50
+  cache-read per 1M) and context window (1M tokens, up from the 200K the old
+  table recorded for 4.7) are updated to match Anthropic's current model docs.
+  Configs pinning `claude-opus-4-7` should switch to `claude-opus-4-8`.
 
 ## [1.4.0] - 2026-05-29
 
