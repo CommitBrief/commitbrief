@@ -51,7 +51,7 @@ var DefaultSpecs = []ProviderSpec{
 		Name:       "openai",
 		Label:      "OpenAI (GPT)",
 		NeedsKey:   true,
-		Models:     []string{"gpt-4o", "gpt-4o-mini"},
+		Models:     []string{"gpt-5.4-mini", "gpt-5.5", "gpt-5.5-pro", "gpt-4o", "gpt-4o-mini"},
 		APIKeyHelp: "Get an API key from https://platform.openai.com/",
 	},
 	{

@@ -8,6 +8,18 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [Unreleased]
+
+### Added
+- **OpenAI: GPT-5 family support — `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.5-pro`.**
+  All three are selectable in `commitbrief setup` and carry correct context
+  windows (1.05M / 400K / 1.05M input) and pricing. The new default OpenAI
+  model is **`gpt-5.4-mini`** (was `gpt-4o`); existing configs that pin a
+  model are unaffected. `gpt-5.5-pro` is served through OpenAI's Responses
+  API (it is not available on Chat Completions) and may take several minutes
+  per review. Reasoning models get a larger default output-token budget so a
+  findings JSON isn't truncated by reasoning tokens.
+
 ## [1.4.0] - 2026-05-29
 
 ### Fixed

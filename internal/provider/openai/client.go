@@ -9,6 +9,7 @@ import (
 
 	sdk "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
@@ -18,8 +19,12 @@ import (
 
 const (
 	defaultMaxTokens = 4096
-	testPingPrompt   = "ping"
-	testPingMaxTok   = 8
+	// defaultReasoningMaxTokens is the output ceiling for GPT-5 reasoning
+	// models when the caller specifies none — larger than defaultMaxTokens
+	// because reasoning tokens are billed out of the same budget.
+	defaultReasoningMaxTokens = 16384
+	testPingPrompt            = "ping"
+	testPingMaxTok            = 8
 )
 
 type Client struct {
@@ -69,6 +74,13 @@ func (c *Client) Pricing(model string) provider.Pricing {
 }
 
 func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Response, error) {
+	model := req.Model
+	if model == "" {
+		model = c.DefaultModel()
+	}
+	if usesResponsesAPI(model) {
+		return c.reviewViaResponses(ctx, req, model)
+	}
 	params := c.buildParams(req)
 	completion, err := c.sdk.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -81,9 +93,37 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 	}, nil
 }
 
+// reviewViaResponses drives a Responses-API-only model (gpt-5.5-pro). The
+// call is synchronous and may take several minutes for the pro model; it
+// honours the caller's context deadline (the SDK sets no client timeout of
+// its own).
+func (c *Client) reviewViaResponses(ctx context.Context, req provider.Request, model string) (provider.Response, error) {
+	resp, err := c.sdk.Responses.New(ctx, c.buildResponsesParams(req, model))
+	if err != nil {
+		return provider.Response{}, mapError(err)
+	}
+	return provider.Response{
+		Content: resp.OutputText(),
+		Model:   resp.Model,
+		Usage:   mapResponsesUsage(resp.Usage),
+	}, nil
+}
+
 func (c *Client) TestConnection(ctx context.Context) error {
+	model := c.DefaultModel()
+	if usesResponsesAPI(model) {
+		params := responses.ResponseNewParams{
+			Model:           shared.ResponsesModel(model),
+			MaxOutputTokens: sdk.Int(testPingMaxTok),
+			Input:           responses.ResponseNewParamsInputUnion{OfString: sdk.String(testPingPrompt)},
+		}
+		if _, err := c.sdk.Responses.New(ctx, params); err != nil {
+			return mapError(err)
+		}
+		return nil
+	}
 	params := sdk.ChatCompletionNewParams{
-		Model:               shared.ChatModel(c.DefaultModel()),
+		Model:               shared.ChatModel(model),
 		MaxCompletionTokens: sdk.Int(testPingMaxTok),
 		Messages: []sdk.ChatCompletionMessageParamUnion{
 			sdk.UserMessage(testPingPrompt),
@@ -102,7 +142,7 @@ func (c *Client) buildParams(req provider.Request) sdk.ChatCompletionNewParams {
 	}
 	maxTokens := int64(req.MaxTokens)
 	if maxTokens <= 0 {
-		maxTokens = defaultMaxTokens
+		maxTokens = defaultMaxTokensFor(model)
 	}
 
 	messages := make([]sdk.ChatCompletionMessageParamUnion, 0, 2)
@@ -124,6 +164,28 @@ func (c *Client) buildParams(req provider.Request) sdk.ChatCompletionNewParams {
 	return params
 }
 
+func (c *Client) buildResponsesParams(req provider.Request, model string) responses.ResponseNewParams {
+	maxTokens := int64(req.MaxTokens)
+	if maxTokens <= 0 {
+		maxTokens = defaultMaxTokensFor(model)
+	}
+
+	params := responses.ResponseNewParams{
+		Model:           shared.ResponsesModel(model),
+		MaxOutputTokens: sdk.Int(maxTokens),
+		Input:           responses.ResponseNewParamsInputUnion{OfString: sdk.String(req.UserPrompt)},
+	}
+	if req.SystemPrompt != "" {
+		params.Instructions = sdk.String(req.SystemPrompt)
+	}
+	// Structured-findings JSON contract (ADR-0014). Omitted for FreeForm
+	// (ADR-0015) so the model returns a plain-text completion.
+	if !req.FreeForm {
+		params.Text = buildResponsesTextFormat()
+	}
+	return params
+}
+
 func extractText(c *sdk.ChatCompletion) string {
 	if c == nil || len(c.Choices) == 0 {
 		return ""
@@ -136,6 +198,14 @@ func mapUsage(u sdk.CompletionUsage) provider.Usage {
 		InputTokens:       int(u.PromptTokens),
 		OutputTokens:      int(u.CompletionTokens),
 		CachedInputTokens: int(u.PromptTokensDetails.CachedTokens),
+	}
+}
+
+func mapResponsesUsage(u responses.ResponseUsage) provider.Usage {
+	return provider.Usage{
+		InputTokens:       int(u.InputTokens),
+		OutputTokens:      int(u.OutputTokens),
+		CachedInputTokens: int(u.InputTokensDetails.CachedTokens),
 	}
 }
 
