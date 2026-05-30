@@ -44,21 +44,21 @@ var DefaultSpecs = []ProviderSpec{
 		Name:       "anthropic",
 		Label:      "Anthropic (Claude)",
 		NeedsKey:   true,
-		Models:     []string{"claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"},
+		Models:     []string{"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"},
 		APIKeyHelp: "Get an API key from https://console.anthropic.com/",
 	},
 	{
 		Name:       "openai",
 		Label:      "OpenAI (GPT)",
 		NeedsKey:   true,
-		Models:     []string{"gpt-4o", "gpt-4o-mini"},
+		Models:     []string{"gpt-5.4-mini", "gpt-5.5", "gpt-5.5-pro", "gpt-4o", "gpt-4o-mini"},
 		APIKeyHelp: "Get an API key from https://platform.openai.com/",
 	},
 	{
 		Name:       "gemini",
 		Label:      "Google Gemini",
 		NeedsKey:   true,
-		Models:     []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-flash"},
+		Models:     []string{"gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"},
 		APIKeyHelp: "Get an API key from https://aistudio.google.com/",
 	},
 	{
@@ -198,7 +198,12 @@ func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	}
 
 	if spec.NeedsKey {
-		if err := promptAPIKey(ctx, spec, &choices, opts.Catalog); err != nil {
+		// If the target config already holds a key for the chosen provider,
+		// let the user leave the prompt blank to keep it — switching the
+		// active provider/model shouldn't force a key re-entry. Apply()
+		// preserves the existing key on empty input.
+		hasExistingKey := base != nil && base.Providers[choices.Provider].APIKey != ""
+		if err := promptAPIKey(ctx, spec, &choices, opts.Catalog, hasExistingKey); err != nil {
 			return nil, err
 		}
 	}
@@ -261,15 +266,23 @@ func selectProvider(ctx context.Context, specs []ProviderSpec, choices *Choices,
 	return form.RunWithContext(ctx)
 }
 
-func promptAPIKey(ctx context.Context, spec *ProviderSpec, choices *Choices, cat *i18n.Catalog) error {
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().
+func promptAPIKey(ctx context.Context, spec *ProviderSpec, choices *Choices, cat *i18n.Catalog, hasExistingKey bool) error {
+	input := huh.NewInput().
+		EchoMode(huh.EchoModePassword).
+		Value(&choices.APIKey)
+	if hasExistingKey {
+		// A key already exists: allow an empty submission (Apply keeps the
+		// stored key) so the user can change only the provider/model.
+		input = input.
+			Title(tr(cat, "setup.api_key.prompt_keep", "Enter a new API key (leave blank to keep the existing one):")).
+			Description(tr(cat, "setup.api_key.help_keep", "A key is already configured for this provider. Leave blank to keep it, or enter a new one to replace it."))
+	} else {
+		input = input.
 			Title(tr(cat, "setup.api_key.prompt", "Enter your API key:")).
 			Description(spec.APIKeyHelp).
-			EchoMode(huh.EchoModePassword).
-			Validate(notEmptyFor(cat)).
-			Value(&choices.APIKey),
-	))
+			Validate(notEmptyFor(cat))
+	}
+	form := huh.NewForm(huh.NewGroup(input))
 	return form.RunWithContext(ctx)
 }
 

@@ -32,8 +32,8 @@ func TestModelsDefensiveCopy(t *testing.T) {
 }
 
 func TestIsModelSupported(t *testing.T) {
-	if !IsModelSupported(ModelPro2_5) {
-		t.Error("gemini-2.5-pro should be supported")
+	if !IsModelSupported(ModelPro31) {
+		t.Error("gemini-3.1-pro-preview should be supported")
 	}
 	if IsModelSupported("gpt-4o") {
 		t.Error("OpenAI model should not be supported here")
@@ -41,8 +41,8 @@ func TestIsModelSupported(t *testing.T) {
 }
 
 func TestContextWindow(t *testing.T) {
-	if contextWindowFor(ModelPro2_5) != 2_000_000 {
-		t.Errorf("pro 2.5 context window wrong: %d", contextWindowFor(ModelPro2_5))
+	if contextWindowFor(ModelPro31) != 1_000_000 {
+		t.Errorf("pro 3.1 context window wrong: %d", contextWindowFor(ModelPro31))
 	}
 	if contextWindowFor("unknown") != defaultContextWindow {
 		t.Error("unknown model should fall back to defaultContextWindow")
@@ -50,7 +50,7 @@ func TestContextWindow(t *testing.T) {
 }
 
 func TestPricingLookup(t *testing.T) {
-	p := pricingFor(ModelPro2_5)
+	p := pricingFor(ModelPro31)
 	if p.InputPer1M == 0 || p.OutputPer1M == 0 {
 		t.Errorf("pro pricing missing: %+v", p)
 	}
@@ -138,7 +138,7 @@ func TestReviewWithFakeServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, err := c.Review(context.Background(), provider.Request{
-		Model:        ModelPro2_5,
+		Model:        ModelPro31,
 		SystemPrompt: "rules",
 		UserPrompt:   "diff",
 		MaxTokens:    256,

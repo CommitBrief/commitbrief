@@ -4,6 +4,7 @@ package openai
 
 import (
 	sdk "github.com/openai/openai-go"
+	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
 )
 
@@ -73,6 +74,23 @@ func buildResponseFormat() sdk.ChatCompletionNewParamsResponseFormatUnion {
 	return sdk.ChatCompletionNewParamsResponseFormatUnion{
 		OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
 			JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
+				Name:        schemaName,
+				Description: sdk.String("Structured findings for a code review."),
+				Strict:      sdk.Bool(true),
+				Schema:      responseSchema,
+			},
+		},
+	}
+}
+
+// buildResponsesTextFormat returns the Responses API equivalent of
+// buildResponseFormat — the same strict findings schema expressed as a
+// `text.format` json_schema config. Used by Responses-API-only models
+// (gpt-5.5-pro).
+func buildResponsesTextFormat() responses.ResponseTextConfigParam {
+	return responses.ResponseTextConfigParam{
+		Format: responses.ResponseFormatTextConfigUnionParam{
+			OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
 				Name:        schemaName,
 				Description: sdk.String("Structured findings for a code review."),
 				Strict:      sdk.Bool(true),

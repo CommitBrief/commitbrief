@@ -7,9 +7,9 @@ func Default() *Config {
 		Version:  CurrentSchemaVersion,
 		Provider: "anthropic",
 		Providers: map[string]ProviderConfig{
-			"anthropic": {Model: "claude-opus-4-7", BaseURL: "https://api.anthropic.com"},
-			"openai":    {Model: "gpt-4o", BaseURL: "https://api.openai.com/v1"},
-			"gemini":    {Model: "gemini-2.5-pro"},
+			"anthropic": {Model: "claude-opus-4-8", BaseURL: "https://api.anthropic.com"},
+			"openai":    {Model: "gpt-5.4-mini", BaseURL: "https://api.openai.com/v1"},
+			"gemini":    {Model: "gemini-3.5-flash"},
 			"ollama":    {Model: "qwen2.5-coder:14b", BaseURL: "http://localhost:11434"},
 		},
 		Output: OutputConfig{

@@ -21,7 +21,7 @@ func TestModelsList(t *testing.T) {
 		t.Errorf("Models() length = %d, want 3", len(got))
 	}
 	want := map[string]bool{
-		ModelOpus47:   true,
+		ModelOpus48:   true,
 		ModelSonnet46: true,
 		ModelHaiku45:  true,
 	}
@@ -41,8 +41,8 @@ func TestModelsDefensiveCopy(t *testing.T) {
 }
 
 func TestIsModelSupported(t *testing.T) {
-	if !IsModelSupported(ModelOpus47) {
-		t.Error("Opus 4.7 should be supported")
+	if !IsModelSupported(ModelOpus48) {
+		t.Error("Opus 4.8 should be supported")
 	}
 	if IsModelSupported("gpt-4o") {
 		t.Error("OpenAI model should not be reported as supported")
@@ -53,8 +53,8 @@ func TestIsModelSupported(t *testing.T) {
 }
 
 func TestContextWindow(t *testing.T) {
-	if contextWindowFor(ModelOpus47) != 200_000 {
-		t.Error("Opus 4.7 context window wrong")
+	if contextWindowFor(ModelOpus48) != 1_000_000 {
+		t.Error("Opus 4.8 should advertise the 1M window")
 	}
 	if contextWindowFor(ModelSonnet46) != 1_000_000 {
 		t.Error("Sonnet 4.6 should advertise the 1M window")
@@ -65,7 +65,7 @@ func TestContextWindow(t *testing.T) {
 }
 
 func TestPricingLookup(t *testing.T) {
-	p := pricingFor(ModelOpus47)
+	p := pricingFor(ModelOpus48)
 	if p.InputPer1M == 0 || p.OutputPer1M == 0 {
 		t.Errorf("Opus pricing missing: %+v", p)
 	}
@@ -223,7 +223,7 @@ func messagePayload(content []map[string]any, inputTokens, outputTokens int) map
 		"id":            "msg_test",
 		"type":          "message",
 		"role":          "assistant",
-		"model":         ModelOpus47,
+		"model":         ModelOpus48,
 		"content":       content,
 		"stop_reason":   "end_turn",
 		"stop_sequence": nil,
@@ -253,7 +253,7 @@ func TestReviewWithFakeServerDegradesToText(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, err := c.Review(context.Background(), provider.Request{
-		Model:        ModelOpus47,
+		Model:        ModelOpus48,
 		SystemPrompt: "rules",
 		UserPrompt:   "diff",
 		MaxTokens:    256,
@@ -291,7 +291,7 @@ func TestReviewWithToolUseFakeServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, err := c.Review(context.Background(), provider.Request{
-		Model:        ModelOpus47,
+		Model:        ModelOpus48,
 		SystemPrompt: "rules",
 		UserPrompt:   "diff",
 		MaxTokens:    256,

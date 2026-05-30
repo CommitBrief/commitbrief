@@ -20,6 +20,26 @@ var pricingTable = map[string]provider.Pricing{
 		OutputPer1M:      0.60,
 		CachedInputPer1M: 0.075,
 	},
+	// gpt-5.5 has tiered pricing: prompts above 272K input tokens incur 2x
+	// input / 1.5x output for the whole session. We snapshot the base
+	// (<=272K) tier; review diffs rarely exceed it, so the verbose cost
+	// footer may under-report on very large inputs.
+	ModelGPT55: {
+		InputPer1M:       5.00,
+		OutputPer1M:      30.00,
+		CachedInputPer1M: 0.50,
+	},
+	ModelGPT54Mini: {
+		InputPer1M:       0.75,
+		OutputPer1M:      4.50,
+		CachedInputPer1M: 0.075,
+	},
+	// gpt-5.5-pro does not offer a cached-input discount.
+	ModelGPT55Pro: {
+		InputPer1M:       30.00,
+		OutputPer1M:      180.00,
+		CachedInputPer1M: 0,
+	},
 }
 
 func pricingFor(model string) provider.Pricing {

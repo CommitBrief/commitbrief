@@ -260,9 +260,9 @@ Four API providers + two CLI-tool-backed providers ship in the box:
 
 | Provider | Models | Notes |
 |----------|--------|-------|
-| **Anthropic** | Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 | Ephemeral prompt caching (5 m TTL) cuts repeated input cost ~10×. |
-| **OpenAI** | GPT-4o, GPT-4o-mini | Automatic prompt caching at ≥1024-token prefixes. |
-| **Google Gemini** | Gemini 2.5 Pro (2 M context!), 2.5 Flash, 1.5 Flash | Largest free-tier context windows. |
+| **Anthropic** | Claude Opus 4.8 (default), Sonnet 4.6, Haiku 4.5 | Ephemeral prompt caching (5 m TTL) cuts repeated input cost ~10×. Opus 4.8 advertises a 1 M-token context. |
+| **OpenAI** | GPT-5.4-mini (default), GPT-5.5, GPT-5.5-pro, GPT-4o, GPT-4o-mini | Automatic prompt caching at ≥1024-token prefixes. `gpt-5.5-pro` runs via the Responses API (not Chat Completions) and can take several minutes per review. |
+| **Google Gemini** | Gemini 3.5 Flash (default), 3.1 Pro, 3.1 Flash-Lite | ~1 M-token context windows. `gemini-3.1-pro-preview` is a preview model. |
 | **DeepSeek** | deepseek-chat, deepseek-reasoner | OpenAI-compatible API (`DEEPSEEK_API_KEY`); JSON is prompt-driven (degrades gracefully). |
 | **Mistral** | Mistral Large / Small, Codestral | OpenAI-compatible API (`MISTRAL_API_KEY`). |
 | **Cohere** | Command R+ / R, Command A | Cohere's OpenAI-compatibility endpoint (`COHERE_API_KEY`). |
@@ -361,7 +361,7 @@ Two-tier YAML config with field-level merge:
 
 Plus environment variables for credentials and runtime tweaks, and
 CLI flags for one-off overrides (`--provider gemini --model
-gemini-2.5-flash`).
+gemini-3.5-flash`).
 
 | Variable | Effect |
 |---|---|
@@ -379,13 +379,13 @@ version: 1
 provider: anthropic                # default provider
 providers:
   anthropic:
-    model: claude-opus-4-7
+    model: claude-opus-4-8
     pricing:                         # optional: override built-in $/1M rates
-      claude-opus-4-7:               # (cost preflight / verbose footer / cache)
-        input_per_1m: 15.0
-        output_per_1m: 75.0          # omitted fields keep the built-in value
+      claude-opus-4-8:               # (cost preflight / verbose footer / cache)
+        input_per_1m: 5.0
+        output_per_1m: 25.0          # omitted fields keep the built-in value
   openai:
-    model: gpt-4o
+    model: gpt-5.4-mini
   ollama:
     model: qwen2.5-coder:14b
     base_url: http://localhost:11434

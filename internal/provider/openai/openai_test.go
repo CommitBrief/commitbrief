@@ -17,10 +17,16 @@ import (
 
 func TestModelsList(t *testing.T) {
 	got := Models()
-	if len(got) != 2 {
-		t.Errorf("Models() length = %d, want 2", len(got))
+	want := map[string]bool{
+		ModelGPT4o:     true,
+		ModelGPT4oMini: true,
+		ModelGPT55:     true,
+		ModelGPT54Mini: true,
+		ModelGPT55Pro:  true,
 	}
-	want := map[string]bool{ModelGPT4o: true, ModelGPT4oMini: true}
+	if len(got) != len(want) {
+		t.Errorf("Models() length = %d, want %d", len(got), len(want))
+	}
 	for _, m := range got {
 		if !want[m] {
 			t.Errorf("unexpected model %q", m)
