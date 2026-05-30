@@ -8,7 +8,7 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
-## [Unreleased]
+## [1.4.1] - 2026-05-30
 
 ### Changed
 - **`setup` no longer forces an API-key re-entry when one already exists.**
