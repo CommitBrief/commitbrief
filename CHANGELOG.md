@@ -19,6 +19,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   API (it is not available on Chat Completions) and may take several minutes
   per review. Reasoning models get a larger default output-token budget so a
   findings JSON isn't truncated by reasoning tokens.
+- **Gemini: `gemini-3.5-flash` support.**
+
+### Changed
+- **Gemini model lineup refreshed to the 3.x family.** `gemini-2.5-pro` →
+  `gemini-3.1-pro-preview`, `gemini-2.5-flash` → `gemini-3.5-flash`,
+  `gemini-1.5-flash` → `gemini-3.1-flash-lite`. The new default Gemini model
+  is **`gemini-3.5-flash`** (was `gemini-2.5-pro`). Pricing and context
+  windows updated; `gemini-3.1-pro-preview` carries tiered pricing (the
+  ≤200K-token base tier is snapshotted). Configs pinning a removed 2.x/1.5
+  model should switch to a 3.x ID.
 
 ## [1.4.0] - 2026-05-29
 

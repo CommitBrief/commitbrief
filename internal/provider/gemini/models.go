@@ -5,17 +5,20 @@ package gemini
 const (
 	Name = "gemini"
 
-	ModelPro2_5   = "gemini-2.5-pro"
-	ModelFlash2_5 = "gemini-2.5-flash"
-	ModelFlash1_5 = "gemini-1.5-flash"
+	// ModelPro31 is a preview model: the public pricing page lists the Pro
+	// tier only as gemini-3.1-pro-preview. Update to the stable ID once
+	// Google promotes it out of preview.
+	ModelPro31       = "gemini-3.1-pro-preview"
+	ModelFlash35     = "gemini-3.5-flash"
+	ModelFlashLite31 = "gemini-3.1-flash-lite"
 
-	DefaultModel = ModelPro2_5
+	DefaultModel = ModelFlash35
 )
 
 var supportedModels = []string{
-	ModelPro2_5,
-	ModelFlash2_5,
-	ModelFlash1_5,
+	ModelPro31,
+	ModelFlash35,
+	ModelFlashLite31,
 }
 
 func Models() []string {
