@@ -141,6 +141,22 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
+// versionFlagRequested reports whether args contain the --version flag
+// before a "--" terminator. Cobra owns the flag itself; Execute only
+// peeks so it can suppress the branding logo for `commitbrief --version`
+// and keep that invocation's output a single parseable line.
+func versionFlagRequested(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--version" {
+			return true
+		}
+	}
+	return false
+}
+
 // Execute is the package entry point used by cmd/commitbrief/main.go.
 func Execute() {
 	// UC-18: on Windows the VT100 escape mode needs to be opted into
@@ -160,7 +176,13 @@ func Execute() {
 	// CI logs don't fill up with raw 24-bit color escapes. The version
 	// string is the resolved value (ldflags-injected at release time,
 	// debug.BuildInfo for `go install`, or "dev" for ad-hoc builds).
-	if ui.ColorEnabled(os.Stderr, ui.ColorAuto) {
+	//
+	// Suppressed for `--version`: that flag is meant to emit a single
+	// machine-parseable line — cobra prints version.Info() to stdout —
+	// so the logo (which lands on stderr above it on a TTY) must not
+	// appear. We peek os.Args because the logo prints before cobra
+	// parses flags; --help and every other invocation keep the logo.
+	if ui.ColorEnabled(os.Stderr, ui.ColorAuto) && !versionFlagRequested(os.Args[1:]) {
 		logo.Print(os.Stderr, version.Version)
 	}
 
