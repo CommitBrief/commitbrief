@@ -11,6 +11,11 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Changed
+- **`--version` no longer prints the splash logo.** `commitbrief --version`
+  now emits only the single `commitbrief vX.Y.Z (commit <sha>, built <iso-ts>)`
+  line, so the output is trivially parseable by scripts. The branding logo is
+  unchanged for `--help` and every other invocation; the version line itself
+  is identical to before.
 - **Interactive Yes/No confirmation prompts.** On a TTY, every confirmation
   prompt — the pre-send `.commitbrief/**` guard, the secret-scan warning, the
   cost preflight, the token/context-window preflight, `cache clear`, and the
