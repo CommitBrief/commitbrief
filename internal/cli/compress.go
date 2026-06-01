@@ -129,11 +129,12 @@ func newCompressCmd() *cobra.Command {
 
 			// Confirmation prompt unless --yes.
 			if !global.yes {
-				ok, err := ui.AskYesNo(
+				ok, err := ui.Confirm(
 					os.Stdin,
 					cmd.OutOrStderr(),
 					app.Catalog.T("compress.replace_prompt"),
 					ui.AskOptions{
+						Interactive:    ui.IsStdinTTY(os.Stdin),
 						NonInteractive: !ui.IsStdinTTY(os.Stdin),
 						Catalog:        app.Catalog,
 					},

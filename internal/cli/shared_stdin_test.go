@@ -4,59 +4,62 @@ package cli
 
 import (
 	"bufio"
+	"io"
 	"strings"
 	"testing"
+
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
-func TestReadPromptLineConsumesOneLinePerCall(t *testing.T) {
-	// UC-21 regression guard. The shared *bufio.Reader created at the
-	// top of runReview must return one line per ReadString('\n') call
-	// — three sequential prompts (guard → secret → cost) reading from
-	// the same buffer must each get their own answer instead of one
-	// scanner gobbling everything via lookahead.
+// UC-21 regression guard. runReview creates one *bufio.Reader at the top
+// and threads it through every interactive prompt (guard → secret scan →
+// token/cost preflight) via ui.Confirm. Each prompt must consume exactly
+// one line from the shared buffer; a per-call bufio.Scanner inside
+// AskYesNo would over-read via lookahead and swallow the answers meant
+// for later prompts. These tests pin the behaviour at the ui.Confirm
+// boundary the review pipeline actually uses.
+
+func TestSharedReaderConsumesOneLinePerConfirm(t *testing.T) {
 	r := bufio.NewReader(strings.NewReader("yes\nno\ny\n"))
 
-	answers := make([]string, 0, 3)
+	got := make([]bool, 0, 3)
 	for i := 0; i < 3; i++ {
-		ans, err := readPromptLine(r)
+		ok, err := ui.Confirm(r, io.Discard, "?", ui.AskOptions{})
 		if err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
-		answers = append(answers, ans)
+		got = append(got, ok)
 	}
-	if got, want := strings.Join(answers, ","), "yes,no,y"; got != want {
-		t.Errorf("answers = %q, want %q (one line per prompt)", got, want)
+
+	want := []bool{true, false, true}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("answers = %v, want %v (one line consumed per prompt)", got, want)
+		}
 	}
 }
 
-func TestReadPromptLineHandlesNoTrailingNewline(t *testing.T) {
-	// A user pressing Ctrl-D after typing "y" (no newline) should
-	// still surface "y" as the answer, not "".
+func TestSharedReaderHandlesNoTrailingNewline(t *testing.T) {
+	// A user pressing Ctrl-D after typing "y" (no newline) should still
+	// surface "y" as affirmative, not an empty/negative answer.
 	r := bufio.NewReader(strings.NewReader("y"))
-	got, err := readPromptLine(r)
+	ok, err := ui.Confirm(r, io.Discard, "?", ui.AskOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "y" {
-		t.Errorf("answer = %q, want %q", got, "y")
+	if !ok {
+		t.Errorf("no-trailing-newline 'y' should be affirmative")
 	}
 }
 
-func TestReadPromptLineNormalisesCaseAndWhitespace(t *testing.T) {
-	r := bufio.NewReader(strings.NewReader("  YES  \n"))
-	got, _ := readPromptLine(r)
-	if got != "yes" {
-		t.Errorf("answer = %q, want lowercased+trimmed yes", got)
-	}
-}
-
-func TestReadPromptLineEOFReturnsEmpty(t *testing.T) {
+func TestSharedReaderEOFIsNegative(t *testing.T) {
+	// Drained buffer (immediate EOF) must read as the default-no, not error.
 	r := bufio.NewReader(strings.NewReader(""))
-	got, err := readPromptLine(r)
+	ok, err := ui.Confirm(r, io.Discard, "?", ui.AskOptions{})
 	if err != nil {
-		t.Errorf("EOF should return (\"\", nil), got err=%v", err)
+		t.Errorf("EOF should return (false, nil); got err=%v", err)
 	}
-	if got != "" {
-		t.Errorf("EOF should return empty string; got %q", got)
+	if ok {
+		t.Errorf("EOF should be negative (default no)")
 	}
 }

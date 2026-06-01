@@ -18,16 +18,16 @@ guard.prompt: "   Continue?"
 guard.non_interactive: "Aborting (non-interactive mode); pass --yes to override."
 guard.secrets.detected: "⚠  Possible secrets detected in diff (%d line(s)):"
 guard.secrets.line: "   line %d: %s"
-guard.secrets.prompt: "   Send to LLM anyway? [y/N]: "
+guard.secrets.prompt: "Send to LLM anyway?"
 guard.secrets.aborted_user: "aborted: pre-send secret scanner"
 guard.secrets.aborted_non_interactive: "Aborted (non-interactive); pass --allow-secrets to override."
 
 cost.estimate: "⚠  Estimated cost: $%.4f (threshold: $%.4f)"
-cost.confirm_prompt: "   Proceed with the review? [y/N]: "
+cost.confirm_prompt: "Proceed with the review?"
 cost.aborted_user: "aborted: cost preflight"
 cost.aborted_non_interactive: "Aborted (non-interactive); pass --no-cost-check or raise cost.warn_threshold_usd to override."
 guard.tokens.exceeds: "⚠  Estimated prompt is %d tokens; %s's context window for this model is %d."
-guard.tokens.confirm_prompt: "   Send it anyway? [y/N]: "
+guard.tokens.confirm_prompt: "Send it anyway?"
 guard.tokens.aborted_user: "aborted: token preflight"
 guard.tokens.aborted_non_interactive: "Aborted (non-interactive); set guard.token_preflight=false to override."
 
@@ -80,6 +80,11 @@ common.error_prefix: "Error:"
 common.yes_short: "y"
 common.yes_long: "yes"
 common.prompt_yn: "[y/N]"
+# Button labels for the interactive (huh) Yes/No toggle that
+# ui.Confirm renders on a TTY. Title-cased, locale-specific. The
+# line-based fallback keeps using prompt_yn / yes_short above.
+common.affirmative: "Yes"
+common.negative: "No"
 
 init.wrote: "Wrote %s"
 init.skipped: "Skipped %s (already exists; pass --force to overwrite)"
