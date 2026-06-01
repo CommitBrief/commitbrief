@@ -18,16 +18,16 @@ guard.prompt: "   Devam edilsin mi?"
 guard.non_interactive: "İptal ediliyor (etkileşimsiz mod); zorlamak için --yes kullanın."
 guard.secrets.detected: "⚠  Diff'te olası gizli anahtar tespit edildi (%d satır):"
 guard.secrets.line: "   satır %d: %s"
-guard.secrets.prompt: "   Yine de LLM'e gönderilsin mi? [e/H]: "
+guard.secrets.prompt: "Yine de LLM'e gönderilsin mi?"
 guard.secrets.aborted_user: "iptal edildi: pre-send secret scanner"
 guard.secrets.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --allow-secrets kullanın."
 
 cost.estimate: "⚠  Tahmini maliyet: $%.4f (eşik: $%.4f)"
-cost.confirm_prompt: "   Review devam etsin mi? [e/H]: "
+cost.confirm_prompt: "Review devam etsin mi?"
 cost.aborted_user: "iptal edildi: cost preflight"
 cost.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --no-cost-check veya cost.warn_threshold_usd değerini yükseltin."
 guard.tokens.exceeds: "⚠  Tahmini prompt %d token; %s sağlayıcısının bu model için bağlam penceresi %d."
-guard.tokens.confirm_prompt: "   Yine de gönderilsin mi? [e/H]: "
+guard.tokens.confirm_prompt: "Yine de gönderilsin mi?"
 guard.tokens.aborted_user: "iptal edildi: token preflight"
 guard.tokens.aborted_non_interactive: "İptal edildi (etkileşimsiz); geçersiz kılmak için guard.token_preflight=false yapın."
 
@@ -78,6 +78,11 @@ common.error_prefix: "Hata:"
 common.yes_short: "e"
 common.yes_long: "evet"
 common.prompt_yn: "[e/H]"
+# Etkileşimli (huh) Evet/Hayır toggle'ının buton etiketleri;
+# ui.Confirm TTY'de bunu çizer. Satır tabanlı fallback yukarıdaki
+# prompt_yn / yes_short'u kullanmaya devam eder.
+common.affirmative: "Evet"
+common.negative: "Hayır"
 
 init.wrote: "%s yazıldı"
 init.skipped: "%s atlandı (zaten mevcut; üzerine yazmak için --force kullanın)"

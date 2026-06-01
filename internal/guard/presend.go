@@ -38,6 +38,12 @@ type Options struct {
 	Writer         io.Writer
 	Reader         io.Reader
 
+	// Interactive routes the confirm through ui.Confirm's arrow-key
+	// Yes/No toggle (huh) instead of reading a line off Reader. CLI
+	// callers set it from ui.IsStdinTTY(os.Stdin); tests leave it
+	// false so the deterministic line path (Reader) still drives them.
+	Interactive bool
+
 	// Catalog plumbs i18n into the .commitbrief/* write-guard so the
 	// user-visible warning, file lines, prompt, and abort messages
 	// honour the active locale. Nil → English defaults (legacy
@@ -74,6 +80,29 @@ func CheckDiffForLocalConfig(d diff.Diff, opts Options) (Result, error) {
 	}
 
 	prompt := tr(opts.Catalog, "guard.prompt", "   Continue?")
+
+	if opts.Interactive {
+		// Interactive routes through huh and ignores the reader, but pass
+		// a real one (shared reader, else os.Stdin) so a future change to
+		// Confirm's routing degrades to the line path with a usable reader
+		// instead of a nil-deref panic.
+		r := opts.Reader
+		if r == nil {
+			r = os.Stdin
+		}
+		ok, err := ui.Confirm(r, w, prompt, ui.AskOptions{
+			Interactive: true,
+			Catalog:     opts.Catalog,
+		})
+		if err != nil {
+			return Abort, fmt.Errorf("guard: confirm: %w", err)
+		}
+		if ok {
+			return Continue, nil
+		}
+		return Abort, nil
+	}
+
 	suffix := ui.PromptSuffix(opts.Catalog)
 	_, _ = fmt.Fprintf(w, "%s %s: ", prompt, suffix)
 

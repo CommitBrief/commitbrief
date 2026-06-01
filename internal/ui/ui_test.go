@@ -163,6 +163,40 @@ func TestAskYesNoNonInteractive(t *testing.T) {
 	}
 }
 
+func TestConfirmAssumeYesShortCircuits(t *testing.T) {
+	// AssumeYes wins before any reader/TTY path — even with Interactive set,
+	// no huh form is constructed (which would fail without a real terminal).
+	got, err := Confirm(strings.NewReader(""), io.Discard, "Continue?",
+		AskOptions{AssumeYes: true, Interactive: true})
+	if err != nil || !got {
+		t.Errorf("AssumeYes: got=%v err=%v", got, err)
+	}
+}
+
+func TestConfirmNonInteractiveDeclines(t *testing.T) {
+	// NonInteractive takes precedence over Interactive and declines without
+	// touching the terminal.
+	got, err := Confirm(strings.NewReader("y\n"), io.Discard, "Continue?",
+		AskOptions{NonInteractive: true, Interactive: true})
+	if err != nil || got {
+		t.Errorf("NonInteractive: got=%v err=%v", got, err)
+	}
+}
+
+func TestConfirmFallsBackToLineWhenNotInteractive(t *testing.T) {
+	// Without Interactive (the test/non-TTY case) Confirm delegates to the
+	// line-based AskYesNo over the supplied reader.
+	for ans, want := range map[string]bool{"y\n": true, "n\n": false, "\n": false} {
+		got, err := Confirm(strings.NewReader(ans), io.Discard, "Continue?", AskOptions{})
+		if err != nil {
+			t.Fatalf("answer %q: %v", ans, err)
+		}
+		if got != want {
+			t.Errorf("answer %q: got=%v want=%v", ans, got, want)
+		}
+	}
+}
+
 func TestAskYesNoAcceptsTurkishWhenCatalogPassed(t *testing.T) {
 	// UC-14 regression guard. With a TR catalog, "e" and "evet" must
 	// count as affirmative. The English forms still work too — locale

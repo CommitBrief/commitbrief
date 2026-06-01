@@ -142,6 +142,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	if res, _ := guard.CheckDiffForLocalConfig(parsed, guard.Options{
 		AssumeYes:      global.yes,
 		NonInteractive: !ui.IsStdinTTY(os.Stdin),
+		Interactive:    ui.IsStdinTTY(os.Stdin),
 		Catalog:        app.Catalog,
 		Reader:         stdinReader,
 	}); res == guard.Abort {
@@ -544,12 +545,14 @@ func handleTokenPreflight(cmd *cobra.Command, app *appContext, prov provider.Pro
 		return true
 	}
 
-	_, _ = fmt.Fprint(w, app.Catalog.T("guard.tokens.confirm_prompt"))
-	answer, err := readPromptLine(stdin)
-	if err != nil || answer == "" {
-		return true
-	}
-	return !ui.AcceptsYes(answer, app.Catalog)
+	// Interactive is hardcoded true (not IsStdinTTY) because the abort
+	// above already guarantees a TTY here. Do NOT soften it to
+	// IsStdinTTY: that routes the non-TTY case through ui.Confirm's
+	// line-based fallback, but non-TTY must abort (handled above),
+	// never line-read a piped answer.
+	ok, err := ui.Confirm(stdin, w, app.Catalog.T("guard.tokens.confirm_prompt"),
+		ui.AskOptions{Interactive: true, Catalog: app.Catalog})
+	return err != nil || !ok
 }
 
 // suggestCommitMessage runs a second, free-form provider call (ADR-0015)
@@ -814,29 +817,14 @@ func handleCostPreflight(cmd *cobra.Command, app *appContext, estCost float64, s
 		return true
 	}
 
-	_, _ = fmt.Fprint(w, app.Catalog.T("cost.confirm_prompt"))
-	answer, err := readPromptLine(stdin)
-	if err != nil || answer == "" {
-		return true
-	}
-	return !ui.AcceptsYes(answer, app.Catalog)
-}
-
-// readPromptLine pulls one line off the shared runReview-scoped
-// bufio.Reader. UC-21: every interactive prompt during a review
-// (guard, secret scan, cost preflight) shares the same buffered
-// reader so a piped-in `e\ne\ne\n` reaches all three sites instead
-// of being swallowed by whichever scanner asked first. Returns the
-// trimmed lowercase answer and any read error.
-func readPromptLine(r *bufio.Reader) (string, error) {
-	line, err := r.ReadString('\n')
-	if err != nil && line == "" {
-		if err == io.EOF {
-			return "", nil
-		}
-		return "", err
-	}
-	return strings.TrimSpace(strings.ToLower(line)), nil
+	// Interactive is hardcoded true (not IsStdinTTY): the abort above
+	// guarantees a TTY here. Do NOT soften it to IsStdinTTY — that would
+	// route non-TTY through the line fallback and let piped input
+	// auto-approve spend, reopening the hole UC-06 closed (non-TTY must
+	// abort, --yes must not bypass; PRD §310).
+	ok, err := ui.Confirm(stdin, w, app.Catalog.T("cost.confirm_prompt"),
+		ui.AskOptions{Interactive: true, Catalog: app.Catalog})
+	return err != nil || !ok
 }
 
 // estimateOutputTokens is a conservative-on-the-high-side guess for
@@ -877,10 +865,12 @@ func handleSecretMatches(cmd *cobra.Command, app *appContext, matches []guard.Se
 		return true
 	}
 
-	_, _ = fmt.Fprint(w, app.Catalog.T("guard.secrets.prompt"))
-	answer, err := readPromptLine(stdin)
-	if err != nil || answer == "" {
-		return true
-	}
-	return !ui.AcceptsYes(answer, app.Catalog)
+	// Interactive is hardcoded true (not IsStdinTTY): the abort above
+	// guarantees a TTY here. Do NOT soften it to IsStdinTTY — that would
+	// route non-TTY through the line fallback and let piped input
+	// auto-confirm a detected secret, reopening the hole UC-01 closed
+	// (non-TTY must abort, --yes must not bypass; PRD §309).
+	ok, err := ui.Confirm(stdin, w, app.Catalog.T("guard.secrets.prompt"),
+		ui.AskOptions{Interactive: true, Catalog: app.Catalog})
+	return err != nil || !ok
 }

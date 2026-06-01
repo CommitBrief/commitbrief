@@ -8,6 +8,20 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 > Tags prior to **v0.4.0** were cut in the private repository and produced no
 > public artifacts; the first publicly released version is v0.4.0.
 
+## [Unreleased]
+
+### Changed
+- **Interactive Yes/No confirmation prompts.** On a TTY, every confirmation
+  prompt — the pre-send `.commitbrief/**` guard, the secret-scan warning, the
+  cost preflight, the token/context-window preflight, `cache clear`, and the
+  `compress` replace prompt — now renders an arrow-key-selectable Yes/No toggle
+  (←/→ to choose, Enter to confirm), pre-selected on **No**, instead of a typed
+  `y/N` line. Built on `huh`, which is already used by `setup`. Non-TTY/CI
+  behaviour is unchanged: these prompts still auto-abort (or honour `--yes` /
+  `--allow-secrets` where applicable), and piped input continues to drive the
+  line-based `y/N` fallback. New catalog keys `common.affirmative` /
+  `common.negative` provide the localized button labels (TR: `Evet` / `Hayır`).
+
 ## [1.4.1] - 2026-05-30
 
 ### Changed
