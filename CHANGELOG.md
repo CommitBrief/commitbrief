@@ -32,6 +32,15 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
     `--suggest-commit` review flag, which is unchanged.
 
 ### Changed
+- **`remote pr` no longer requests changes by default.** A `request-changes`
+  verdict is now **opt-in**: `--request-changes-on` defaults to unset instead
+  of `critical`. Without the flag, `remote pr` submits `approve` (no findings
+  or info-only) or `comment` (any non-info findings) and **never**
+  `request-changes`. Pass `--request-changes-on=<critical|high|medium|low>` to
+  re-enable escalation at/above that severity. Inline-comment posting and the
+  loop-cap are unchanged. Auto-requesting changes should be a deliberate
+  choice, not the out-of-the-box behavior (ADR-0016 §5 Update). Verdict-only —
+  no effect under `--no-post`.
 - **`--version` no longer prints the splash logo.** `commitbrief --version`
   now emits only the single `commitbrief vX.Y.Z (commit <sha>, built <iso-ts>)`
   line, so the output is trivially parseable by scripts. The branding logo is

@@ -343,11 +343,13 @@ commitbrief remote pr 42 --no-post             # review locally, write nothing t
 commitbrief remote pr 42 --no-post --output review.md   # …or --json / --cli gemini, etc.
 ```
 
-`--request-changes-on=<critical|high|medium|low>` (default `critical`)
-sets the severity at or above which the verdict becomes request-changes;
-`--repo owner/repo` overrides git-context repo discovery. Requires an API
-provider. `--fail-on` is ignored here — the GitHub verdict replaces the
-exit-code gate.
+`--request-changes-on=<critical|high|medium|low>` **opts in** to a
+request-changes verdict at or above that severity. **Without the flag the
+verdict is never request-changes** — a clean or info-only PR is approved,
+anything else is left as a plain `comment`. Inline comments are posted
+either way. `--repo owner/repo` overrides git-context repo discovery.
+Requires an API provider. `--fail-on` is ignored here — the GitHub verdict
+replaces the exit-code gate.
 
 **`--no-post`** turns `remote pr` into a read-only review: it fetches the
 PR diff via `gh` and renders the result to your terminal exactly like a

@@ -39,17 +39,24 @@ func newRemotePRCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pr <PR-ID>",
 		Short: "Review a GitHub pull request and post findings as inline comments",
+		// Help text intentionally avoids raw <angle-bracket> placeholders: the
+		// man-page generator runs Long/Use through a markdown→roff converter
+		// that drops them as if they were HTML tags. The PR-ID/severity are
+		// described in prose instead.
 		Long: "Pulls a PR's diff via `gh`, runs the review pipeline, posts each\n" +
-			"finding as an inline comment, and submits a verdict (approve / comment\n" +
-			"/ request-changes). <PR-ID> accepts gh-native forms: 42, owner/repo#42,\n" +
-			"or a full URL. See ADR-0016.",
+			"finding as an inline comment, and submits a verdict. By default the\n" +
+			"verdict is only approve (no findings / info-only) or comment; a\n" +
+			"request-changes verdict is opt-in via the --request-changes-on flag.\n" +
+			"The PR ID accepts gh-native forms: 42, owner/repo#42, or a full URL.\n" +
+			"See ADR-0016.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRemotePR(cmd, args[0], f, remote.NewRunner())
 		},
 	}
-	cmd.Flags().StringVar(&f.requestChangesOn, "request-changes-on", "critical",
-		"severity at/above which the verdict becomes request-changes (critical|high|medium|low)")
+	cmd.Flags().StringVar(&f.requestChangesOn, "request-changes-on", "",
+		"opt in to a request-changes verdict at/above this severity (critical|high|medium|low); "+
+			"omitted, the verdict is never request-changes (comment / approve only)")
 	cmd.Flags().StringVar(&f.repo, "repo", "", "target repository owner/repo (overrides git context)")
 	cmd.Flags().BoolVar(&f.noPost, "no-post", false,
 		"review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review")
@@ -101,12 +108,19 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		return errors.New(cat.T("remote.repo_required"))
 	}
 
-	threshold, perr := parseRequestChangesOn(f.requestChangesOn)
-	if perr != nil {
-		if errors.Is(perr, errRequestChangesInfo) {
-			return errors.New(cat.T("remote.request_changes_on_info"))
+	// request-changes is opt-in: without --request-changes-on the threshold is
+	// empty, and computeVerdict never escalates past comment. Only validate
+	// when the user actually set it.
+	var threshold render.Severity
+	if f.requestChangesOn != "" {
+		t, perr := parseRequestChangesOn(f.requestChangesOn)
+		if perr != nil {
+			if errors.Is(perr, errRequestChangesInfo) {
+				return errors.New(cat.T("remote.request_changes_on_info"))
+			}
+			return errors.New(cat.T("remote.request_changes_on_invalid", f.requestChangesOn))
 		}
-		return errors.New(cat.T("remote.request_changes_on_invalid", f.requestChangesOn))
+		threshold = t
 	}
 
 	if err := remote.EnsureGH(); err != nil {
@@ -682,6 +696,10 @@ func computeVerdict(findings []render.Finding, threshold render.Severity) remote
 	if len(findings) == 0 {
 		return remote.VerdictApprove
 	}
+	// An empty threshold means --request-changes-on was not set: request-changes
+	// is opt-in, so we never escalate past comment regardless of severity. A
+	// real threshold re-enables the at/above-rank escalation below.
+	enabled := threshold != ""
 	tr := severityRank[threshold]
 	onlyInfo := true
 	reached := false
@@ -689,7 +707,7 @@ func computeVerdict(findings []render.Finding, threshold render.Severity) remote
 		if fnd.Severity != render.SeverityInfo {
 			onlyInfo = false
 		}
-		if severityRank[fnd.Severity] <= tr {
+		if enabled && severityRank[fnd.Severity] <= tr {
 			reached = true
 		}
 	}
@@ -704,9 +722,12 @@ func computeVerdict(findings []render.Finding, threshold render.Severity) remote
 }
 
 // selectPostable applies the loop-cap rule (ADR-0016 §6), sorted by
-// severity desc then file+line. When the threshold is critical/high:
-// critical+high are always posted, everything else is capped at 10.
-// When the threshold is medium/low: post everything at/above it, no cap.
+// severity desc then file+line. When the threshold is critical/high (or
+// empty — request-changes disabled): critical+high are always posted,
+// everything else is capped at 10. When the threshold is medium/low: post
+// everything at/above it, no cap. Inline-comment selection is independent of
+// the verdict, so disabling request-changes does not change which comments
+// post — only the review-level verdict (see computeVerdict).
 func selectPostable(findings []render.Finding, threshold render.Severity) []render.Finding {
 	sorted := make([]render.Finding, len(findings))
 	copy(sorted, findings)
@@ -721,7 +742,9 @@ func selectPostable(findings []render.Finding, threshold render.Severity) []rend
 		return sorted[i].Line < sorted[j].Line
 	})
 
-	flagHigh := severityRank[threshold] <= severityRank[render.SeverityHigh]
+	// Empty threshold (request-changes disabled) shares the critical/high cap
+	// policy. Stated explicitly rather than leaning on severityRank[""] == 0.
+	flagHigh := threshold == "" || severityRank[threshold] <= severityRank[render.SeverityHigh]
 	out := make([]render.Finding, 0, len(sorted))
 	below := 0
 	for _, fnd := range sorted {

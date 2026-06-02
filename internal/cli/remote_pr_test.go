@@ -82,6 +82,11 @@ func TestComputeVerdict(t *testing.T) {
 		{"high under critical -> comment", findingsOf(render.SeverityHigh), render.SeverityCritical, remote.VerdictComment},
 		{"high reaches high", findingsOf(render.SeverityHigh), render.SeverityHigh, remote.VerdictRequestChanges},
 		{"low+info under critical -> comment", findingsOf(render.SeverityLow, render.SeverityInfo), render.SeverityCritical, remote.VerdictComment},
+		// Empty threshold = --request-changes-on not set: never request-changes.
+		{"critical, no threshold -> comment", findingsOf(render.SeverityCritical), "", remote.VerdictComment},
+		{"high+critical, no threshold -> comment", findingsOf(render.SeverityHigh, render.SeverityCritical), "", remote.VerdictComment},
+		{"only info, no threshold -> approve", findingsOf(render.SeverityInfo), "", remote.VerdictApprove},
+		{"no findings, no threshold -> approve", nil, "", remote.VerdictApprove},
 	}
 	for _, c := range cases {
 		if got := computeVerdict(c.findings, c.threshold); got != c.want {
@@ -292,6 +297,27 @@ func TestRemotePRApproveFlowPostsCommentThenApproves(t *testing.T) {
 	}
 	if r.callCount("--approve") != 1 {
 		t.Errorf("want a --approve verdict, calls=%v", r.calls)
+	}
+}
+
+// Without --request-changes-on the verdict path must never escalate to
+// request-changes, even end-to-end. (The default mock returns an info-only
+// finding, so this asserts the absence of --request-changes; the
+// critical→comment decision is covered by TestComputeVerdict.)
+func TestRemotePRNoFlagNeverRequestsChanges(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	r := &fakeGH{
+		whoami:     "tester",
+		prMeta:     prMetaJSON("contributor", "stable"),
+		commitsSeq: []string{`{"commits":[{"oid":"stable"}]}`},
+		diff:       sampleDiff,
+	}
+	if err := e.callRemotePR("42", remotePRFlags{}, r); err != nil {
+		t.Fatalf("no-flag flow: %v", err)
+	}
+	if r.callCount("--request-changes") != 0 {
+		t.Errorf("request-changes must never be submitted without the flag; calls=%v", r.calls)
 	}
 }
 
