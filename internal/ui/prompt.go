@@ -39,6 +39,13 @@ type AskOptions struct {
 	// of catalog, so a user typing English in a Turkish session also
 	// proceeds.
 	Catalog *i18n.Catalog
+
+	// DefaultYes flips the pre-selected answer to Yes. In the interactive
+	// (huh) path the toggle starts on the affirmative button; in the
+	// line-based path an empty answer is treated as yes. Off by default so
+	// every existing caller keeps the safe default-to-No behaviour. Used by
+	// the `commit` command, whose confirm defaults to Yes (ADR-0019).
+	DefaultYes bool
 }
 
 // AskYesNo asks question on w and reads a yes/no response from r.
@@ -62,6 +69,10 @@ func AskYesNo(r io.Reader, w io.Writer, question string, opts AskOptions) (bool,
 	answer, err := readLine(r)
 	if err != nil {
 		return false, fmt.Errorf("ui: read answer: %w", err)
+	}
+	// DefaultYes: an empty (just-Enter) answer means yes.
+	if answer == "" && opts.DefaultYes {
+		return true, nil
 	}
 	if AcceptsYes(answer, opts.Catalog) {
 		return true, nil
@@ -107,7 +118,7 @@ func Confirm(r io.Reader, w io.Writer, question string, opts AskOptions) (bool, 
 		return false, nil
 	}
 	if opts.Interactive {
-		return confirmInteractive(question, opts.Catalog)
+		return confirmInteractive(question, opts.Catalog, opts.DefaultYes)
 	}
 	return AskYesNo(r, w, question, opts)
 }
@@ -118,7 +129,7 @@ func Confirm(r io.Reader, w io.Writer, question string, opts AskOptions) (bool, 
 // catalog (common.affirmative / common.negative) so non-English locales
 // get native Yes/No. The bound value starts false, so "No" is the
 // pre-selected default — matching the line-based default-to-no.
-func confirmInteractive(question string, catalog *i18n.Catalog) (bool, error) {
+func confirmInteractive(question string, catalog *i18n.Catalog, defaultYes bool) (bool, error) {
 	affirmative, negative := "Yes", "No"
 	if catalog != nil {
 		if s := strings.TrimSpace(catalog.T("common.affirmative")); s != "" && s != "common.affirmative" {
@@ -129,7 +140,7 @@ func confirmInteractive(question string, catalog *i18n.Catalog) (bool, error) {
 		}
 	}
 
-	confirm := false
+	confirm := defaultYes
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().
 			Title(strings.TrimSpace(question)).
@@ -141,6 +152,34 @@ func confirmInteractive(question string, catalog *i18n.Catalog) (bool, error) {
 		return false, fmt.Errorf("ui: confirm prompt: %w", err)
 	}
 	return confirm, nil
+}
+
+// Select renders an arrow-key single-choice list on the controlling
+// terminal (input os.Stdin, output os.Stderr so a captured stdout stays
+// clean) and returns the index of the chosen item. labels[i] is shown for
+// item i; the first item is pre-selected. It is interactive-only — callers
+// must guarantee a TTY (the `commit` command errors on non-TTY before
+// reaching the selector). Returns an error if labels is empty or the form
+// is aborted (e.g. Ctrl-C).
+func Select(question string, labels []string) (int, error) {
+	if len(labels) == 0 {
+		return 0, fmt.Errorf("ui: select: no options")
+	}
+	options := make([]huh.Option[int], 0, len(labels))
+	for i, label := range labels {
+		options = append(options, huh.NewOption(label, i))
+	}
+	choice := 0
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[int]().
+			Title(strings.TrimSpace(question)).
+			Options(options...).
+			Value(&choice),
+	)).WithInput(os.Stdin).WithOutput(os.Stderr)
+	if err := form.Run(); err != nil {
+		return 0, fmt.Errorf("ui: select prompt: %w", err)
+	}
+	return choice, nil
 }
 
 // AcceptsYes reports whether `answer` is an affirmative response. The

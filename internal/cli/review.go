@@ -568,7 +568,13 @@ func suggestCommitMessage(ctx context.Context, cmd *cobra.Command, app *appConte
 	if !global.suggestCommit {
 		return nil
 	}
-	p := prompt.BuildCommitMessage(diffText)
+	// --suggest-commit keeps its original shape: one Conventional Commit
+	// message. The richer --type / --generate surface lives on the
+	// standalone `commit` command (ADR-0019).
+	p := prompt.BuildCommitMessage(diffText, prompt.CommitOptions{
+		Type:  prompt.CommitConventional,
+		Count: 1,
+	})
 	resp, err := prov.Review(ctx, provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,

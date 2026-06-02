@@ -4,6 +4,7 @@ package mock
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,19 @@ const DefaultResponseContent = `{"findings":[{"severity":"info","file":"mock.go"
 // DefaultCommitMessage is the canned plain-text response the mock returns
 // for a FreeForm request (ADR-0015), exercising the --suggest-commit path.
 const DefaultCommitMessage = "feat(store): add user lookup by name\n\nSynthetic commit message from the mock provider."
+
+// commitDelimiter mirrors prompt.MessageDelimiter (kept as a literal to
+// avoid a mock→prompt import). When a FreeForm system prompt contains it,
+// the --generate N path is in play, so the mock returns several delimited
+// messages so ParseMessages has more than one to work with.
+const commitDelimiter = "<<<commitbrief-msg>>>"
+
+// DefaultCommitMessages is the canned multi-suggestion FreeForm response
+// (ADR-0019 --generate path), returned when the prompt requests delimited
+// messages. Three distinct subjects, delimiter-joined.
+const DefaultCommitMessages = "feat(store): add user lookup by name\n" +
+	commitDelimiter + "\nfeat(store): support finding users by their name\n" +
+	commitDelimiter + "\nfeat: add name-based user lookup to the store"
 
 type Provider struct {
 	mu sync.Mutex
@@ -112,6 +126,9 @@ func (m *Provider) Review(ctx context.Context, req provider.Request) (provider.R
 	content := m.ResponseContent
 	if req.FreeForm {
 		content = DefaultCommitMessage
+		if strings.Contains(req.SystemPrompt, commitDelimiter) {
+			content = DefaultCommitMessages
+		}
 	}
 	usage := m.usage()
 	model := req.Model

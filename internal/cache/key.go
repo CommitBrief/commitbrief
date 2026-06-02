@@ -23,6 +23,13 @@ type ComputeArgs struct {
 	// keeping diff-only keys byte-identical to pre-ADR-0017 entries — no
 	// mass cache invalidation on upgrade.
 	WithContext bool
+
+	// Mode namespaces non-review cache entries (e.g. "commit" for the
+	// commit-message generation, ADR-0019). The commit system prompt
+	// already differs from the review prompt, so collision is unlikely;
+	// the explicit marker makes the separation impossible. Folded in only
+	// when non-empty, so review keys stay byte-identical to before.
+	Mode string
 }
 
 // Compute returns the deterministic SHA-256 key (lowercase hex) for the
@@ -45,6 +52,11 @@ func Compute(args ComputeArgs) string {
 	// unchanged from before ADR-0017 (see WithContext doc).
 	if args.WithContext {
 		h.Write([]byte(":ctx"))
+	}
+	// Append the mode marker only when set, so review keys stay byte-
+	// identical to before ADR-0019 (see Mode doc).
+	if args.Mode != "" {
+		h.Write([]byte(":mode:" + args.Mode))
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
