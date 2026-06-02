@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-02
+
 ### Added
 - **`commit` command — generate a commit message and commit (ADR-0019).**
   `commitbrief commit` reads the staged diff, asks the configured provider for
