@@ -200,6 +200,12 @@ commitbrief --unstaged --file app/Http/Controllers/API.php --file routes/web.php
 commitbrief --unstaged --dir database/seeder --dir app/Models
 commitbrief diff HEAD~3 HEAD --dir docs
 
+# Commit message (writes to git, with confirmation)
+commitbrief commit                           # suggest a message for the staged diff, then commit
+commitbrief commit --type conventional       # pick a format (-t); see "commitbrief commit" below
+commitbrief commit --generate 3              # offer 3 alternatives to choose from (-g)
+commitbrief commit --yes                     # commit the first suggestion non-interactively
+
 # Setup and rules
 commitbrief setup [--local]                  # provider + API key wizard
 commitbrief providers list|use|test          # switch active provider without re-running setup
@@ -235,6 +241,38 @@ the diff), `--no-cost-check` (skip cost preflight),
 `--show-prompt` (print the exact system + user prompt that would be sent,
 then exit — no provider call, no cost; honours `--output`), `--color`. See
 `commitbrief --help`.
+
+### `commitbrief commit`
+
+Generate a commit message from the **staged** diff and, after you confirm,
+run `git commit`. This is the only command that writes to git — every
+review path is read-only.
+
+```sh
+commitbrief commit                          # suggest one message, confirm (default Yes), commit
+commitbrief commit -t conventional+body     # conventional subject + a generated body
+commitbrief commit -g 4                      # pick from 4 alternatives
+commitbrief commit --provider openai --model gpt-5.4-mini
+commitbrief commit --yes                     # CI/non-interactive: commit the first suggestion
+```
+
+- **`--type` / `-t`** — message format: `plain` (default), `conventional`,
+  `conventional+body`, `gitmoji`, `subject+body`.
+- **`--generate` / `-g <N>`** — produce N alternatives (1–10) and choose one
+  in an arrow-key selector. A single provider call generates all N.
+- **`--provider` / `--model` / `--cli`** — select the backend, same as a
+  review. Messages are always written in English regardless of `--lang`.
+- Defaults come from the `commit.type` and `commit.generate` config keys when
+  the flags are omitted (precedence: flag > config > built-in).
+- The pre-send `.commitbrief/**` guard, secret scan, and cost preflight run on
+  the staged diff before the call; the suggestion is cached.
+- With **nothing staged** it errors (stage with `git add` first). On a
+  **non-TTY** without `--yes` it errors, because it cannot show the confirm or
+  selector. `--yes` commits the first suggestion (it does **not** bypass the
+  secret scan or cost preflight).
+
+> The tool never auto-stages and never edits files — it only runs `git commit`
+> on changes you already staged, and only after you say Yes.
 
 ### `--with-context` (CLI providers only)
 
@@ -402,6 +440,9 @@ guard:
   token_preflight: false           # opt-in: confirm/abort when the prompt overflows the model's context window
 command:
   default: ""                      # args applied to a bare `commitbrief`; empty = `--staged`
+commit:
+  type: plain                      # default --type for `commitbrief commit` (plain|conventional|conventional+body|gitmoji|subject+body)
+  generate: 1                      # default --generate (number of message alternatives)
 ```
 
 ### Default command (`command.default`)

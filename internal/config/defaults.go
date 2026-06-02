@@ -27,5 +27,9 @@ func Default() *Config {
 		Cost: CostConfig{
 			WarnThresholdUSD: 0.50,
 		},
+		Commit: CommitConfig{
+			Type:     "plain",
+			Generate: 1,
+		},
 	}
 }

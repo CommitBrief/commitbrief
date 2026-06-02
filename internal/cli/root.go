@@ -32,6 +32,8 @@ type globalFlags struct {
 	noCostCheck   bool
 	copy          bool
 	suggestCommit bool
+	commitType    string // commit: --type <format>; "" → commit.type config → "plain"
+	commitGen     int    // commit: --generate <N>; 0 → commit.generate config → 1
 	failOn        string
 	minSeverity   string
 	lang          string
@@ -137,6 +139,7 @@ func newRootCmd() *cobra.Command {
 		newCacheCmd(),
 		newDiffCmd(),
 		newRemoteCmd(),
+		newCommitCmd(),
 	)
 	return cmd
 }

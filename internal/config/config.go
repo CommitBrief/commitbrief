@@ -13,6 +13,20 @@ type Config struct {
 	Guard     GuardConfig               `yaml:"guard"`
 	Cost      CostConfig                `yaml:"cost"`
 	Command   CommandConfig             `yaml:"command"`
+	Commit    CommitConfig              `yaml:"commit"`
+}
+
+// CommitConfig sets defaults for the `commit` command (ADR-0019) so a repo
+// or user can pin a preferred message format / suggestion count without
+// retyping flags. Precedence is flag > config > built-in default. Type is
+// one of plain|conventional|conventional+body|gitmoji|subject+body; an
+// empty value means "use the built-in default" (plain). Generate is the
+// number of suggestions to offer; zero/negative means the built-in default
+// (1). The values are validated at the CLI layer, not here, so a stale
+// config never blocks loading.
+type CommitConfig struct {
+	Type     string `yaml:"type"`
+	Generate int    `yaml:"generate"`
 }
 
 // CommandConfig customizes the bare `commitbrief` invocation. Default is

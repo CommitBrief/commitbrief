@@ -10,6 +10,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`commit` command — generate a commit message and commit (ADR-0019).**
+  `commitbrief commit` reads the staged diff, asks the configured provider for
+  a commit message, shows it for confirmation, and — on Yes (the default) or
+  `--yes` — runs `git commit`. This is the first path where the tool writes to
+  git; everything else stays read-only (PRD NG4 is rescoped to the review
+  path). Highlights:
+  - `--type` / `-t` picks the format: `plain` (default), `conventional`,
+    `conventional+body`, `gitmoji`, `subject+body`.
+  - `--generate` / `-g <N>` offers N alternatives in an arrow-key selector
+    (capped at 10); a single provider call produces all N.
+  - `--provider` / `--model` / `--cli` select the backend exactly as for a
+    review; messages are always written in English regardless of `--lang`.
+  - The pre-send `.commitbrief/**` guard, secret scan, and cost preflight all
+    run on the staged diff before the call; the suggestion is cached.
+  - With no staged changes it errors clearly; a non-TTY run without `--yes`
+    errors (it cannot confirm). `--yes` commits the first suggestion.
+  - New config keys `commit.type` and `commit.generate` set the defaults
+    (precedence: flag > config > built-in). This complements the existing
+    `--suggest-commit` review flag, which is unchanged.
+
 ### Changed
 - **`--version` no longer prints the splash logo.** `commitbrief --version`
   now emits only the single `commitbrief vX.Y.Z (commit <sha>, built <iso-ts>)`
