@@ -30,6 +30,18 @@ commitbrief diff main...feature        # PR-style three-dot diff
 
 Narrow any scope with ` + "`--file`" + ` / ` + "`--dir`" + ` (repeatable, see below).
 
+## Summary
+
+` + "```" + `
+commitbrief summary                    # plain-language digest of staged changes
+commitbrief summary --unstaged         # digest of unstaged working-tree changes
+commitbrief summary main...develop     # digest a range; commit messages are used
+commitbrief summary HEAD~3 HEAD        # digest the last three commits
+` + "```" + `
+
+Read-only, plain text (no findings); each line is grouped by logical area and
+attributed to the short commit hash(es) for a range. Use ` + "`-o`" + ` to write to a file.
+
 ## Setup and rules
 
 ` + "```" + `

@@ -140,6 +140,7 @@ func newRootCmd() *cobra.Command {
 		newDiffCmd(),
 		newRemoteCmd(),
 		newCommitCmd(),
+		newSummaryCmd(),
 	)
 	return cmd
 }

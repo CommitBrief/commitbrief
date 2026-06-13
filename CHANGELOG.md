@@ -10,6 +10,30 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`summary` command — explain a set of changes in plain language (ADR-0020).**
+  `commitbrief summary` produces a read-only, human-readable digest of what
+  changed (and, when the commit messages make it clear, why), grouped by
+  logical area rather than file by file. It reuses the review infrastructure
+  (provider selection, pre-send guard, secret scan, cost preflight, cache) but
+  emits prose, not findings. Highlights:
+  - Scope mirrors the review surface: no args ⇒ staged (default), `--unstaged`
+    for the working tree, or positional `git diff` arguments for an arbitrary
+    range exactly like the `diff` subcommand (`commitbrief summary
+    main...develop`, `commitbrief summary HEAD~3 HEAD`).
+  - For a range, the matching commit messages are ingested as context and each
+    line is attributed to the short commit hash(es) responsible; staged/
+    unstaged scopes (which have no commits) produce unattributed lines.
+  - Output is plain text; `-o`/`--output` writes it to a file. `--lang` is
+    honoured, so `--lang tr` yields a Turkish summary.
+  - Provider selection matches a review: `--provider`/`--model`, or
+    `--cli claude|gemini|codex` for a host CLI tool. `--with-context` works for
+    CLI providers (lets the agent read beyond the diff; errors on an API
+    provider), exactly as on the review path.
+  - Emits no findings, so `--json`, `--markdown`, `--suggest-commit`,
+    `--fail-on`, and `--min-severity` are rejected with a clear message. The
+    command never writes to git.
+
 ## [1.5.0] - 2026-06-02
 
 ### Added

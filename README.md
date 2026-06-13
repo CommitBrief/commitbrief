@@ -200,6 +200,11 @@ commitbrief --unstaged --file app/Http/Controllers/API.php --file routes/web.php
 commitbrief --unstaged --dir database/seeder --dir app/Models
 commitbrief diff HEAD~3 HEAD --dir docs
 
+# Plain-language change digest (read-only; no findings)
+commitbrief summary                          # what's staged, grouped by area
+commitbrief summary main...develop           # a range; uses the commit messages in it
+commitbrief summary HEAD~3 HEAD -o NOTES.md  # write the digest to a file
+
 # Commit message (writes to git, with confirmation)
 commitbrief commit                           # suggest a message for the staged diff, then commit
 commitbrief commit --type conventional       # pick a format (-t); see "commitbrief commit" below
@@ -273,6 +278,49 @@ commitbrief commit --yes                     # CI/non-interactive: commit the fi
 
 > The tool never auto-stages and never edits files — it only runs `git commit`
 > on changes you already staged, and only after you say Yes.
+
+### `commitbrief summary`
+
+Explain a set of changes in plain language — a short, human-readable digest of
+what changed (and, when the commit messages make it clear, why), grouped by
+logical area rather than file by file. Read-only; it produces **no findings**.
+
+```sh
+commitbrief summary                         # digest the staged diff
+commitbrief summary --unstaged              # digest unstaged working-tree changes
+commitbrief summary main...develop          # digest a range (git-diff passthrough, like `diff`)
+commitbrief summary HEAD~3 HEAD             # digest the last three commits
+commitbrief summary main...develop -o RELEASE.md   # write the digest to a file
+commitbrief summary main...develop --lang tr       # Turkish digest
+commitbrief summary --cli claude                   # use a host CLI tool as the backend
+commitbrief summary --cli claude --with-context    # let the CLI agent read beyond the diff
+```
+
+Example output:
+
+```text
+Invoice Service: Rounding bug in fee calculation fixed. (a1b2c3d)
+Auth: Token refresh flow added. (d4e5f6a)
+DB: Index added to the invoices table. (f7a8b9c)
+```
+
+- **Scope** mirrors the review surface: no args ⇒ staged (default),
+  `--unstaged` for the working tree, or positional `git diff` arguments for an
+  arbitrary range — exactly like the `diff` subcommand. `--file` / `--dir`
+  narrow it further.
+- **For a range**, the commit messages in that range are taken into account and
+  each line is attributed to the short commit hash(es) responsible. Staged /
+  unstaged changes have no commits, so their lines carry no attribution.
+- **Output is plain text;** `-o`/`--output` writes it to a file. `--lang` is
+  honoured (e.g. `--lang tr`).
+- **Provider selection** is identical to a review: `--provider` / `--model`, or
+  `--cli claude|gemini|codex` to use a host CLI tool. With a CLI provider,
+  [`--with-context`](#--with-context-cli-providers-only) lets the agent read
+  files beyond the diff to ground the digest (it errors on an API provider).
+- Reuses the pre-send `.commitbrief/**` guard, secret scan, and cost preflight,
+  and is cached. Emits no findings, so `--json`, `--markdown`,
+  `--suggest-commit`, `--fail-on`, and `--min-severity` are rejected. Never
+  writes to git.
 
 ### `--with-context` (CLI providers only)
 
