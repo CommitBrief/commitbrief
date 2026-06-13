@@ -4,22 +4,14 @@ package lang
 
 import "github.com/CommitBrief/commitbrief/internal/config"
 
-type Env struct {
-	LANG string
-}
-
 type Source int
 
 const (
 	SourceDefault Source = iota
-	SourceEnvLANG
 	SourceGlobalConfig
 	SourceRepoConfig
-	// SourceCLIFlag is the highest-priority step in the D-21 chain: when the
-	// user explicitly passes --lang on the command line, that wins over all
-	// other sources. Resolve() does not return it directly (it has no access
-	// to flags); callers apply the override after Resolve() and stamp this
-	// Source so dry-run and verbose footer attribution stay accurate.
+	// SourceCLIFlag is the highest-priority step in the resolution chain:
+	// an explicit `--lang` on the command line wins over both config files.
 	SourceCLIFlag
 )
 
@@ -31,8 +23,6 @@ func (s Source) String() string {
 		return "repo config"
 	case SourceGlobalConfig:
 		return "global config"
-	case SourceEnvLANG:
-		return "LANG env"
 	case SourceDefault:
 		return "default"
 	default:
@@ -40,60 +30,77 @@ func (s Source) String() string {
 	}
 }
 
+// Resolution is the outcome of the language chain. Code is the resolved
+// language and drives the AI **output** language verbatim (so an output-only
+// language like "fr" is preserved). Name is its display name for the prompt
+// directive. Source records which step of the chain decided it, for dry-run
+// and verbose-footer attribution.
+//
+// The CLI **interface** language is derived separately via UICatalog(): the
+// output language and the interface language share one resolution but the
+// interface only localizes to languages we ship a catalog for.
 type Resolution struct {
 	Code   string
 	Name   string
 	Source Source
 }
 
-// Resolve walks the D-21 source chain (repo config → global config →
-// LANG env → built-in default) and returns the active locale.
-//
-// UC-09: when the resolved code is not one we ship a catalog for, we
-// silently coerce it to "en" while keeping the original Source so
-// dry-run and verbose-footer attribution still reflect *where* the
-// choice came from. Erroring or warning loudly would punish users
-// with legitimate non-en locales (LANG=de_DE.UTF-8 on a developer
-// laptop) — silent coerce keeps the CLI usable and matches the
-// existing i18n.Load fallback semantics one layer below.
-func Resolve(repo, global *config.Config, env Env) Resolution {
-	if repo != nil && repo.Output.Lang != "" {
-		return coerce(fromConfig(repo.Output.Lang, SourceRepoConfig))
+// UICatalog returns the language code to load CLI interface strings for: the
+// resolved code when we ship a catalog for it (en, tr), otherwise English.
+// This is what makes `--lang fr` produce French *output* while the CLI's own
+// chrome stays English — the two are resolved from the same chain but the
+// interface degrades to English for any language we haven't translated.
+func (r Resolution) UICatalog() string {
+	if hasUICatalog(r.Code) {
+		return r.Code
 	}
-	if global != nil && global.Output.Lang != "" {
-		return coerce(fromConfig(global.Output.Lang, SourceGlobalConfig))
-	}
-	if code := parseLocale(env.LANG); code != "" {
-		return coerce(Resolution{Code: code, Name: nameOf(code), Source: SourceEnvLANG})
-	}
-	return Resolution{Code: "en", Name: "English", Source: SourceDefault}
+	return "en"
 }
 
-// coerce returns r untouched when r.Code names a supported locale,
-// otherwise it swaps Code+Name for English while preserving Source.
-// Centralised so every entry point in Resolve hits the same logic.
-func coerce(r Resolution) Resolution {
-	if supported(r.Code) {
+// Resolve walks the language source chain and returns the resolved output
+// language:
+//
+//	--lang flag → repo config (output.lang) → user config (output.lang) → English
+//
+// At every step a value that is empty OR not a recognized language falls
+// through to the next source — it never short-circuits to English mid-chain.
+// The system locale (LANG env var) is deliberately NOT consulted: language is
+// config-driven only (ADR-0021, superseding the D-21 / UC-09 env-LANG step).
+//
+// flag is the raw `--lang` value ("" when the flag was not passed). repo and
+// global are the raw per-file configs (config.LoadFile, not the merged
+// config) so each level is judged on its own stated value.
+func Resolve(flag string, repo, global *config.Config) Resolution {
+	if r, ok := fromValue(flag, SourceCLIFlag); ok {
 		return r
 	}
-	r.Code = "en"
-	r.Name = "English"
-	return r
+	if repo != nil {
+		if r, ok := fromValue(repo.Output.Lang, SourceRepoConfig); ok {
+			return r
+		}
+	}
+	if global != nil {
+		if r, ok := fromValue(global.Output.Lang, SourceGlobalConfig); ok {
+			return r
+		}
+	}
+	return English()
 }
 
-func fromConfig(raw string, src Source) Resolution {
+// English is the terminal fallback of the chain, and a convenience
+// constructor for callers that always want English output (e.g. the eval
+// harness, which pins fixtures to a deterministic language).
+func English() Resolution {
+	return Resolution{Code: "en", Name: displayName("en"), Source: SourceDefault}
+}
+
+// fromValue normalizes raw and, when it names a recognized language, returns
+// its Resolution tagged with src; otherwise ok=false so the caller advances to
+// the next source in the chain.
+func fromValue(raw string, src Source) (Resolution, bool) {
 	code := normalize(raw)
-	return Resolution{Code: code, Name: nameOf(code), Source: src}
-}
-
-// CoerceCLIFlag turns a raw --lang value into a Resolution tagged with
-// SourceCLIFlag, applying the same UC-09 coercion as Resolve so an
-// unsupported code does not bypass the supported() filter just
-// because the user passed it on the command line.
-func CoerceCLIFlag(raw string) Resolution {
-	return coerce(Resolution{
-		Code:   normalize(raw),
-		Name:   nameOf(normalize(raw)),
-		Source: SourceCLIFlag,
-	})
+	if !recognized(code) {
+		return Resolution{}, false
+	}
+	return Resolution{Code: code, Name: displayName(code), Source: src}, true
 }

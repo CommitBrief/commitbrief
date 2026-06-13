@@ -459,7 +459,7 @@ gemini-3.5-flash`).
 | `COMMITBRIEF_MODEL` | Overrides the active provider's model. |
 | `COMMITBRIEF_CONFIG` | Absolute path to the user-level config file; replaces the default `~/.commitbrief/config.yml` lookup. Useful for tests and ephemeral CI environments. |
 | `COMMITBRIEF_NO_COLOR`, `NO_COLOR` | Force ANSI color off (overrides `--color always`). |
-| `LANG` | When `output.lang` is unset, the first two letters of `LANG` (e.g. `tr_TR.UTF-8` → `tr`) seed the active locale. Coerced to `en` if not in the supported set (`en`, `tr`). |
+| `LANG` | No longer drives language (ADR-0021): language is config-driven (`--lang` → repo `output.lang` → user `output.lang` → English). |
 
 ```yaml
 # ~/.commitbrief/config.yml
@@ -478,7 +478,7 @@ providers:
     model: qwen2.5-coder:14b
     base_url: http://localhost:11434
 output:
-  lang: en                         # CLI strings + review language
+  lang: en                         # AI output language (any recognized lang, e.g. fr); UI localizes for en/tr only
   stream: true
   color: auto                      # auto | always | never
 cache:

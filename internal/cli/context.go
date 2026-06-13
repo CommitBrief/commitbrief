@@ -69,21 +69,20 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 		pc.Model = global.model
 		cfg.Providers[cfg.Provider] = pc
 	}
-	if global.lang != "" {
-		cfg.Output.Lang = global.lang
-	}
 
+	// Language resolution (ADR-0021) is independent of the merged config: it
+	// reads the raw per-file configs so each level (--lang flag → repo → user
+	// → English) is judged on its own value, with invalid/empty values falling
+	// through. langRes.Code is the AI *output* language (any recognized
+	// language, e.g. "fr"); the CLI's own interface strings load from
+	// langRes.UICatalog(), which degrades to English for any language we don't
+	// ship a catalog for. The flag is NOT folded into cfg.Output.Lang, so
+	// `config get output.lang` still reports the stored file value.
 	rawGlobal, _ := config.LoadFile(globalPath)
 	rawRepo, _ := config.LoadFile(repoPath)
-	langRes := lang.Resolve(rawRepo, rawGlobal, lang.Env{LANG: os.Getenv("LANG")})
-	if global.lang != "" {
-		// UC-09: --lang goes through the same supported() coercion the
-		// config-file path uses, so passing --lang=de on the CLI lands
-		// at "en" rather than blowing up i18n.Load below.
-		langRes = lang.CoerceCLIFlag(global.lang)
-	}
+	langRes := lang.Resolve(global.lang, rawRepo, rawGlobal)
 
-	cat, err := i18n.Load(langRes.Code)
+	cat, err := i18n.Load(langRes.UICatalog())
 	if err != nil {
 		cat, _ = i18n.Load(i18n.DefaultLang)
 	}

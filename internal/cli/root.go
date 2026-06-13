@@ -14,6 +14,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/lang"
 	"github.com/CommitBrief/commitbrief/internal/logo"
 	"github.com/CommitBrief/commitbrief/internal/ui"
 	"github.com/CommitBrief/commitbrief/internal/version"
@@ -98,7 +99,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.suggestCommit, "suggest-commit", false, "after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)")
 	flags.StringVar(&global.failOn, "fail-on", "", "exit 1 if any finding meets/exceeds severity (critical|high|medium|low|info|any|none)")
 	flags.StringVar(&global.minSeverity, "min-severity", "", "hide findings below this severity in the rendered output (critical|high|medium|low|info); --json and --fail-on still see the full set")
-	flags.StringVar(&global.lang, "lang", "", "override output language (e.g. tr, en)")
+	flags.StringVar(&global.lang, "lang", "", "AI output language (e.g. tr, fr); the CLI interface localizes for en/tr only, output for any recognized language. Resolution: --lang → repo config → user config → English")
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
@@ -206,8 +207,8 @@ func Execute() {
 	if err := root.ExecuteContext(ctx); err != nil {
 		// Best-effort error-prefix translation. appContext isn't built at
 		// this layer (cobra surfaces errors from RunE before/instead of
-		// resolveContext), so we honor only --lang and LANG env — the
-		// remaining D-21 steps need configs we cannot safely load here.
+		// resolveContext), so we honor only the --lang flag — the remaining
+		// chain steps need configs we cannot safely load here (ADR-0021).
 		cat := pickErrorCatalog()
 		fmt.Fprintln(os.Stderr, cat.T("common.error_prefix"), err)
 		os.Exit(1)
@@ -252,14 +253,11 @@ func loadDefaultCommand() string {
 // pickErrorCatalog returns the i18n catalog used for the top-level "Error:"
 // prefix when a command fails before appContext is resolved.
 func pickErrorCatalog() *i18n.Catalog {
-	code := global.lang
-	if code == "" {
-		// Read the first two letters of LANG (e.g. "tr_TR.UTF-8" → "tr").
-		if env := os.Getenv("LANG"); len(env) >= 2 {
-			code = env[:2]
-		}
-	}
-	if cat, err := i18n.Load(code); err == nil {
+	// Early-error catalog: before appContext exists we only have the --lang
+	// flag (no config loaded yet), so honor it when it names a UI-translated
+	// language and fall back to English otherwise. The system locale is not
+	// consulted (ADR-0021).
+	if cat, err := i18n.Load(lang.UICatalogFor(global.lang)); err == nil {
 		return cat
 	}
 	cat, _ := i18n.Load(i18n.DefaultLang)

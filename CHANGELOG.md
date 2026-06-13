@@ -35,6 +35,24 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
     command never writes to git.
 
 ### Changed
+- **`--lang` now sets the AI output language independently of the interface
+  (ADR-0021).** The output language and the CLI's own interface language are
+  resolved from one chain but applied separately:
+  - **Any recognized language works for output.** `--lang fr` (or `de`, `ja`,
+    … ~50 languages) now produces a **French review**; previously anything
+    outside `{en, tr}` was coerced to English. The CLI's own strings still
+    localize only for `en`/`tr` (English for everything else), so `--lang fr`
+    gives a French review with an English interface; `--lang tr` gives Turkish
+    for both.
+  - **The fallback chain is mistake-tolerant.** Resolution is `--lang` → repo
+    `output.lang` → user `output.lang` → English, and an **empty or invalid**
+    value at any level falls through to the next source instead of
+    short-circuiting to English.
+  - **`config set output.lang` validates** the value (a typo is rejected at
+    set-time).
+  - **Breaking:** the system locale (`LANG` env var) is **no longer consulted**
+    for language. A setup that relied on `LANG=tr_TR` with no config now
+    defaults to English — set `output.lang` or pass `--lang` instead.
 - **`commit`'s staged-file list reads tighter.** The "Detected N staged files"
   line no longer ends with a dangling colon, the file names below it are no
   longer separated by a blank trunk line in the progress tree, and when more

@@ -20,7 +20,7 @@ import (
 // sends on a default-config run, so the eval measures the shipped path
 // rather than a bespoke prompt.
 func buildRequest(fx Fixture, model string) provider.Request {
-	p := prompt.Build(rules.Default(), lang.CoerceCLIFlag("en"), fx.Diff)
+	p := prompt.Build(rules.Default(), lang.English(), fx.Diff)
 	return provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,

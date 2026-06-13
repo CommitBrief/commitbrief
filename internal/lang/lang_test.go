@@ -8,159 +8,161 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/config"
 )
 
-func TestParseLocale(t *testing.T) {
-	cases := map[string]string{
-		"tr_TR.UTF-8": "tr",
-		"en_US.UTF-8": "en",
-		"en_US":       "en",
-		"tr":          "tr",
-		"C":           "",
-		"POSIX":       "",
-		"":            "",
-		"klingon":     "",
-		"sr_RS@latin": "sr",
-		"TR_tr":       "tr",
-		"x":           "",
-		"abcde":       "",
-		"123":         "",
-		"  fr  ":      "fr",
-	}
-	for input, want := range cases {
-		if got := parseLocale(input); got != want {
-			t.Errorf("parseLocale(%q) = %q, want %q", input, got, want)
-		}
+func cfgLang(code string) *config.Config {
+	return &config.Config{Output: config.OutputConfig{Lang: code}}
+}
+
+// --- chain order -----------------------------------------------------------
+
+func TestResolveFlagWins(t *testing.T) {
+	res := Resolve("fr", cfgLang("tr"), cfgLang("de"))
+	if res.Code != "fr" || res.Source != SourceCLIFlag {
+		t.Fatalf("flag should win; got %+v", res)
 	}
 }
 
-func TestResolveRepoConfig(t *testing.T) {
-	repo := &config.Config{Output: config.OutputConfig{Lang: "tr"}}
-	global := &config.Config{Output: config.OutputConfig{Lang: "en"}}
-	res := Resolve(repo, global, Env{LANG: "fr_FR.UTF-8"})
-	if res.Code != "tr" {
-		t.Errorf("Code = %q, want tr", res.Code)
+func TestResolveRepoOverGlobal(t *testing.T) {
+	res := Resolve("", cfgLang("tr"), cfgLang("de"))
+	if res.Code != "tr" || res.Source != SourceRepoConfig {
+		t.Fatalf("repo config should win over global; got %+v", res)
 	}
-	if res.Source != SourceRepoConfig {
-		t.Errorf("Source = %v, want SourceRepoConfig", res.Source)
+}
+
+func TestResolveGlobalWhenNoRepo(t *testing.T) {
+	res := Resolve("", cfgLang(""), cfgLang("de"))
+	if res.Code != "de" || res.Source != SourceGlobalConfig {
+		t.Fatalf("global config should be used; got %+v", res)
+	}
+}
+
+func TestResolveDefaultEnglish(t *testing.T) {
+	res := Resolve("", nil, nil)
+	if res.Code != "en" || res.Source != SourceDefault {
+		t.Fatalf("empty chain should default to English; got %+v", res)
+	}
+	if res.Name != "English" {
+		t.Errorf("Name = %q, want English", res.Name)
+	}
+}
+
+// --- fall-through on empty / invalid ---------------------------------------
+
+func TestResolveInvalidFlagFallsThrough(t *testing.T) {
+	// An unrecognized --lang value does NOT short-circuit to English: it
+	// falls through to the repo config (the user's actual mistake-tolerant
+	// requirement).
+	res := Resolve("zzz", cfgLang("tr"), cfgLang("de"))
+	if res.Code != "tr" || res.Source != SourceRepoConfig {
+		t.Fatalf("invalid flag should fall through to repo; got %+v", res)
+	}
+}
+
+func TestResolveInvalidRepoFallsThroughToGlobal(t *testing.T) {
+	res := Resolve("", cfgLang("nope"), cfgLang("fr"))
+	if res.Code != "fr" || res.Source != SourceGlobalConfig {
+		t.Fatalf("invalid repo lang should fall through to global; got %+v", res)
+	}
+}
+
+func TestResolveAllInvalidFallsToEnglish(t *testing.T) {
+	res := Resolve("xx", cfgLang("yy"), cfgLang("zz"))
+	if res.Code != "en" || res.Source != SourceDefault {
+		t.Fatalf("all-invalid chain should land at English; got %+v", res)
+	}
+}
+
+func TestResolveEmptyRepoFallsThrough(t *testing.T) {
+	res := Resolve("", cfgLang(""), cfgLang("tr"))
+	if res.Source != SourceGlobalConfig {
+		t.Fatalf("empty repo lang should fall through; got %+v", res)
+	}
+}
+
+// --- output-only languages (no UI catalog) ---------------------------------
+
+func TestResolveOutputOnlyLanguagePreserved(t *testing.T) {
+	// fr is recognized for OUTPUT but has no UI catalog: the resolved Code
+	// stays "fr" (so the AI answers in French) while UICatalog() degrades to
+	// English (so the CLI chrome stays English). This is the core of the
+	// decoupling the maintainer asked for.
+	res := Resolve("fr", nil, nil)
+	if res.Code != "fr" {
+		t.Errorf("output Code = %q, want fr (preserved, not coerced)", res.Code)
+	}
+	if res.Name != "French" {
+		t.Errorf("Name = %q, want French", res.Name)
+	}
+	if res.UICatalog() != "en" {
+		t.Errorf("UICatalog() = %q, want en (no fr catalog)", res.UICatalog())
+	}
+}
+
+func TestResolveCatalogLanguageUsesItForBoth(t *testing.T) {
+	res := Resolve("tr", nil, nil)
+	if res.Code != "tr" || res.UICatalog() != "tr" {
+		t.Errorf("tr should drive both output and UI; got Code=%q UICatalog=%q", res.Code, res.UICatalog())
 	}
 	if res.Name != "Türkçe" {
 		t.Errorf("Name = %q, want Türkçe", res.Name)
 	}
 }
 
-func TestResolveGlobalConfig(t *testing.T) {
-	global := &config.Config{Output: config.OutputConfig{Lang: "en"}}
-	res := Resolve(nil, global, Env{LANG: "fr_FR.UTF-8"})
-	if res.Code != "en" || res.Source != SourceGlobalConfig {
-		t.Errorf("Resolve() = %+v, want code=en source=global", res)
+func TestUICatalogEnglishForUntranslated(t *testing.T) {
+	for _, code := range []string{"fr", "de", "ja", "ar"} {
+		if got := (Resolution{Code: code}).UICatalog(); got != "en" {
+			t.Errorf("UICatalog(%q) = %q, want en", code, got)
+		}
 	}
-}
-
-func TestResolveEmptyRepoLangFallsThrough(t *testing.T) {
-	repo := &config.Config{Output: config.OutputConfig{Lang: ""}}
-	global := &config.Config{Output: config.OutputConfig{Lang: "tr"}}
-	res := Resolve(repo, global, Env{})
-	if res.Source != SourceGlobalConfig {
-		t.Errorf("Empty repo lang should fall through; got %+v", res)
-	}
-}
-
-func TestResolveEnvLANG(t *testing.T) {
-	res := Resolve(nil, nil, Env{LANG: "tr_TR.UTF-8"})
-	if res.Code != "tr" || res.Source != SourceEnvLANG {
-		t.Errorf("Resolve() = %+v, want code=tr source=env", res)
-	}
-}
-
-func TestResolveDefault(t *testing.T) {
-	res := Resolve(nil, nil, Env{})
-	if res.Code != "en" || res.Source != SourceDefault {
-		t.Errorf("Resolve() = %+v, want code=en source=default", res)
-	}
-	if res.Name != "English" {
-		t.Errorf("Name = %q, want English", res.Name)
-	}
-}
-
-func TestResolveBadEnvLANGFallsToDefault(t *testing.T) {
-	for _, bad := range []string{"C", "POSIX", "klingon", ""} {
-		res := Resolve(nil, nil, Env{LANG: bad})
-		if res.Source != SourceDefault {
-			t.Errorf("LANG=%q should fall to default; got source=%v", bad, res.Source)
+	for _, code := range []string{"en", "tr"} {
+		if got := (Resolution{Code: code}).UICatalog(); got != code {
+			t.Errorf("UICatalog(%q) = %q, want %q", code, got, code)
 		}
 	}
 }
 
-func TestResolveNilConfigsHandled(t *testing.T) {
-	res := Resolve(nil, nil, Env{LANG: "tr_TR.UTF-8"})
-	if res.Code != "tr" {
-		t.Errorf("nil configs should not panic; got %+v", res)
-	}
-}
-
-func TestResolveUnknownLangSilentlyCoercesToEnglish(t *testing.T) {
-	// UC-09 regression guard. Pre-v0.9.2 the resolver preserved any
-	// unknown code (e.g. "de") and i18n.Load *separately* fell back
-	// to English, giving a confusing "Resolution says de but output
-	// is English" mismatch. The locale surface is now narrowed to
-	// {en, tr} and Resolve coerces silently — Source is preserved so
-	// the dry-run footer still attributes the original config layer
-	// even when the code itself is rewritten.
-	repo := &config.Config{Output: config.OutputConfig{Lang: "de"}}
-	res := Resolve(repo, nil, Env{})
-	if res.Code != "en" {
-		t.Errorf("Code = %q, want en (coerced)", res.Code)
-	}
-	if res.Name != "English" {
-		t.Errorf("Name = %q, want English", res.Name)
-	}
-	if res.Source != SourceRepoConfig {
-		t.Errorf("Source = %v, want SourceRepoConfig preserved through coercion", res.Source)
-	}
-}
-
-func TestResolveUnknownEnvLANGCoercesToEnglish(t *testing.T) {
-	// Same UC-09 coercion when the unsupported code arrives through
-	// the LANG env var path.
-	res := Resolve(nil, nil, Env{LANG: "fr_FR.UTF-8"})
-	if res.Code != "en" {
-		t.Errorf("Code = %q, want en (coerced from LANG=fr_FR)", res.Code)
-	}
-	if res.Source != SourceEnvLANG {
-		t.Errorf("Source = %v, want SourceEnvLANG preserved", res.Source)
-	}
-}
-
-func TestCoerceCLIFlagUnknownLandsAtEnglish(t *testing.T) {
-	// UC-09 — CLI flag path mirrors the config path. --lang=de must
-	// also land at "en" so i18n.Load doesn't hit a missing catalog.
-	res := CoerceCLIFlag("de")
-	if res.Code != "en" {
-		t.Errorf("Code = %q, want en", res.Code)
-	}
-	if res.Source != SourceCLIFlag {
-		t.Errorf("Source = %v, want SourceCLIFlag", res.Source)
-	}
-}
-
-func TestCoerceCLIFlagSupportedPasses(t *testing.T) {
-	if res := CoerceCLIFlag("tr"); res.Code != "tr" || res.Name != "Türkçe" {
-		t.Errorf("supported tr should pass through; got %+v", res)
-	}
-}
+// --- normalization + helpers -----------------------------------------------
 
 func TestResolveNormalizesCase(t *testing.T) {
-	repo := &config.Config{Output: config.OutputConfig{Lang: "TR"}}
-	res := Resolve(repo, nil, Env{})
+	res := Resolve("TR", nil, nil)
 	if res.Code != "tr" {
 		t.Errorf("Code = %q, want lowercased tr", res.Code)
 	}
 }
 
+func TestEnglishConstructor(t *testing.T) {
+	res := English()
+	if res.Code != "en" || res.Name != "English" {
+		t.Errorf("English() = %+v, want en/English", res)
+	}
+}
+
+func TestRecognized(t *testing.T) {
+	for _, ok := range []string{"en", "tr", "fr", "DE", "  es  ", "ja"} {
+		if !Recognized(ok) {
+			t.Errorf("Recognized(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "zzz", "english", "xx", "123"} {
+		if Recognized(bad) {
+			t.Errorf("Recognized(%q) = true, want false", bad)
+		}
+	}
+}
+
+func TestUICatalogFor(t *testing.T) {
+	cases := map[string]string{"tr": "tr", "TR": "tr", "fr": "en", "": "en", "zzz": "en"}
+	for in, want := range cases {
+		if got := UICatalogFor(in); got != want {
+			t.Errorf("UICatalogFor(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestSourceString(t *testing.T) {
 	cases := map[Source]string{
+		SourceCLIFlag:      "cli flag",
 		SourceRepoConfig:   "repo config",
 		SourceGlobalConfig: "global config",
-		SourceEnvLANG:      "LANG env",
 		SourceDefault:      "default",
 	}
 	for s, want := range cases {

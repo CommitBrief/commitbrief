@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
+	"github.com/CommitBrief/commitbrief/internal/lang"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/setup"
 )
@@ -277,6 +278,12 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 		}
 		switch parts[1] {
 		case "lang":
+			// Empty clears the override (chain falls through to the next
+			// level); a non-empty value must name a recognized language so a
+			// typo is caught here instead of silently falling back at runtime.
+			if value != "" && !lang.Recognized(value) {
+				return fmt.Errorf("config: output.lang %q is not a recognized language code (e.g. en, tr, fr, de, es)", value)
+			}
 			cfg.Output.Lang = value
 		case "stream":
 			b, err := parseConfigBool(value)
