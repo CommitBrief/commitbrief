@@ -59,6 +59,7 @@ type stage struct {
 	state stageState
 	err   error // populated only when state == stageFail
 	info  bool  // true for static informational lines (no leading dot)
+	sub   bool  // true for a sub-list item (InfoSub): the trunk separator that normally precedes it is suppressed so the item hugs the line above
 }
 
 type stageState int
@@ -145,7 +146,17 @@ func (p *Progress) Start(label string) {
 
 // Info appends a static informational line (no animated glyph, no
 // terminal state). Used for stats lines like "36 files +1233 -34".
-func (p *Progress) Info(label string) {
+func (p *Progress) Info(label string) { p.appendInfo(label, false) }
+
+// InfoSub appends a static info line that belongs to a sub-list under the
+// preceding line — e.g. the per-file entries below a "Detected N staged
+// files" header. In animated mode the trunk separator (`│`) that normally
+// sits between adjacent stages is suppressed *before* a sub line, so the
+// items cluster tightly under their header instead of each getting a blank
+// breather. In plain mode it is identical to Info.
+func (p *Progress) InfoSub(label string) { p.appendInfo(label, true) }
+
+func (p *Progress) appendInfo(label string, sub bool) {
 	switch p.mode {
 	case progressSilent:
 		return
@@ -160,7 +171,7 @@ func (p *Progress) Info(label string) {
 			p.stages[n-1].state = stageDone
 			doneLabel = p.stages[n-1].label
 		}
-		p.stages = append(p.stages, stage{label: label, info: true, state: stageInfo})
+		p.stages = append(p.stages, stage{label: label, info: true, state: stageInfo, sub: sub})
 		p.mu.Unlock()
 		if doneLabel != "" {
 			_, _ = fmt.Fprintln(p.w, "[done]  "+doneLabel)
@@ -175,7 +186,7 @@ func (p *Progress) Info(label string) {
 	if n := len(p.stages); n > 0 && p.stages[n-1].state == stageActive {
 		p.stages[n-1].state = stageDone
 	}
-	p.stages = append(p.stages, stage{label: label, info: true, state: stageInfo})
+	p.stages = append(p.stages, stage{label: label, info: true, state: stageInfo, sub: sub})
 	p.mu.Unlock()
 	p.redraw()
 }
@@ -417,17 +428,22 @@ func (p *Progress) redraw() {
 		// breathing room and visually completes the tree drawing
 		// (the trunk descends through these blanks down to the next
 		// branch). Skipped after the final stage so the cursor lands
-		// cleanly below the tree.
-		if !isLast {
+		// cleanly below the tree, and skipped when the *next* line is a
+		// sub-list item so grouped entries (e.g. staged file names)
+		// hug their header instead of each getting a blank breather.
+		if !isLast && !p.stages[i+1].sub {
 			buf.WriteString("│\033[K\n")
 		}
 	}
 	// prevLen accounting: every stage emits one line, every failed
-	// stage adds an error line, and there's a separator line between
-	// each adjacent pair of stages.
+	// stage adds an error line, and a separator line precedes every
+	// non-sub stage after the first (sub stages suppress their leading
+	// separator, see the render loop above).
 	p.prevLen = len(p.stages)
-	if len(p.stages) > 1 {
-		p.prevLen += len(p.stages) - 1
+	for i := 1; i < len(p.stages); i++ {
+		if !p.stages[i].sub {
+			p.prevLen++
+		}
 	}
 	for _, st := range p.stages {
 		if st.state == stageFail && st.err != nil {

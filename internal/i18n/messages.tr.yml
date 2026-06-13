@@ -176,7 +176,7 @@ commit.suggest_output_conflict: "--suggest-commit; --json, --markdown veya --out
 
 # commit command (ADR-0019)
 commit.no_staged: "Commit'lenecek staged değişiklik yok. Önce `git add` ile değişiklikleri stage'leyin."
-commit.detected_files: "%d staged dosya algılandı:"
+commit.detected_files: "%d staged dosya algılandı"
 commit.all_filtered: "Tüm staged dosyalar filtre kurallarınca yok sayıldı; mesaj için staged diff'in tamamı kullanılıyor."
 commit.generating: "Commit mesajı önerisi yazılıyor…"
 commit.parse_failed: "Sağlayıcı kullanılabilir bir commit mesajı döndürmedi."

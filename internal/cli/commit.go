@@ -25,6 +25,12 @@ import (
 // past what a human picks from.
 const commitGenMax = 10
 
+// maxListedStagedFiles caps how many staged file names `commit` prints under
+// the "Detected N staged files" header. Past this the per-file list is
+// omitted (the count alone is shown) so a large stage — dozens of files —
+// doesn't flood the progress tree before the message even appears.
+const maxListedStagedFiles = 20
+
 // newCommitCmd is the `commitbrief commit` entry point (ADR-0019): generate
 // a commit message from the staged diff and, on confirmation, run
 // `git commit`. It is the one command that writes to git — every other path
@@ -116,8 +122,14 @@ func runCommit(cmd *cobra.Command) error {
 	// staged), fall back to the raw staged diff — the user staged it and
 	// wants a message, so describe it rather than refuse.
 	prog.Info(app.Catalog.T("commit.detected_files", parsedRaw.FileCount()))
-	for _, name := range stagedFileNames(parsedRaw) {
-		prog.Info("    " + name)
+	// List the file names as a tight sub-group under the header (InfoSub
+	// suppresses the blank trunk separator between them), but only when there
+	// are few enough to be useful — a large stage would flood the tree, so
+	// past the cap we show the count alone.
+	if parsedRaw.FileCount() <= maxListedStagedFiles {
+		for _, name := range stagedFileNames(parsedRaw) {
+			prog.InfoSub("    " + name)
+		}
 	}
 	parsed := diff.Filter(parsedRaw, buildMatcher(app.RepoRoot))
 	if parsed.Empty() {

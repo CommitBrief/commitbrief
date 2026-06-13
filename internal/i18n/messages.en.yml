@@ -178,7 +178,7 @@ commit.suggest_output_conflict: "--suggest-commit can't be combined with --json,
 
 # commit command (ADR-0019)
 commit.no_staged: "No staged changes to commit. Stage changes with `git add` first."
-commit.detected_files: "Detected %d staged file(s):"
+commit.detected_files: "Detected %d staged file(s)"
 commit.all_filtered: "All staged files are ignored by the filter rules; using the full staged diff for the message."
 commit.generating: "Writing commit message suggestion(s)…"
 commit.parse_failed: "The provider returned no usable commit message."

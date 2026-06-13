@@ -235,6 +235,43 @@ func TestProgressAnimatedDrawsTrunkSeparatorsBetweenStages(t *testing.T) {
 	}
 }
 
+func TestProgressInfoSubSuppressesTrunkSeparator(t *testing.T) {
+	// Sub-list items (InfoSub) hug the line above them: no `│` breather is
+	// drawn before a sub line. A header followed only by sub items therefore
+	// renders with zero trunk separators, so the file list reads tightly.
+	w := &safeBuffer{}
+	p := NewProgress(w, ColorAlways, false)
+	p.Info("Detected 3 staged files")
+	p.InfoSub("    a.go")
+	p.InfoSub("    b.go")
+	p.Close()
+	out := w.String()
+	if strings.Contains(out, "│\033[K\n") {
+		t.Errorf("sub-list items must not be separated by a trunk `│`; got:\n%q", out)
+	}
+	for _, name := range []string{"a.go", "b.go"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("sub item %q missing from render; got:\n%q", name, out)
+		}
+	}
+}
+
+func TestProgressInfoSubSeparatedFromNextStage(t *testing.T) {
+	// A non-sub stage after a sub-list gets its separator back, so the list
+	// is visually closed off from whatever stage follows it.
+	w := &safeBuffer{}
+	p := NewProgress(w, ColorAlways, false)
+	p.Info("Detected 2 staged files")
+	p.InfoSub("    a.go")
+	p.Start("Preparing...")
+	p.Finish()
+	p.Close()
+	out := w.String()
+	if !strings.Contains(out, "│\033[K\n") {
+		t.Errorf("expected a trunk separator between the sub-list and the next stage; got:\n%q", out)
+	}
+}
+
 func TestProgressInfoLineHasNoLeadingDot(t *testing.T) {
 	// Info lines are static data ("36 files +1233 -34") — no glyph,
 	// no terminal state, just the connector + label.

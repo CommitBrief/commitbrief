@@ -34,6 +34,13 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
     `--fail-on`, and `--min-severity` are rejected with a clear message. The
     command never writes to git.
 
+### Changed
+- **`commit`'s staged-file list reads tighter.** The "Detected N staged files"
+  line no longer ends with a dangling colon, the file names below it are no
+  longer separated by a blank trunk line in the progress tree, and when more
+  than 20 files are staged the names are omitted entirely (the count alone is
+  shown) so a large stage doesn't flood the screen.
+
 ## [1.5.0] - 2026-06-02
 
 ### Added
