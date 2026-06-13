@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-13
+
 ### Added
 - **`summary` command — explain a set of changes in plain language (ADR-0020).**
   `commitbrief summary` produces a read-only, human-readable digest of what
