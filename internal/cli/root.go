@@ -31,6 +31,7 @@ type globalFlags struct {
 	compact       bool
 	allowSecrets  bool
 	noCostCheck   bool
+	noFlaky       bool
 	copy          bool
 	suggestCommit bool
 	commitType    string // commit: --type <format>; "" → commit.type config → "plain"
@@ -95,6 +96,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.compact, "compact", false, "one-line per finding (dense review output)")
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
 	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
+	flags.BoolVar(&global.noFlaky, "no-flaky", false, "skip the deterministic flaky-test detector (ADR-0022)")
 	flags.BoolVar(&global.copy, "copy", false, "copy findings (severity, path, title, description) to the system clipboard via OSC 52 + native tool")
 	flags.BoolVar(&global.suggestCommit, "suggest-commit", false, "after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)")
 	flags.StringVar(&global.failOn, "fail-on", "", "exit 1 if any finding meets/exceeds severity (critical|high|medium|low|info|any|none)")

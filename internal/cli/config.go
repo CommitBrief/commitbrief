@@ -225,12 +225,23 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return "", fmt.Errorf("config: unknown field %q in command (allowed: default)", parts[1])
 		}
 
+	case "review":
+		if len(parts) != 2 {
+			return "", fmt.Errorf("config: %q must be review.<field>", path)
+		}
+		switch parts[1] {
+		case "flaky":
+			return strconv.FormatBool(cfg.Review.Flaky), nil
+		default:
+			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky)", parts[1])
+		}
+
 	case "version":
 		// Read-only via get; explicitly rejected by configFieldSet.
 		return strconv.Itoa(cfg.Version), nil
 
 	default:
-		return "", fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*, version)", parts[0])
+		return "", fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*, review.*, version)", parts[0])
 	}
 }
 
@@ -392,11 +403,27 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 		}
 		return nil
 
+	case "review":
+		if len(parts) != 2 {
+			return fmt.Errorf("config: %q must be review.<field>", path)
+		}
+		switch parts[1] {
+		case "flaky":
+			b, err := parseConfigBool(value)
+			if err != nil {
+				return fmt.Errorf("config: review.flaky: %w", err)
+			}
+			cfg.Review.Flaky = b
+		default:
+			return fmt.Errorf("config: unknown field %q in review (allowed: flaky)", parts[1])
+		}
+		return nil
+
 	case "version":
 		return errors.New("config: version is managed by migrations and cannot be set manually")
 
 	default:
-		return fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*)", parts[0])
+		return fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*, review.*)", parts[0])
 	}
 }
 

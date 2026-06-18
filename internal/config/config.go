@@ -14,6 +14,16 @@ type Config struct {
 	Cost      CostConfig                `yaml:"cost"`
 	Command   CommandConfig             `yaml:"command"`
 	Commit    CommitConfig              `yaml:"commit"`
+	Review    ReviewConfig              `yaml:"review"`
+}
+
+// ReviewConfig toggles review-time behaviors that aren't pre-send guards.
+// Flaky enables the deterministic static flaky-test detector (ADR-0022): a
+// provider-free pre-pass that flags timing/randomness anti-patterns in
+// changed test files and merges them into the structured findings. On by
+// default; precedence is --no-flaky > review.flaky config > built-in (true).
+type ReviewConfig struct {
+	Flaky bool `yaml:"flaky"`
 }
 
 // CommitConfig sets defaults for the `commit` command (ADR-0019) so a repo

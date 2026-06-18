@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/clipboard"
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/flaky"
 	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/guard"
 	"github.com/CommitBrief/commitbrief/internal/ignore"
@@ -233,6 +235,16 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		return showPromptOutput(cmd, p)
 	}
 
+	// Deterministic flaky-test pre-pass (ADR-0022). Static, provider-free
+	// findings from the filtered diff, merged into the structured results in
+	// both the cache-hit and fresh paths below. Skipped for plain-text/CLI
+	// providers (their output isn't structured) and when disabled via
+	// review.flaky=false or --no-flaky.
+	var flakyFindings []render.Finding
+	if app.Config.Review.Flaky && !global.noFlaky && !plainText {
+		flakyFindings = flaky.New(app.Catalog).Detect(parsed)
+	}
+
 	model := app.Config.Providers[app.Config.Provider].Model
 	if model == "" {
 		model = prov.DefaultModel()
@@ -289,6 +301,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			case cache.FormatJSON, "":
 				findings, _ = render.ParseFindings(entry.Result.Content)
 			}
+			findings = mergeFlaky(findings, flakyFindings)
 			if entry.Result.Format == cache.FormatPlainText {
 				// CLI-emitted output: stream the cached body verbatim to
 				// stdout instead of going through the cards renderer.
@@ -407,6 +420,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	case cache.FormatMarkdownFallback:
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
 	}
+	findings = mergeFlaky(findings, flakyFindings)
 
 	respModel := model
 	meta := render.Meta{
@@ -464,6 +478,31 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	}
 	handleCopyFlag(cmd, app, findings)
 	return applyFailOn(cmd, app, findings)
+}
+
+// mergeFlaky appends deterministic flaky-test findings (ADR-0022) to the LLM
+// findings, skipping any whose (file, line) the LLM already reported so the
+// same line isn't surfaced twice. Every LLM finding is preserved; flaky
+// findings are additive. Returns llm unchanged when there are no flaky
+// findings — the common case, and the plain-text/CLI path where the detector
+// never ran.
+func mergeFlaky(llm, flakyFindings []render.Finding) []render.Finding {
+	if len(flakyFindings) == 0 {
+		return llm
+	}
+	seen := make(map[string]struct{}, len(llm))
+	for _, f := range llm {
+		seen[f.File+":"+strconv.Itoa(f.Line)] = struct{}{}
+	}
+	out := make([]render.Finding, 0, len(llm)+len(flakyFindings))
+	out = append(out, llm...)
+	for _, f := range flakyFindings {
+		if _, dup := seen[f.File+":"+strconv.Itoa(f.Line)]; dup {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
 }
 
 // emitPlainText streams a CLI-provider's already-formatted output

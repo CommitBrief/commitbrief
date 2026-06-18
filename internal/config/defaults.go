@@ -31,5 +31,8 @@ func Default() *Config {
 			Type:     "plain",
 			Generate: 1,
 		},
+		Review: ReviewConfig{
+			Flaky: true,
+		},
 	}
 }
