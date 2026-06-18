@@ -244,8 +244,22 @@ read project files beyond the diff to ground the review; see below),
 `--allow-secrets` (acknowledge a flagged credential in
 the diff), `--no-cost-check` (skip cost preflight),
 `--show-prompt` (print the exact system + user prompt that would be sent,
-then exit — no provider call, no cost; honours `--output`), `--color`. See
-`commitbrief --help`.
+then exit — no provider call, no cost; honours `--output`), `--no-flaky`
+(skip the flaky-test detector below), `--color`. See `commitbrief --help`.
+
+### Flaky-test detection (deterministic, ADR-0022)
+
+Before the model is called, a **static pre-pass** scans the added lines of any
+changed **test** files for high-precision flakiness anti-patterns — hard-coded
+sleeps / fixed waits (`time.Sleep`, `Thread.sleep`, `Task.Delay`,
+`asyncio.sleep`, `*.waitForTimeout`, numeric `cy.wait`, `usleep`, `sleep(<n>)`)
+and unseeded randomness (`Math.random`, Python `random.*`, Go `math/rand`).
+Matches merge into the normal findings, so they render, count toward
+`--fail-on`, and `--copy` like any other finding — but they are **deterministic
+and reproducible**: no model call, no JSON-schema change. On by default for the
+API/mock providers; turn it off per-run with `--no-flaky` or persistently with
+`review.flaky: false`. CLI-tool-backed plain-text providers are unaffected for
+now.
 
 ### `commitbrief commit`
 
@@ -493,6 +507,8 @@ command:
 commit:
   type: plain                      # default --type for `commitbrief commit` (plain|conventional|conventional+body|gitmoji|subject+body)
   generate: 1                      # default --generate (number of message alternatives)
+review:
+  flaky: true                      # deterministic flaky-test detector pre-pass (ADR-0022); --no-flaky overrides per-run
 ```
 
 ### Default command (`command.default`)

@@ -198,3 +198,12 @@ summary.flag_conflict_review: "summary bulgu üretmez; --suggest-commit, --fail-
 summary.no_changes: "Filtrelemeden sonra özetlenecek değişiklik yok."
 summary.generating: "Özet yazılıyor…"
 summary.empty: "Sağlayıcı boş bir özet döndürdü."
+
+# Deterministik flaky-test dedektörü (ADR-0022). Statik internal/flaky
+# ön-süzgecinin bulgu metni; LLM bulguları gibi (çıktı dili) yerelleştirilir.
+flaky.hard_sleep.title: "Test senkronizasyon için sabit bir bekleme (sleep) kullanıyor"
+flaky.hard_sleep.description: "Sabit beklemeler testi zamana bağımlı kılar: hızlı makinede geçer, CI yükü altında başarısız olur; bu da süite olan güveni aşındıran kararsız (flaky) sonuçlar üretir."
+flaky.hard_sleep.suggestion: "Sabit gecikmeyi koşula dayalı bir beklemeyle değiştir — beklenen duruma ulaşana kadar yokla ya da çerçevenin Eventually/waitFor yardımcısını kullan — ki test duvar saatine değil gerçek hazır oluşa tepki versin."
+flaky.unseeded_random.title: "Test sabitlenmemiş (seed'siz) rastgeleliğe dayanıyor"
+flaky.unseeded_random.description: "Sabit bir seed olmadan rastgele kaynak her çalıştırmada farklı değer üretir; bu yüzden doğrulamalar deterministik olmayan biçimde geçebilir ya da kalabilir."
+flaky.unseeded_random.suggestion: "Üreteci testte sabit bir seed ile başlat ya da deterministik bir sahte üreteç enjekte et; böylece çalıştırma tekrar üretilebilir olur."

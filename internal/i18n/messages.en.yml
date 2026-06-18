@@ -200,3 +200,12 @@ summary.flag_conflict_review: "summary produces no findings; it can't be combine
 summary.no_changes: "No changes to summarize after filtering."
 summary.generating: "Writing summary…"
 summary.empty: "The provider returned an empty summary."
+
+# Deterministic flaky-test detector (ADR-0022). Finding text for the static
+# internal/flaky pre-pass; localized like LLM findings (output language).
+flaky.hard_sleep.title: "Test uses a hard-coded sleep for synchronization"
+flaky.hard_sleep.description: "Fixed sleeps make a test timing-dependent: it passes on a fast machine and fails under CI load, producing flaky results that erode trust in the suite."
+flaky.hard_sleep.suggestion: "Replace the fixed delay with a condition-based wait — poll until the expected state, or use your framework's Eventually/waitFor helper — so the test reacts to actual readiness instead of wall-clock time."
+flaky.unseeded_random.title: "Test relies on unseeded randomness"
+flaky.unseeded_random.description: "A random source without a fixed seed yields different values on every run, so assertions can pass or fail non-deterministically."
+flaky.unseeded_random.suggestion: "Seed the generator with a constant in the test, or inject a deterministic fake, so the run is reproducible."

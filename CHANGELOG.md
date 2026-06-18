@@ -10,6 +10,20 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **Deterministic flaky-test detector (ADR-0022).** A static, provider-free
+  pre-pass scans the added lines of changed test files for high-precision
+  flakiness anti-patterns — hard-coded sleeps / fixed waits (`time.Sleep`,
+  `Thread.sleep`, `Task.Delay`, `asyncio.sleep`, `*.waitForTimeout`, numeric
+  `cy.wait`, `usleep`, `sleep(<n>)`) and unseeded randomness (`Math.random`,
+  Python `random.*`, Go `math/rand`) — and merges them into the structured
+  findings, so they render, count toward `--fail-on`, and `--copy` like any
+  other finding. Deterministic and reproducible: no model call, no JSON-schema
+  change (the findings contract stays v1). On by default for API/mock
+  providers; skip per-run with `--no-flaky` or persistently with
+  `review.flaky: false`. Localized (en/tr). CLI-tool-backed plain-text
+  providers are unaffected for now.
+
 ## [1.6.0] - 2026-06-13
 
 ### Added
