@@ -37,6 +37,7 @@ guard.secrets.prompt: "Yine de LLM'e gönderilsin mi?"
 guard.secrets.aborted_user: "iptal edildi: pre-send secret scanner"
 guard.secrets.aborted_non_interactive: "İptal edildi (etkileşimsiz); zorlamak için --allow-secrets kullanın."
 guard.secret_patterns.invalid: "Geçersiz guard.secret_patterns girdisi: %s"
+filter.glob.invalid: "Geçersiz --file/--dir glob deseni: %s"
 guard.injection.warning: "⚠  %s içinde olası prompt-injection ifadesi (%s. satır); sistem promptuna ekleniyor. Gözden geçirin — devam ediliyor (yalnızca uyarı)."
 
 cost.estimate: "⚠  Tahmini maliyet: $%.4f (eşik: $%.4f)"

@@ -195,10 +195,12 @@ commitbrief diff HEAD~3 HEAD               # the last three commits
 commitbrief diff main feature              # one branch vs another
 commitbrief diff main...feature            # three-dot PR-style range
 
-# Narrow any scope with repeatable path filters
+# Narrow any scope with repeatable path filters (exact paths or globs)
 commitbrief --unstaged --file app/Http/Controllers/API.php --file routes/web.php
 commitbrief --unstaged --dir database/seeder --dir app/Models
 commitbrief diff HEAD~3 HEAD --dir docs
+commitbrief --staged --file '*.go'                 # gitignore-style glob (any depth)
+commitbrief --staged --file 'internal/**/*.ts'     # anchored recursive glob
 
 # Plain-language change digest (read-only; no findings)
 commitbrief summary                          # what's staged, grouped by area
@@ -236,8 +238,9 @@ message for the staged diff; prints to stdout, requires `--staged`, not
 with `--json`/`--markdown`/`--output`), `--compact`, `--no-cache`,
 `--fail-on=<sev>`, `--min-severity=<sev>`
 (hide findings below this severity in the rendered output; `--json` and
-`--fail-on` still see the full set), `-f/--file` (repeatable),
-`-d/--dir` (repeatable), `--yes`, `--verbose`, `--quiet`, `--lang`,
+`--fail-on` still see the full set), `-f/--file` (repeatable; exact
+path or gitignore-style glob), `-d/--dir` (repeatable; exact prefix or
+glob), `--yes`, `--verbose`, `--quiet`, `--lang`,
 `--provider`, `--model`, `--cli <claude|gemini|codex>` (shorthand for the
 CLI-tool-backed providers; mutually exclusive with `--json` /
 `--markdown`), `--with-context` (CLI providers only — let the host CLI

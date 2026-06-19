@@ -11,6 +11,21 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **Glob support for `--file` / `--dir` (ADR-0026).** The path filters now accept
+  gitignore-style glob patterns in addition to exact paths. A value containing
+  `*`, `?`, or `[` is compiled as a glob: a slash-less pattern matches the
+  basename at any depth (`--file '*.go'` catches both `main.go` and
+  `internal/cli/root.go`), while a slash-bearing pattern is anchored at the repo
+  root (`--file 'internal/**/*.ts'`). `--dir` accepts globs too (`--dir 'app/**'`).
+  Patterns are also tested against a file's pre-rename path, and Windows-style
+  `app\Models\*` input is normalized to forward slashes regardless of host OS.
+  **Backward compatible:** a value with no glob metacharacter keeps its exact
+  v0.9.0 behavior byte-for-byte — `--file` an exact path, `--dir` a `<dir>/`
+  prefix. Patterns are union'd; repeat the flag rather than comma-joining
+  (`-f '*.go' -f '*.ts'`). An invalid pattern (e.g. unterminated `[`) errors
+  before any provider call instead of silently mis-filtering. Built on go-git's
+  gitignore matcher (already a dependency) — **zero new dependencies**. Localized
+  (en/tr).
 - **User-extensible secret-scan patterns (ADR-0024).** `guard.secret_patterns`
   lets you register your own credential regexes on top of the built-in eight —
   e.g. an internal service-token format your house style uses:

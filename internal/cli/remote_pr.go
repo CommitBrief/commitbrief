@@ -295,7 +295,12 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		return err
 	}
 	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
-	parsed = diff.KeepPaths(parsed, global.files, global.dirs)
+	parsed, err = diff.KeepPaths(parsed, global.files, global.dirs)
+	if err != nil {
+		err = errors.New(cat.T("filter.glob.invalid", err.Error()))
+		prog.Fail(err)
+		return err
+	}
 	if parsed.Empty() {
 		prog.Finish()
 		prog.Close()

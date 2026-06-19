@@ -45,7 +45,10 @@ func newDryRunCmd() *cobra.Command {
 			builtinExcluded := before - afterBuiltin.FileCount()
 			repoExcluded := afterBuiltin.FileCount() - parsed.FileCount()
 			beforePathFilter := parsed.FileCount()
-			parsed = diff.KeepPaths(parsed, global.files, global.dirs)
+			parsed, err = diff.KeepPaths(parsed, global.files, global.dirs)
+			if err != nil {
+				return errors.New(app.Catalog.T("filter.glob.invalid", err.Error()))
+			}
 			pathFilterExcluded := beforePathFilter - parsed.FileCount()
 			loaded, err := rules.Load(app.RepoRoot)
 			if err != nil {

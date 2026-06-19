@@ -112,7 +112,12 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	}
 	matcher := buildMatcher(app.RepoRoot)
 	parsed = diff.Filter(parsed, matcher)
-	parsed = diff.KeepPaths(parsed, global.files, global.dirs)
+	parsed, err = diff.KeepPaths(parsed, global.files, global.dirs)
+	if err != nil {
+		err = errors.New(app.Catalog.T("filter.glob.invalid", err.Error()))
+		prog.Fail(err)
+		return err
+	}
 	if parsed.Empty() {
 		prog.Finish()
 		prog.Close()
