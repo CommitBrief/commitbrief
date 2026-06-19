@@ -213,6 +213,7 @@ commitbrief commit --yes                     # commit the first suggestion non-i
 
 # Setup and rules
 commitbrief setup [--local]                  # provider + API key wizard
+commitbrief setup --alias[=cbr]              # install a shell alias for commitbrief (bash/zsh/fish/PowerShell/cmd)
 commitbrief providers list|use|test          # switch active provider without re-running setup
 commitbrief config show|get|set              # inspect / tweak the merged YAML config
 commitbrief init [--force]                   # write COMMITBRIEF.md + OUTPUT.md template
