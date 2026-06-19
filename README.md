@@ -503,6 +503,10 @@ cache:
 guard:
   secret_scan: true                # scan diff + rules for credential patterns before sending
   token_preflight: false           # opt-in: confirm/abort when the prompt overflows the model's context window
+  injection_scan: true             # warn (never abort) if a non-default COMMITBRIEF.md/OUTPUT.md has prompt-injection phrasing
+  secret_patterns:                 # additive user credential regexes; built-ins always run (ADR-0024)
+    - name: "Internal Service Token"
+      regex: 'INT-[0-9]{10}'
 command:
   default: ""                      # args applied to a bare `commitbrief`; empty = `--staged`
 commit:

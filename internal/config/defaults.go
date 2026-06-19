@@ -22,7 +22,8 @@ func Default() *Config {
 			TTLDays: 7,
 		},
 		Guard: GuardConfig{
-			SecretScan: true,
+			SecretScan:    true,
+			InjectionScan: true,
 		},
 		Cost: CostConfig{
 			WarnThresholdUSD: 0.50,

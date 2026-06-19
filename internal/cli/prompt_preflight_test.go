@@ -86,6 +86,62 @@ func TestConfigFieldGuardUnknownFieldListsTokenPreflight(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "token_preflight") {
 		t.Errorf("unknown guard field error should list token_preflight; got: %v", err)
 	}
+	// The v1.7.0 additions must show up in the allowed-fields list too.
+	if !strings.Contains(err.Error(), "secret_patterns") || !strings.Contains(err.Error(), "injection_scan") {
+		t.Errorf("unknown guard field error should list secret_patterns + injection_scan; got: %v", err)
+	}
+}
+
+// ---------- guard.secret_patterns get/set (ADR-0024) ----------
+
+func TestConfigFieldSecretPatternsGetListsNames(t *testing.T) {
+	cfg := config.Default()
+	// Empty by default.
+	if got, err := configFieldGet(cfg, "guard.secret_patterns"); err != nil || got != "" {
+		t.Fatalf("default guard.secret_patterns = %q, err=%v; want empty", got, err)
+	}
+	cfg.Guard.SecretPatterns = []config.SecretPatternConfig{
+		{Name: "Internal Token", Regex: `INT-[0-9]{10}`},
+		{Name: "Acme Key", Regex: `acme_[a-z]{12}`},
+	}
+	got, err := configFieldGet(cfg, "guard.secret_patterns")
+	if err != nil {
+		t.Fatalf("get guard.secret_patterns: %v", err)
+	}
+	if !strings.Contains(got, "Internal Token") || !strings.Contains(got, "Acme Key") {
+		t.Errorf("get should list both pattern names; got %q", got)
+	}
+}
+
+func TestConfigFieldSecretPatternsSetRejected(t *testing.T) {
+	cfg := config.Default()
+	err := configFieldSet(cfg, "guard.secret_patterns", "anything")
+	if err == nil {
+		t.Fatal("expected config set guard.secret_patterns to be rejected")
+	}
+	if !strings.Contains(err.Error(), "edit the config file directly") {
+		t.Errorf("rejection should point the user at the config file; got %v", err)
+	}
+}
+
+// ---------- guard.injection_scan config round-trip (ADR-0025) ----------
+
+func TestConfigFieldInjectionScanRoundTrip(t *testing.T) {
+	cfg := config.Default()
+
+	// Default is on → true.
+	if got, err := configFieldGet(cfg, "guard.injection_scan"); err != nil || got != "true" {
+		t.Fatalf("default guard.injection_scan = %q, err=%v; want \"true\"", got, err)
+	}
+	if err := configFieldSet(cfg, "guard.injection_scan", "false"); err != nil {
+		t.Fatalf("set guard.injection_scan: %v", err)
+	}
+	if cfg.Guard.InjectionScan {
+		t.Error("set did not flip the struct field")
+	}
+	if got, err := configFieldGet(cfg, "guard.injection_scan"); err != nil || got != "false" {
+		t.Errorf("after set, guard.injection_scan = %q, err=%v; want \"false\"", got, err)
+	}
 }
 
 // ---------- --show-prompt ----------

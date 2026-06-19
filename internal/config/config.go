@@ -73,9 +73,35 @@ type CostConfig struct {
 // paid round-trip, instead of letting the provider reject it with a raw
 // 400. Off by default because the estimate is a chars/4 heuristic and a
 // false positive shouldn't block a review nobody asked to guard.
+//
+// SecretPatterns lets a user ADD their own credential regexes on top of
+// the built-in set (ADR-0024); it is purely additive — the built-ins
+// always run and cannot be disabled via this field (set
+// secret_scan: false to turn the whole scan off). Each entry compiles
+// once per review; an invalid regex fails the review with a clear error
+// naming the offending pattern. Only meaningful while secret_scan is on.
+//
+// InjectionScan controls the prompt-injection scan of a non-default
+// COMMITBRIEF.md / OUTPUT.md (ADR-0025): when on (the default), the CLI
+// warns — never aborts — if the user's own rules content contains
+// injection-shaped phrasing ("ignore previous instructions", etc.). It
+// is defense-in-depth visibility complementing the passive XML-wrap
+// immutability guard; the embedded defaults are trusted and skipped.
 type GuardConfig struct {
-	SecretScan     bool `yaml:"secret_scan"`
-	TokenPreflight bool `yaml:"token_preflight"`
+	SecretScan     bool                  `yaml:"secret_scan"`
+	TokenPreflight bool                  `yaml:"token_preflight"`
+	SecretPatterns []SecretPatternConfig `yaml:"secret_patterns"`
+	InjectionScan  bool                  `yaml:"injection_scan"`
+}
+
+// SecretPatternConfig is one user-supplied credential pattern (ADR-0024).
+// Name is the human-readable label echoed in scan output (line numbers +
+// names only — the matched substring is never recorded); Regex is a Go
+// regexp/syntax expression compiled at review time. Both are required;
+// an empty name or an invalid regex fails the review with a clear error.
+type SecretPatternConfig struct {
+	Name  string `yaml:"name"`
+	Regex string `yaml:"regex"`
 }
 
 type ProviderConfig struct {

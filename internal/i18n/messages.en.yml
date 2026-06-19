@@ -36,6 +36,8 @@ guard.secrets.line: "   line %d: %s"
 guard.secrets.prompt: "Send to LLM anyway?"
 guard.secrets.aborted_user: "aborted: pre-send secret scanner"
 guard.secrets.aborted_non_interactive: "Aborted (non-interactive); pass --allow-secrets to override."
+guard.secret_patterns.invalid: "Invalid guard.secret_patterns entry: %s"
+guard.injection.warning: "⚠  Possible prompt-injection phrasing in %s (line(s) %s); it joins the system prompt. Review it — continuing (warn only)."
 
 cost.estimate: "⚠  Estimated cost: $%.4f (threshold: $%.4f)"
 cost.confirm_prompt: "Proceed with the review?"

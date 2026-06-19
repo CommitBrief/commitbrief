@@ -204,3 +204,157 @@ func TestSecretPatternNamesReturnsSortedUniqueList(t *testing.T) {
 		}
 	}
 }
+
+// ── User-extensible patterns (ADR-0024) ───────────────────────────────
+
+func TestCompileUserPatternsValid(t *testing.T) {
+	extra, err := CompileUserPatterns([]UserSecretPattern{
+		{Name: "Internal Token", Regex: `INT-[0-9]{10}`},
+		{Name: "Acme Secret", Regex: `acme_[a-z]{12}`},
+	})
+	if err != nil {
+		t.Fatalf("unexpected compile error: %v", err)
+	}
+	if len(extra) != 2 {
+		t.Fatalf("expected 2 compiled patterns; got %d", len(extra))
+	}
+}
+
+func TestCompileUserPatternsInvalidRegexNamesPattern(t *testing.T) {
+	// An unbalanced group is invalid; the error must name the offending
+	// pattern so the CLI can surface an actionable message.
+	_, err := CompileUserPatterns([]UserSecretPattern{
+		{Name: "Bad One", Regex: `INT-([0-9`},
+	})
+	if err == nil {
+		t.Fatal("expected an error for an invalid regex; got nil")
+	}
+	if !strings.Contains(err.Error(), "Bad One") {
+		t.Errorf("error should name the offending pattern %q; got %q", "Bad One", err.Error())
+	}
+}
+
+func TestCompileUserPatternsRejectsEmptyNameAndRegex(t *testing.T) {
+	if _, err := CompileUserPatterns([]UserSecretPattern{{Name: "", Regex: `x`}}); err == nil {
+		t.Error("expected an error for an empty name; got nil")
+	}
+	if _, err := CompileUserPatterns([]UserSecretPattern{{Name: "n", Regex: "   "}}); err == nil {
+		t.Error("expected an error for an empty/blank regex; got nil")
+	}
+}
+
+func TestCompileUserPatternsEmptyInputReturnsNil(t *testing.T) {
+	got, err := CompileUserPatterns(nil)
+	if err != nil || got != nil {
+		t.Errorf("nil input should return (nil, nil); got (%v, %v)", got, err)
+	}
+}
+
+func TestScanForSecretsWithUserPatternMatches(t *testing.T) {
+	extra, err := CompileUserPatterns([]UserSecretPattern{
+		{Name: "Internal Token", Regex: `INT-[0-9]{10}`},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	// A string the built-ins would never flag, but the user pattern does.
+	diff := "diff --git a/x b/x\n+++ b/x\n+token = \"INT-0123456789\"\n"
+	matches := ScanForSecretsWith(diff, extra)
+	if len(matches) != 1 {
+		t.Fatalf("expected one match from the user pattern; got %+v", matches)
+	}
+	found := false
+	for _, p := range matches[0].Patterns {
+		if p == "Internal Token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected user pattern %q in matches; got %v", "Internal Token", matches[0].Patterns)
+	}
+}
+
+func TestScanForSecretsWithBuiltinStillFiresAlongsideUserPatterns(t *testing.T) {
+	// Regression guard for the additive contract: supplying a user pattern
+	// must not silence the built-ins. A built-in (AWS) secret on its own
+	// line must still be flagged when extra patterns are present.
+	extra, err := CompileUserPatterns([]UserSecretPattern{
+		{Name: "Internal Token", Regex: `INT-[0-9]{10}`},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	diff := "+" + fakeAWS
+	matches := ScanForSecretsWith(diff, extra)
+	if len(matches) != 1 {
+		t.Fatalf("expected the built-in AWS pattern to still fire; got %+v", matches)
+	}
+	found := false
+	for _, p := range matches[0].Patterns {
+		if p == "AWS Access Key" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("built-in AWS pattern should fire even with user patterns present; got %v", matches[0].Patterns)
+	}
+}
+
+func TestMergePatternsBuiltinWinsOnNameCollision(t *testing.T) {
+	// A user pattern named the same as a built-in must NOT replace it
+	// (additive only, ADR-0024) — the effective name list stays the
+	// built-in set length, not built-in+1.
+	extra, err := CompileUserPatterns([]UserSecretPattern{
+		{Name: "AWS Access Key", Regex: `ZZZ-never-matches`},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if got, want := len(AllPatternNames(extra)), len(SecretPatternNames()); got != want {
+		t.Errorf("name collision should not add a duplicate: AllPatternNames=%d, SecretPatternNames=%d", got, want)
+	}
+}
+
+func TestScanForSecretsWithNeverRecordsSubstring(t *testing.T) {
+	// The matched substring must never appear in the SecretMatch — same
+	// rule the built-ins follow. Use a distinctive user secret value and
+	// assert it is absent from every recorded field.
+	const secretVal = "INT-9876543210"
+	extra, err := CompileUserPatterns([]UserSecretPattern{
+		{Name: "Internal Token", Regex: `INT-[0-9]{10}`},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	matches := ScanTextWith("api = "+secretVal+"\n", extra)
+	if len(matches) != 1 {
+		t.Fatalf("expected one match; got %+v", matches)
+	}
+	for _, p := range matches[0].Patterns {
+		if strings.Contains(p, secretVal) {
+			t.Errorf("matched substring leaked into pattern field: %q", p)
+		}
+	}
+}
+
+func TestAllPatternNamesIncludesUserPatternsSorted(t *testing.T) {
+	extra, err := CompileUserPatterns([]UserSecretPattern{
+		{Name: "ZZ Last Pattern", Regex: `zz`},
+		{Name: "AA First Pattern", Regex: `aa`},
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	names := AllPatternNames(extra)
+	if len(names) != len(SecretPatternNames())+2 {
+		t.Errorf("expected built-ins + 2 user patterns; got %d", len(names))
+	}
+	for i := 1; i < len(names); i++ {
+		if names[i] <= names[i-1] {
+			t.Errorf("AllPatternNames not sorted: %q <= %q", names[i], names[i-1])
+		}
+	}
+	if names[0] != "AA First Pattern" {
+		t.Errorf("expected user pattern to sort to the front; got %q", names[0])
+	}
+}

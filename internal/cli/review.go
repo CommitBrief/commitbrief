@@ -165,18 +165,45 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// to the provider just as surely as one pasted into a diff. The
 	// embedded defaults are presumed-clean and skipped.
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
+		// User-extensible patterns (ADR-0024): compile the configured
+		// extras once and merge them with the built-ins for this scan.
+		// Built-ins always run regardless; a bad regex fails the review
+		// here (before any provider call) with the offending pattern named.
+		extra, compileErr := guard.CompileUserPatterns(toUserSecretPatterns(app.Config.Guard.SecretPatterns))
+		if compileErr != nil {
+			prog.Resume()
+			return errors.New(app.Catalog.T("guard.secret_patterns.invalid", compileErr.Error()))
+		}
 		var matches []guard.SecretMatch
-		matches = append(matches, guard.ScanForSecrets(diffText)...)
+		matches = append(matches, guard.ScanForSecretsWith(diffText, extra)...)
 		if loaded.Source != rules.SourceDefault {
-			matches = append(matches, guard.ScanText(loaded.Content)...)
+			matches = append(matches, guard.ScanTextWith(loaded.Content, extra)...)
 		}
 		if outputLoaded.Source != rules.SourceDefault {
-			matches = append(matches, guard.ScanText(outputLoaded.Content)...)
+			matches = append(matches, guard.ScanTextWith(outputLoaded.Content, extra)...)
 		}
 		if len(matches) > 0 {
 			if abort := handleSecretMatches(cmd, app, matches, stdinReader); abort {
 				return errors.New(app.Catalog.T("guard.secrets.aborted_user"))
 			}
+		}
+	}
+
+	// Prompt-injection scan of user rules (ADR-0025). A non-default
+	// COMMITBRIEF.md / OUTPUT.md is the user's own file and joins the
+	// system prompt; if it contains injection-shaped phrasing ("ignore
+	// previous instructions", "you are now", ...) we WARN — never abort.
+	// This is defense-in-depth visibility next to the passive
+	// <project_rules> immutability wrap (internal/prompt/build.go); the
+	// trusted embedded defaults are skipped. On by default
+	// (guard.injection_scan); the warning is non-blocking, so it does not
+	// share the secret scanner's prompt machinery.
+	if app.Config.Guard.InjectionScan {
+		if loaded.Source != rules.SourceDefault {
+			warnInjection(cmd, app, rules.Filename, guard.ScanForInjection(loaded.Content))
+		}
+		if outputLoaded.Source != rules.SourceDefault {
+			warnInjection(cmd, app, rules.OutputFilename, guard.ScanForInjection(outputLoaded.Content))
 		}
 	}
 	prog.Resume()
@@ -890,6 +917,42 @@ func estimateOutputTokens(inputTokens int) int {
 		out = minOut
 	}
 	return out
+}
+
+// toUserSecretPatterns adapts the config-layer SecretPatternConfig slice
+// into the guard package's UserSecretPattern input shape (ADR-0024). The
+// guard package stays a leaf — it never imports config — so the CLI does
+// the field-for-field copy here. A nil/empty input yields nil.
+func toUserSecretPatterns(specs []config.SecretPatternConfig) []guard.UserSecretPattern {
+	if len(specs) == 0 {
+		return nil
+	}
+	out := make([]guard.UserSecretPattern, len(specs))
+	for i, s := range specs {
+		out[i] = guard.UserSecretPattern{Name: s.Name, Regex: s.Regex}
+	}
+	return out
+}
+
+// warnInjection prints a single non-blocking warning to stderr when the
+// prompt-injection scan (ADR-0025) flags one or more lines in a
+// user-authored rules file, then returns — it NEVER aborts the review,
+// because the file is the user's own. No-op on a clean scan (the common
+// case). Only the file name and 1-based line numbers are printed; the
+// matched text is never echoed (InjectionMatch carries labels + lines
+// only). Honours --quiet via infof's underlying stream is intentionally
+// NOT used here: this is a security advisory, so it always prints (like
+// the --with-context caution), but it is a warning, not an error.
+func warnInjection(cmd *cobra.Command, app *appContext, file string, matches []guard.InjectionMatch) {
+	if len(matches) == 0 {
+		return
+	}
+	lineStrs := make([]string, 0, len(matches))
+	for _, l := range guard.InjectionLines(matches) {
+		lineStrs = append(lineStrs, strconv.Itoa(l))
+	}
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(),
+		app.Catalog.T("guard.injection.warning", file, strings.Join(lineStrs, ", ")))
 }
 
 // handleSecretMatches formats the pre-send secret-scan warnings and

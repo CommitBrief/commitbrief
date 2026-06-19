@@ -199,8 +199,18 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return strconv.FormatBool(cfg.Guard.SecretScan), nil
 		case "token_preflight":
 			return strconv.FormatBool(cfg.Guard.TokenPreflight), nil
+		case "injection_scan":
+			return strconv.FormatBool(cfg.Guard.InjectionScan), nil
+		case "secret_patterns":
+			// List-of-objects: surface the configured pattern names (one
+			// per line) rather than a bool/scalar. Empty when none are set.
+			names := make([]string, len(cfg.Guard.SecretPatterns))
+			for i, p := range cfg.Guard.SecretPatterns {
+				names[i] = p.Name
+			}
+			return strings.Join(names, "\n"), nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight, injection_scan, secret_patterns)", parts[1])
 		}
 
 	case "cost":
@@ -365,8 +375,20 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 				return fmt.Errorf("config: guard.token_preflight: %w", err)
 			}
 			cfg.Guard.TokenPreflight = b
+		case "injection_scan":
+			b, err := parseConfigBool(value)
+			if err != nil {
+				return fmt.Errorf("config: guard.injection_scan: %w", err)
+			}
+			cfg.Guard.InjectionScan = b
+		case "secret_patterns":
+			// A list of {name, regex} objects cannot be expressed through the
+			// flat `config set <key> <value>` form. Reject with guidance to
+			// edit the YAML directly, mirroring how the pricing map (the only
+			// other non-scalar surface) is set — by hand, not via `config set`.
+			return errors.New("config: guard.secret_patterns is a list of {name, regex} objects; edit the config file directly (commitbrief config show prints its path)")
 		default:
-			return fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight)", parts[1])
+			return fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight, injection_scan, secret_patterns)", parts[1])
 		}
 		return nil
 

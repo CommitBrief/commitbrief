@@ -11,6 +11,36 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **User-extensible secret-scan patterns (ADR-0024).** `guard.secret_patterns`
+  lets you register your own credential regexes on top of the built-in eight —
+  e.g. an internal service-token format your house style uses:
+  ```yaml
+  guard:
+    secret_patterns:
+      - name: "Internal Service Token"
+        regex: 'INT-[0-9]{10}'
+  ```
+  The feature is **additive only**: the built-in patterns always run and cannot
+  be disabled through this block (`guard.secret_scan: false` remains the single
+  off-switch for the whole scan). On a name collision the built-in wins, so a
+  user entry can never shadow or silence one. Each `regex` is a Go `regexp`
+  (RE2) expression compiled once per review; an invalid one aborts the review
+  before any provider call, naming the offending pattern. As with the built-ins,
+  only line numbers and pattern names are ever reported — never the matched
+  substring. `commitbrief config get guard.secret_patterns` lists the configured
+  names; `config set` is rejected (edit the YAML directly, like
+  `providers.*.pricing.*`). Localized (en/tr).
+- **Prompt-injection scan of user rules (ADR-0025).** When you use a custom
+  (non-default) `COMMITBRIEF.md` or `OUTPUT.md` template — which is concatenated
+  verbatim into the system prompt — CommitBrief now scans it for
+  prompt-injection phrasing ("ignore previous instructions", "you are now…",
+  "system prompt", "new instructions:", etc., case-insensitive) and prints a
+  **warning** to stderr naming the file and the offending line numbers. It is
+  **non-blocking** — the review always continues, because it's your own file —
+  and complements the existing passive `<project_rules>` immutability wrap
+  (ADR-0004). The embedded default rules are trusted and never scanned. Only
+  category labels and line numbers are reported, never the matched text. On by
+  default; disable with `guard.injection_scan: false`. Localized (en/tr).
 - **`setup --alias` — install a shell alias (ADR-0023).** `commitbrief setup
   --alias` skips the provider wizard and installs a shell alias for
   `commitbrief` (default `cbr`, expanding to the bare command). Bare `--alias`
