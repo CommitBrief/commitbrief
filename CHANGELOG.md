@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-19
+
 ### Added
 - **Glob support for `--file` / `--dir` (ADR-0026).** The path filters now accept
   gitignore-style glob patterns in addition to exact paths. A value containing
@@ -1750,7 +1752,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/CommitBrief/commitbrief/compare/v1.6.0...v1.7.0
 [0.5.0]: https://github.com/CommitBrief/commitbrief/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CommitBrief/commitbrief/compare/v0.2.0...v0.4.0
 [0.2.0]: https://github.com/CommitBrief/commitbrief/compare/v0.1.0...v0.2.0
