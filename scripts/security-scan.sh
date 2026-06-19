@@ -48,7 +48,16 @@ cd "$(dirname "$0")/.."
 #     inside the user's repo and is not on a security boundary; a
 #     symlink swap mid-prune would at worst remove a different file
 #     the user owns. Worth revisiting if cache ever stores secrets.
-GOSEC_EXCLUDE="G304,G306,G301,G204,G101,G122"
+#
+#   G703 — Path traversal via taint analysis (write side). Added
+#     2026-06-19 for ADR-0023 (`setup --alias`).
+#     The alias installer writes a managed block into the user's OWN
+#     shell startup files, whose paths are derived from $HOME, $ZDOTDIR
+#     and $XDG_CONFIG_HOME (internal/alias/alias_unix.go) — env-tainted
+#     by design. This is the write-side analog of G304: the destination
+#     IS the user's dotfile, there is no privilege boundary to cross,
+#     and honoring those env vars is the entire point of the feature.
+GOSEC_EXCLUDE="G304,G306,G301,G204,G101,G122,G703"
 
 # Real findings (G115 int-overflow, future G401 weak crypto, etc.) are
 # NOT excluded — they should fail the scan and demand a fix.

@@ -11,6 +11,19 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **`setup --alias` — install a shell alias (ADR-0023).** `commitbrief setup
+  --alias` skips the provider wizard and installs a shell alias for
+  `commitbrief` (default `cbr`, expanding to the bare command). Bare `--alias`
+  prompts for the name (Enter accepts `cbr`); `--alias=<name>` sets it without
+  prompting for dotfiles/CI. The shell is detected from `$SHELL` (PowerShell on
+  Windows) with an interactive picker fallback, and the alias is written to the
+  right place per shell: bash (`~/.bashrc`), zsh (`~/.zshrc`), fish
+  (`config.fish`), PowerShell (`function` in `$PROFILE`), and cmd.exe (a DOSKEY
+  macrofile loaded via a merged `AutoRun` registry value). File-based shells get
+  an idempotent managed block that is replaced in place on re-run and never
+  clobbers surrounding lines. If the chosen name shadows a command on `PATH` or
+  is already defined, you are warned and asked to proceed / pick another /
+  cancel (`--yes` proceeds). Localized (en/tr).
 - **Deterministic flaky-test detector (ADR-0022).** A static, provider-free
   pre-pass scans the added lines of changed test files for high-precision
   flakiness anti-patterns — hard-coded sleeps / fixed waits (`time.Sleep`,
