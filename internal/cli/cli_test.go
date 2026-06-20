@@ -11,7 +11,7 @@ import (
 
 func TestRootCommandHasSubcommands(t *testing.T) {
 	root := newRootCmd()
-	want := []string{"cache", "commit", "compress", "config", "diff", "doctor", "dry-run", "init", "install-hook", "list", "mcp", "providers", "remote", "setup", "summary"}
+	want := []string{"cache", "commit", "compress", "config", "diff", "doctor", "dry-run", "guard", "init", "install-hook", "list", "mcp", "providers", "remote", "setup", "summary"}
 	got := []string{}
 	for _, c := range root.Commands() {
 		// cobra adds `help` and `completion` automatically; filter to ours.

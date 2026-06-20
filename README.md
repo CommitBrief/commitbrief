@@ -225,6 +225,7 @@ commitbrief install-hook [--hook=...]        # install a git hook that runs comm
 commitbrief dry-run                          # pipeline preview; no API call
 commitbrief list                             # command reference
 commitbrief mcp                              # run an MCP server over stdio (agent review gate; see "MCP server")
+commitbrief guard                            # gate a review against .commitbrief/policy.yml (see "Policy gate")
 
 # Cache maintenance
 commitbrief cache clear                    # wipe every cached LLM response for this repo
@@ -580,6 +581,49 @@ The host launches the process, performs the `initialize` handshake, discovers th
 requests on stdin and writes responses on stdout until the host closes the stream;
 diagnostics go to stderr. See [the MCP server wiki page](https://github.com/CommitBrief/commitbrief/wiki/MCP-server)
 for the full handshake and a worked example.
+
+## Policy gate (`guard`)
+
+`commitbrief guard` is a **declarative merge gate**: it evaluates a review's
+actionable findings against a `.commitbrief/policy.yml` and exits non-zero when
+the policy is breached. It is richer than the single `--fail-on=<severity>`
+threshold — a per-severity *budget* — and is aimed at gating high-volume (often
+AI-authored) pull requests.
+
+Create the policy (the gate is opt-in — no file means no gate):
+
+```yaml
+# .commitbrief/policy.yml
+version: 1
+thresholds:        # max findings allowed per severity (omit or ~ = unlimited)
+  critical: 0
+  high: 0
+  medium: 5
+  low: ~
+total: 20          # optional overall cap
+```
+
+Then gate a change — two modes:
+
+```sh
+# run-mode: review the diff, then evaluate (reuses the full pipeline)
+commitbrief guard                     # staged diff
+commitbrief guard --unstaged
+commitbrief guard --diff main...HEAD
+
+# consume-mode: evaluate a review you already produced — no provider call
+commitbrief --json --staged > review.json
+commitbrief guard --from-json review.json
+```
+
+It evaluates the findings that survive **baseline + suppression** (signal
+control) — exactly what `--json` shows. The exit code is **0 (pass)** or
+**non-zero (blocked)**; a load/parse failure also blocks (a merge gate must not
+pass when it cannot prove the change is within policy). `--json` emits a machine
+verdict (`{passed, counts, total, violations}`). `guard` complements `--fail-on`
+(the simple one-threshold gate) — use either or both. Rule-id-scoped allow/deny
+lists are not yet supported (findings carry no stable rule id). See
+[the guard wiki page](https://github.com/CommitBrief/commitbrief/wiki/Guard-command).
 
 ## Configuration
 

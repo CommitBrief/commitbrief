@@ -10,6 +10,20 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-20
+
+### Added
+- **Policy gate: `commitbrief guard` (ADR-0029).** A declarative merge gate that
+  caps how many findings of each severity a change may carry, via an opt-in
+  `.commitbrief/policy.yml` (`thresholds:` per severity + an optional `total:`).
+  Richer than the single `--fail-on=<severity>` threshold and aimed at gating
+  high-volume (AI-authored) PRs. Two modes: run-mode reviews the diff (reusing
+  the standard pipeline), and `--from-json <file|->` evaluates a prior schema-v1
+  review without calling a provider (so an agent's MCP self-review can be gated
+  cheaply). Evaluates the set that survives baseline + suppression; exits 0 on
+  pass, non-zero when blocked. `--json` emits a machine-readable verdict.
+  Rule-id-scoped allow/deny lists are deferred (findings carry no stable rule id).
+
 ## [1.9.0] - 2026-06-20
 
 ### Added
@@ -1834,7 +1848,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/CommitBrief/commitbrief/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/CommitBrief/commitbrief/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/CommitBrief/commitbrief/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/CommitBrief/commitbrief/compare/v1.6.0...v1.7.0

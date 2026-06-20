@@ -232,6 +232,12 @@ summary.empty: "The provider returned an empty summary."
 # review tool. mcp.serving is a one-line stderr diagnostic; the tool
 # description is host-facing text shown next to the `review` tool.
 mcp.serving: "MCP server ready on stdio (JSON-RPC 2.0); waiting for a host. Press Ctrl-C or close stdin to stop."
+guard.no_policy: "no policy file at %s — create .commitbrief/policy.yml to enable the gate"
+guard.bad_review: "could not parse the review findings"
+guard.pass: "Policy gate: PASS"
+guard.blocked: "Policy gate: BLOCKED — %d violation(s)"
+guard.violation_line: "%s: %d found (max %d)"
+guard.counts: "findings"
 mcp.tool.review.description: "Run a CommitBrief code review on the current git repository's diff and return structured findings (JSON schema v1) plus a short summary. With no arguments it reviews the staged diff; pass `unstaged`, or `diff` git-range arguments, to review other changes. Use this before submitting code to catch issues the way a human reviewer would."
 
 # Deterministic flaky-test detector (ADR-0022). Finding text for the static
