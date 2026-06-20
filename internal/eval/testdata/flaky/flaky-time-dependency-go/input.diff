@@ -1,0 +1,14 @@
+diff --git a/internal/token/expiry_test.go b/internal/token/expiry_test.go
+index 1111111..2222222 100644
+--- a/internal/token/expiry_test.go
++++ b/internal/token/expiry_test.go
+@@ -5,6 +5,10 @@ func TestTokenExpiry(t *testing.T) {
+ 	tok := Issue("user-1")
+ 	start := time.Now()
+ 	_ = start
++	got := tok.ExpiresAt()
++	require.Equal(t, time.Now().Add(time.Hour).Hour(), got.Hour())
++	assert.True(t, got.After(time.Now()))
++	_ = tok
+ 	assertValid(t, tok)
+ }

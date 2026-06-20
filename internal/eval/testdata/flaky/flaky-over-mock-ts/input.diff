@@ -1,0 +1,18 @@
+diff --git a/src/order/order.test.ts b/src/order/order.test.ts
+index 1111111..2222222 100644
+--- a/src/order/order.test.ts
++++ b/src/order/order.test.ts
+@@ -4,6 +4,15 @@ describe('OrderService', () => {
+   it('places an order end to end', () => {
+     const svc = new OrderService()
+     const order = buildOrder()
++    jest.mock('./payment')
++    jest.mock('./inventory')
++    jest.mock('./shipping')
++    jest.spyOn(svc, 'notify')
++    paymentGateway.charge.mockResolvedValue(true)
++    inventory.reserve.mockReturnValue(true)
++    const result = svc.place(order)
++    expect(result.status).toBe('placed')
++    expect(paymentGateway.charge).toHaveBeenCalled()
+   })

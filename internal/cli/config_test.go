@@ -173,6 +173,24 @@ func TestConfigGetUnknownProvider(t *testing.T) {
 	}
 }
 
+func TestConfigReviewBaselineRoundTrips(t *testing.T) {
+	// ADR-0027 SC1: review.baseline defaults to true and toggles via config.
+	e := newCLIEnv(t)
+	if err := e.run("config", "get", "review.baseline"); err != nil {
+		t.Fatalf("config get review.baseline: %v", err)
+	}
+	if got := strings.TrimSpace(e.out.String()); got != "true" {
+		t.Errorf("review.baseline default = %q, want true", got)
+	}
+	if err := e.run("config", "set", "review.baseline", "false"); err != nil {
+		t.Fatalf("config set review.baseline false: %v", err)
+	}
+	cfg := loadCfg(t, e.homeDir)
+	if cfg.Review.Baseline {
+		t.Error("review.baseline should be false after set")
+	}
+}
+
 // ---------- config set ----------
 
 func TestConfigSetStringField(t *testing.T) {

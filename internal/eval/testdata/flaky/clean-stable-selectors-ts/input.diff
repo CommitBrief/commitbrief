@@ -1,0 +1,14 @@
+diff --git a/e2e/login.spec.ts b/e2e/login.spec.ts
+index 1111111..2222222 100644
+--- a/e2e/login.spec.ts
++++ b/e2e/login.spec.ts
+@@ -2,5 +2,10 @@ test('logs in', async ({ page }) => {
+   await page.goto('/login')
+   await page.getByLabel('Email').fill('a@b.com')
+   await page.getByLabel('Password').fill('secret')
++  await page.getByRole('button', { name: 'Sign in' }).click()
++  await page.getByTestId('dashboard').waitFor()
++  await cy.wait('@session')
++  await expect(page.getByText('Welcome')).toBeVisible()
++  await expect(page.locator('[data-test=avatar]')).toBeVisible()
+ })

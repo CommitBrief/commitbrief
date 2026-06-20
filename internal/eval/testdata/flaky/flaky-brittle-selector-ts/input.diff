@@ -1,0 +1,13 @@
+diff --git a/e2e/checkout.spec.ts b/e2e/checkout.spec.ts
+index 1111111..2222222 100644
+--- a/e2e/checkout.spec.ts
++++ b/e2e/checkout.spec.ts
+@@ -10,5 +10,9 @@ test('completes checkout', async ({ page }) => {
+   await page.goto('/cart')
+   await page.getByRole('button', { name: 'Checkout' }).click()
+   await expect(page).toHaveURL(/\/pay/)
++  await page.locator('//section[2]/form/button[1]').click()
++  await page.locator('.summary > div:nth-child(3)').click()
++  await page.getByTestId('confirm').click()
++  await expect(page.getByRole('heading')).toHaveText('Thanks')
+ })

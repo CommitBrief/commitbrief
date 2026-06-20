@@ -1,0 +1,16 @@
+diff --git a/internal/token/refresh_test.go b/internal/token/refresh_test.go
+index 1111111..2222222 100644
+--- a/internal/token/refresh_test.go
++++ b/internal/token/refresh_test.go
+@@ -6,6 +6,12 @@ func TestRefresh(t *testing.T) {
+ 	fixed := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+ 	clock := fakeClock{now: fixed}
+ 	store := newStore(clock)
++	api := newFakeAPI()
++	tok := Refresh(store, api)
++	require.Equal(t, fixed.Add(time.Hour), tok.ExpiresAt)
++	require.NoError(t, store.Err())
++	require.True(t, tok.Valid)
++	assertPersisted(t, store, tok)
+ 	_ = clock
+ }

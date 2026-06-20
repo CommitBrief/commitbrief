@@ -1,0 +1,13 @@
+diff --git a/tests/test_shuffle.py b/tests/test_shuffle.py
+index 1111111..2222222 100644
+--- a/tests/test_shuffle.py
++++ b/tests/test_shuffle.py
+@@ -3,5 +3,9 @@ def test_deck_shuffle():
+     deck = build_deck()
+     shuffler = Shuffler(deck)
+     result = shuffler.run()
++    pick = random.choice(result)
++    assert pick in result
++    n = random.randint(0, 51)
++    assert result[n] is not None
+     assert len(result) == 52

@@ -27,8 +27,8 @@ test: ## Run unit + integration tests (live provider tests excluded)
 test-live: ## Run live provider tests (real API keys required)
 	$(GO) test -tags=live ./...
 
-eval: ## Deterministic mock-tier review-quality eval (CI-safe; ADR-0018)
-	$(GO) test ./internal/eval/ -run TestEvalMockCorpus -v
+eval: ## Deterministic review-quality + static flaky eval (CI-safe; ADR-0018/0022)
+	$(GO) test ./internal/eval/ -run 'TestEvalMockCorpus|TestEvalFlakyCorpus' -v
 
 eval-live: ## Live-provider review-quality eval (uses COMMITBRIEF_EVAL_PROVIDER or ~/.commitbrief/config.yml)
 	$(GO) test -tags=live -count=1 -timeout=20m ./internal/eval/ -run '^TestEvalLive$$' -v

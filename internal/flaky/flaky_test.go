@@ -92,7 +92,9 @@ func assertResolved(t *testing.T, f render.Finding) {
 	if f.Description == "" || f.Suggestion == "" {
 		t.Errorf("missing description/suggestion: %+v", f)
 	}
-	if !strings.HasPrefix(f.Snippet, "+") {
+	// Line-scoped rules carry the matched line as a "+"-prefixed snippet;
+	// file-scoped rules (over-mock) legitimately carry none.
+	if f.Snippet != "" && !strings.HasPrefix(f.Snippet, "+") {
 		t.Errorf("snippet should keep the diff prefix: %q", f.Snippet)
 	}
 }
@@ -177,6 +179,190 @@ func TestDetect_CypressFixedWaitPrecision(t *testing.T) {
 		t.Errorf("cy.wait line = %d, want 6", got[0].Line)
 	}
 	assertResolved(t, got[0])
+}
+
+// findingByTitleContains returns the first finding whose title contains sub
+// (case-insensitive), or a zero Finding and false.
+func findingByTitleContains(got []render.Finding, sub string) (render.Finding, bool) {
+	for _, f := range got {
+		if strings.Contains(strings.ToLower(f.Title), strings.ToLower(sub)) {
+			return f, true
+		}
+	}
+	return render.Finding{}, false
+}
+
+func TestDetect_BrittleSelector(t *testing.T) {
+	cat := loadCatalog(t)
+	// Positive: an absolute-XPath Playwright locator and a CSS :nth-child are
+	// brittle. Negative: a data-testid locator and a role/text query are the
+	// recommended stable patterns and must NOT be flagged.
+	raw := `diff --git a/e2e/checkout.spec.ts b/e2e/checkout.spec.ts
+--- a/e2e/checkout.spec.ts
++++ b/e2e/checkout.spec.ts
+@@ -1,1 +1,6 @@
+ test('checkout', async () => {
++  await page.locator('//div[2]/button[1]').click()
++  cy.get('ul li:nth-child(3)').click()
++  await page.getByTestId('submit').click()
++  await page.getByRole('button', { name: 'Pay' }).click()
++  cy.get('[data-test=total]').should('be.visible')
+`
+	got := detect(t, cat, raw)
+	var brittle []render.Finding
+	for _, f := range got {
+		if strings.Contains(strings.ToLower(f.Title), "selector") {
+			brittle = append(brittle, f)
+		}
+	}
+	if len(brittle) != 2 {
+		t.Fatalf("brittle-selector: want 2 findings (absolute XPath + :nth-child), got %d: %+v", len(brittle), got)
+	}
+	for _, f := range brittle {
+		assertResolved(t, f)
+		if f.Severity != render.SeverityLow {
+			t.Errorf("brittle-selector severity = %s, want low", f.Severity)
+		}
+	}
+	if brittle[0].Line != 2 {
+		t.Errorf("first brittle-selector line = %d, want 2", brittle[0].Line)
+	}
+}
+
+func TestDetect_BrittleSelectorOnlyJSTS(t *testing.T) {
+	cat := loadCatalog(t)
+	// :nth-child inside a Go test string is not a UI selector context; the
+	// rule is language-gated to js/ts and must stay silent here.
+	raw := `diff --git a/css_test.go b/css_test.go
+--- a/css_test.go
++++ b/css_test.go
+@@ -1,1 +1,2 @@
+ func TestParse(t *testing.T) {
++	got := parse("ul li:nth-child(2)")
+`
+	if got := detect(t, cat, raw); len(got) != 0 {
+		t.Fatalf("brittle-selector must be js/ts only, got %d on a .go file: %+v", len(got), got)
+	}
+}
+
+func TestDetect_TimeDependency(t *testing.T) {
+	cat := loadCatalog(t)
+	// Positive: time.Now() compared inside an assertion. Negative: time.Now()
+	// captured into a variable for setup (no assertion on the same line) must
+	// NOT be flagged — only a clock read in the assertion path is flaky.
+	raw := `diff --git a/clock_test.go b/clock_test.go
+--- a/clock_test.go
++++ b/clock_test.go
+@@ -1,1 +1,4 @@
+ func TestExpiry(t *testing.T) {
++	start := time.Now()
++	require.Equal(t, time.Now().Day(), got.Day())
++	process(start)
+`
+	got := detect(t, cat, raw)
+	f, ok := findingByTitleContains(got, "wall clock")
+	if !ok {
+		t.Fatalf("time-dependency: expected a finding, got %+v", got)
+	}
+	assertResolved(t, f)
+	if f.Line != 3 {
+		t.Errorf("time-dependency line = %d, want 3 (the assertion line, not the setup capture)", f.Line)
+	}
+	if f.Severity != render.SeverityLow {
+		t.Errorf("time-dependency severity = %s, want low", f.Severity)
+	}
+	// The setup capture on line 2 must not produce its own finding.
+	if len(got) != 1 {
+		t.Errorf("want exactly 1 finding (assertion only, not the setup capture), got %d: %+v", len(got), got)
+	}
+}
+
+func TestDetect_OverMock(t *testing.T) {
+	cat := loadCatalog(t)
+	// Positive: six jest mock setups inside one test function crosses the
+	// threshold (>5). The finding anchors at the sixth (threshold-crossing)
+	// setup.
+	raw := `diff --git a/svc.test.ts b/svc.test.ts
+--- a/svc.test.ts
++++ b/svc.test.ts
+@@ -1,1 +1,9 @@
+ test('processes order', () => {
++  jest.mock('./a')
++  jest.mock('./b')
++  jest.spyOn(svc, 'c')
++  jest.spyOn(svc, 'd')
++  api.fetch.mockReturnValue(1)
++  api.save.mockResolvedValue(2)
++  const r = run()
++  expect(r).toBe(2)
+`
+	got := detect(t, cat, raw)
+	f, ok := findingByTitleContains(got, "mocks")
+	if !ok {
+		t.Fatalf("over-mock: expected a finding, got %+v", got)
+	}
+	assertResolved(t, f)
+	if f.Severity != render.SeverityLow {
+		t.Errorf("over-mock severity = %s, want low", f.Severity)
+	}
+	if f.Snippet != "" {
+		t.Errorf("over-mock is file-scoped and should carry no snippet, got %q", f.Snippet)
+	}
+	// Anchored at the 6th setup = added line 7 (header is new line 1).
+	if f.Line != 7 {
+		t.Errorf("over-mock line = %d, want 7 (the threshold-crossing setup)", f.Line)
+	}
+}
+
+func TestDetect_OverMockUnderThreshold(t *testing.T) {
+	cat := loadCatalog(t)
+	// Exactly the threshold count (5) of legitimate stubs must NOT fire — the
+	// gate only triggers above overMockThreshold to keep precision high.
+	raw := `diff --git a/svc.test.ts b/svc.test.ts
+--- a/svc.test.ts
++++ b/svc.test.ts
+@@ -1,1 +1,8 @@
+ test('processes order', () => {
++  jest.mock('./a')
++  jest.mock('./b')
++  jest.spyOn(svc, 'c')
++  jest.spyOn(svc, 'd')
++  api.fetch.mockReturnValue(1)
++  const r = run()
++  expect(r).toBe(1)
+`
+	for _, f := range detect(t, cat, raw) {
+		if strings.Contains(strings.ToLower(f.Title), "mocks") {
+			t.Fatalf("over-mock fired at the threshold (5); should only fire above it: %+v", f)
+		}
+	}
+}
+
+func TestDetect_OverMockScopedPerFunction(t *testing.T) {
+	cat := loadCatalog(t)
+	// Three mocks in one test and three in another must NOT combine into a
+	// single over-threshold count: scoping is per test function.
+	raw := `diff --git a/svc.test.ts b/svc.test.ts
+--- a/svc.test.ts
++++ b/svc.test.ts
+@@ -1,1 +1,11 @@
+ describe('svc', () => {
++  test('a', () => {
++    jest.mock('./a')
++    jest.mock('./b')
++    jest.spyOn(svc, 'c')
++  })
++  test('b', () => {
++    jest.mock('./d')
++    jest.mock('./e')
++    jest.spyOn(svc, 'f')
++  })
+`
+	for _, f := range detect(t, cat, raw) {
+		if strings.Contains(strings.ToLower(f.Title), "mocks") {
+			t.Fatalf("over-mock must not aggregate across two functions (3+3): %+v", f)
+		}
+	}
 }
 
 func TestDetect_DeletedAndBinaryFilesSkipped(t *testing.T) {

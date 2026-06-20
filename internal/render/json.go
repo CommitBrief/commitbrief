@@ -50,6 +50,15 @@ type jsonMeta struct {
 	LatencyMS int64     `json:"latency_ms"`
 	Cached    bool      `json:"cached"`
 	Timestamp time.Time `json:"timestamp"`
+
+	// Signal-control counts (ADR-0027). Additive optional fields: emitted
+	// only when non-zero (omitempty) so a review with no baselining /
+	// suppression produces byte-for-byte the same meta block as schema v1
+	// always did — schema stays 1. Baselined/Suppressed findings are removed
+	// from findings[]; these counts report how many, so the filtering is
+	// never silent.
+	Baselined  int `json:"baselined,omitempty"`
+	Suppressed int `json:"suppressed,omitempty"`
 }
 
 type jsonUsage struct {
@@ -78,13 +87,15 @@ func JSON(w io.Writer, p Payload) error {
 		Content:  content,
 		Findings: findings,
 		Meta: jsonMeta{
-			Provider:  p.Meta.Provider,
-			Model:     p.Meta.Model,
-			Lang:      p.Meta.Lang,
-			Cost:      p.Meta.Cost,
-			LatencyMS: p.Meta.Latency.Milliseconds(),
-			Cached:    p.Meta.Cached,
-			Timestamp: p.Meta.Timestamp,
+			Provider:   p.Meta.Provider,
+			Model:      p.Meta.Model,
+			Lang:       p.Meta.Lang,
+			Cost:       p.Meta.Cost,
+			LatencyMS:  p.Meta.Latency.Milliseconds(),
+			Cached:     p.Meta.Cached,
+			Timestamp:  p.Meta.Timestamp,
+			Baselined:  p.Meta.Baselined,
+			Suppressed: p.Meta.Suppressed,
 			Usage: jsonUsage{
 				InputTokens:       p.Meta.Usage.InputTokens,
 				OutputTokens:      p.Meta.Usage.OutputTokens,

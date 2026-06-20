@@ -242,8 +242,10 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 		switch parts[1] {
 		case "flaky":
 			return strconv.FormatBool(cfg.Review.Flaky), nil
+		case "baseline":
+			return strconv.FormatBool(cfg.Review.Baseline), nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline)", parts[1])
 		}
 
 	case "version":
@@ -436,8 +438,14 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 				return fmt.Errorf("config: review.flaky: %w", err)
 			}
 			cfg.Review.Flaky = b
+		case "baseline":
+			b, err := parseConfigBool(value)
+			if err != nil {
+				return fmt.Errorf("config: review.baseline: %w", err)
+			}
+			cfg.Review.Baseline = b
 		default:
-			return fmt.Errorf("config: unknown field %q in review (allowed: flaky)", parts[1])
+			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline)", parts[1])
 		}
 		return nil
 

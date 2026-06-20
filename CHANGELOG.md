@@ -10,6 +10,65 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **Flaky-test detector: three new rules (ADR-0022).** The deterministic static
+  pre-pass now flags three more high-precision anti-patterns in changed test files,
+  in addition to `hard-sleep` and `unseeded-random`:
+  - **`brittle-selector`** (`low`, JS/TS): fragile UI/E2E locators — absolute or
+    positional XPath (`//section[2]/button[1]`, `xpath=/…`, `By.xpath('//…')`,
+    `.locator('//…')`), CSS `:nth-child` / `:nth-of-type`, Cypress `.eq(<n>)`,
+    Playwright `.nth(<n>)`. Stable `data-testid` / role / attribute selectors are
+    never flagged.
+  - **`over-mock`** (`low`): a single test function that sets up more than five
+    mock/stub statements (`jest.mock`/`spyOn`/`mock*Value`, `when(…).thenReturn`,
+    `sinon.stub`, `patch(…)`/`MagicMock`, `gomock`/`.EXPECT()`, Mockery
+    `shouldReceive`). The **first file-scoped rule** — it counts setups across a
+    test body and emits one finding at the threshold-crossing line.
+  - **`time-dependency`** (`low`): a wall-clock read (`time.Now()`, `Date.now()`,
+    `new Date()`, `datetime.now/utcnow`, `System.currentTimeMillis()`) used directly
+    in an assertion rather than against an injected clock; a setup clock is not flagged.
+
+  All three stay conservative (precision over recall) and ship localized en/tr finding
+  text. No JSON-schema change (the locked findings schema stays `1`). Toggle with the
+  existing `--no-flaky` / `review.flaky: false`.
+- **Deterministic flaky eval slice (ADR-0018/0022).** A new known-answer corpus at
+  `internal/eval/testdata/flaky/` (7 fixtures, 8 expected findings, 2 clean controls,
+  2 held-out) scores the **real** static detector's precision / recall /
+  false-positive-rate through the shared eval matcher — provider-free, so it runs under
+  `go test ./...`, the `make check` CI gate, and the deterministic `make eval`.
+- **Signal control: a user-private baseline (ADR-0027).** Brownfield repos can now
+  accept the current findings once and see only NEW findings on later runs.
+  `commitbrief --update-baseline` records the current findings' fingerprints in
+  `.commitbrief/baseline.json` (and does **not** filter that run); subsequent runs
+  remove any finding whose fingerprint is recorded there. The file is **per-developer
+  and gitignored** — it never reaches CI or a reviewer's gate, so it can't be used to
+  hide a real bug from a senior. The fingerprint is
+  `sha256(File + Severity + normalize(Title))`, which is **resilient to line drift**
+  (a finding that moves up or down the file stays baselined) and deliberately ignores
+  the LLM-volatile description/snippet. Toggle with `review.baseline` (default `true`,
+  `config set review.baseline <bool>`) or bypass per-run with `--no-baseline`. A missing
+  baseline file is a transparent no-op. Localized (en/tr).
+- **Signal control: inline suppression (ADR-0027).** Silence a single finding at its
+  source with a visible, written reason: add a `commitbrief-ignore: <reason>` (or
+  `commitbrief-ignore[<severity>]: <reason>`) comment on the offending line or the line
+  directly above it. A scoped marker silences only that severity; an unscoped marker
+  silences any. The comment prefix is irrelevant — `//`, `#`, `--`, and `/* */` all work.
+  Markers are read from the **added** diff lines, so the suppression is part of the change
+  under review (a reviewer sees it in the diff). Localized (en/tr).
+- Both baseline and inline suppression are **true removals**: a removed finding no longer
+  counts toward `--fail-on`, no longer appears in the `--json findings[]` array, and is
+  hidden from the rendered output — distinct from the display-only `--min-severity`. The
+  filtering is never silent: optional additive `meta.baselined` / `meta.suppressed` counts
+  appear in the JSON output (schema stays `1`) and a one-line footer
+  ("N baselined · M suppressed") prints to stderr.
+- **`.pre-commit-hooks.yaml` — pre-commit framework integration (EC1).** CommitBrief can
+  now be added to a [pre-commit](https://pre-commit.com) `.pre-commit-config.yaml` with a
+  one-line entry. Two hook ids are published: `commitbrief` (`language: golang`, the
+  documented default — the framework builds the binary) and `commitbrief-system`
+  (`language: system`, uses an already-installed binary on PATH). Both run the review gate
+  on the staged diff (`--staged --fail-on=high`) non-interactively. This is **distinct
+  from `commitbrief install-hook`**, which writes a native git hook script.
+
 ## [1.7.0] - 2026-06-19
 
 ### Added

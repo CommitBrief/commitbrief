@@ -334,6 +334,16 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				findings, _ = render.ParseFindings(entry.Result.Content)
 			}
 			findings = mergeFlaky(findings, flakyFindings)
+			// Signal-control stage (ADR-0027): baseline + inline suppression
+			// are TRUE removals applied before fail-on / render, even on a
+			// cache hit (the cached body is the provider response; what the
+			// developer chose to baseline/suppress still applies this run).
+			var baselined, suppressed int
+			findings, baselined, suppressed, err = applyActionableFilters(cmd, app, parsed, findings)
+			if err != nil {
+				return err
+			}
+			meta.Baselined, meta.Suppressed = baselined, suppressed
 			if entry.Result.Format == cache.FormatPlainText {
 				// CLI-emitted output: stream the cached body verbatim to
 				// stdout instead of going through the cards renderer.
@@ -343,6 +353,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			} else if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
 				return err
 			}
+			signalControlFooter(cmd, app, baselined, suppressed)
 			if err := suggestCommitMessage(ctx, cmd, app, prov, model, diffText); err != nil {
 				return err
 			}
@@ -453,6 +464,15 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
 	}
 	findings = mergeFlaky(findings, flakyFindings)
+	// Signal-control stage (ADR-0027): baseline + inline suppression are TRUE
+	// removals (fail-on + JSON findings[] + display), inserted after the
+	// findings are assembled and before applyFailOn / render — distinct from
+	// the display-only filterMinSeverity. --update-baseline short-circuits
+	// here to absorb the current findings instead of filtering this run.
+	findings, baselined, suppressed, err := applyActionableFilters(cmd, app, parsed, findings)
+	if err != nil {
+		return err
+	}
 
 	respModel := model
 	meta := render.Meta{
@@ -467,6 +487,8 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		LinesAdded:   parsed.AddedLines(),
 		LinesRemoved: parsed.DeletedLines(),
 		RulesLoaded:  loaded.Source != rules.SourceDefault,
+		Baselined:    baselined,
+		Suppressed:   suppressed,
 	}
 
 	if !global.noCache && cacheStore != nil {
@@ -505,6 +527,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	} else if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
 		return err
 	}
+	signalControlFooter(cmd, app, baselined, suppressed)
 	if err := suggestCommitMessage(ctx, cmd, app, prov, model, diffText); err != nil {
 		return err
 	}

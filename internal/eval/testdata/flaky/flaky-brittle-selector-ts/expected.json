@@ -1,0 +1,8 @@
+{
+  "language": "ts",
+  "expected_findings": [
+    {"id":"brittle-absolute-xpath","file":"e2e/checkout.spec.ts","line":13,"line_tol":0,"category":"flaky-brittle-selector","min_severity":"low","summary":"Absolute-position XPath locator ('//section[2]/form/button[1]') breaks on unrelated markup changes."},
+    {"id":"brittle-nth-child","file":"e2e/checkout.spec.ts","line":14,"line_tol":0,"category":"flaky-brittle-selector","min_severity":"low","summary":"CSS :nth-child(3) is position-dependent and fragile."}
+  ],
+  "must_stay_silent_on": []
+}

@@ -169,6 +169,52 @@ func TestJSONLatencyMillis(t *testing.T) {
 	}
 }
 
+// TestJSONSignalControlCountsAdditive verifies the ADR-0027 meta counts:
+// absent (omitted) when zero so the locked schema-v1 shape is byte-stable,
+// present when non-zero so filtering is never silent.
+func TestJSONSignalControlCountsOmittedWhenZero(t *testing.T) {
+	var w bytes.Buffer
+	if err := JSON(&w, samplePayload()); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(w.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	meta := doc["meta"].(map[string]any)
+	if _, ok := meta["baselined"]; ok {
+		t.Error("baselined must be omitted when zero (schema-v1 byte stability)")
+	}
+	if _, ok := meta["suppressed"]; ok {
+		t.Error("suppressed must be omitted when zero")
+	}
+}
+
+func TestJSONSignalControlCountsPresentWhenSet(t *testing.T) {
+	p := samplePayload()
+	p.Meta.Baselined = 3
+	p.Meta.Suppressed = 2
+	var w bytes.Buffer
+	if err := JSON(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(w.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	meta := doc["meta"].(map[string]any)
+	if meta["baselined"] != float64(3) {
+		t.Errorf("baselined = %v, want 3", meta["baselined"])
+	}
+	if meta["suppressed"] != float64(2) {
+		t.Errorf("suppressed = %v, want 2", meta["suppressed"])
+	}
+	// schema int must remain 1 — counts are additive, not a version bump.
+	if doc["schema"] != float64(1) {
+		t.Errorf("schema = %v, want 1 (additive change must not bump)", doc["schema"])
+	}
+}
+
 // TestJSONv1Golden is the drift guard for the v1 JSON schema. Any change to
 // JSON output bytes (field rename, type change, ordering, formatting) trips
 // this test. If the change is intentional and v1-compatible (additive only —

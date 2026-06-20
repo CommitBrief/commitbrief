@@ -1,0 +1,15 @@
+diff --git a/internal/worker/poll_test.go b/internal/worker/poll_test.go
+index 1111111..2222222 100644
+--- a/internal/worker/poll_test.go
++++ b/internal/worker/poll_test.go
+@@ -8,6 +8,11 @@ func TestPollDrainsQueue(t *testing.T) {
+ 	q := newQueue()
+ 	q.push(job{})
+ 	go drain(q)
++	time.Sleep(2 * time.Second)
++	if q.len() != 0 {
++		t.Fatalf("queue not drained")
++	}
++	cancel()
+ 	assertClosed(t, q)
+ }

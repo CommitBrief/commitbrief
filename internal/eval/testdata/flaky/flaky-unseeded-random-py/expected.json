@@ -1,0 +1,8 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {"id":"unseeded-random-choice","file":"tests/test_shuffle.py","line":6,"line_tol":0,"category":"flaky-unseeded-random","min_severity":"low","summary":"random.choice on a shuffled result without a fixed seed makes the assertion non-deterministic."},
+    {"id":"unseeded-random-randint","file":"tests/test_shuffle.py","line":8,"line_tol":0,"category":"flaky-unseeded-random","min_severity":"low","summary":"random.randint used to index the result without a seed is non-reproducible."}
+  ],
+  "must_stay_silent_on": []
+}

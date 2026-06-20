@@ -1,0 +1,10 @@
+{
+  "language": "ts",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file":"e2e/login.spec.ts","line":5,"reason":"getByRole is a stable accessible selector, not brittle"},
+    {"file":"e2e/login.spec.ts","line":6,"reason":"getByTestId + condition-based waitFor is the recommended pattern"},
+    {"file":"e2e/login.spec.ts","line":7,"reason":"cy.wait('@alias') is an aliased wait, not a fixed numeric sleep"},
+    {"file":"e2e/login.spec.ts","line":9,"reason":"[data-test=avatar] attribute selector is stable, not position-based"}
+  ]
+}

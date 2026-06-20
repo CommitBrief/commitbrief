@@ -21,33 +21,35 @@ import (
 )
 
 type globalFlags struct {
-	json          bool
-	markdown      bool
-	output        string
-	noCache       bool
-	yes           bool
-	verbose       bool
-	quiet         bool
-	compact       bool
-	allowSecrets  bool
-	noCostCheck   bool
-	noFlaky       bool
-	copy          bool
-	suggestCommit bool
-	commitType    string // commit: --type <format>; "" → commit.type config → "plain"
-	commitGen     int    // commit: --generate <N>; 0 → commit.generate config → 1
-	failOn        string
-	minSeverity   string
-	lang          string
-	provider      string
-	model         string
-	color         string
-	cli           string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
-	withContext   bool     // --with-context; CLI providers only — let the host CLI read project files beyond the diff (ADR-0017)
-	showPrompt    bool     // --show-prompt; print the assembled system+user prompt and exit (no provider call)
-	files         []string // global --file (repeatable); path filter applied post-parse
-	dirs          []string // global --dir (repeatable); prefix filter applied post-parse
-	genMan        string   // hidden: --gen-man <dir> writes man pages and exits
+	json           bool
+	markdown       bool
+	output         string
+	noCache        bool
+	yes            bool
+	verbose        bool
+	quiet          bool
+	compact        bool
+	allowSecrets   bool
+	noCostCheck    bool
+	noFlaky        bool
+	updateBaseline bool // --update-baseline; absorb the current findings into .commitbrief/baseline.json instead of filtering (ADR-0027)
+	noBaseline     bool // --no-baseline; ignore the baseline for this run (ADR-0027)
+	copy           bool
+	suggestCommit  bool
+	commitType     string // commit: --type <format>; "" → commit.type config → "plain"
+	commitGen      int    // commit: --generate <N>; 0 → commit.generate config → 1
+	failOn         string
+	minSeverity    string
+	lang           string
+	provider       string
+	model          string
+	color          string
+	cli            string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
+	withContext    bool     // --with-context; CLI providers only — let the host CLI read project files beyond the diff (ADR-0017)
+	showPrompt     bool     // --show-prompt; print the assembled system+user prompt and exit (no provider call)
+	files          []string // global --file (repeatable); path filter applied post-parse
+	dirs           []string // global --dir (repeatable); prefix filter applied post-parse
+	genMan         string   // hidden: --gen-man <dir> writes man pages and exits
 }
 
 var global globalFlags
@@ -97,7 +99,10 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
 	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
 	flags.BoolVar(&global.noFlaky, "no-flaky", false, "skip the deterministic flaky-test detector (ADR-0022)")
+	flags.BoolVar(&global.updateBaseline, "update-baseline", false, "rewrite .commitbrief/baseline.json from the current findings (accepts them all) instead of filtering this run; user-private, gitignored (ADR-0027)")
+	flags.BoolVar(&global.noBaseline, "no-baseline", false, "ignore the signal-control baseline for this run (show everything, even baselined findings)")
 	flags.BoolVar(&global.copy, "copy", false, "copy findings (severity, path, title, description) to the system clipboard via OSC 52 + native tool")
+	cmd.MarkFlagsMutuallyExclusive("update-baseline", "no-baseline")
 	flags.BoolVar(&global.suggestCommit, "suggest-commit", false, "after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)")
 	flags.StringVar(&global.failOn, "fail-on", "", "exit 1 if any finding meets/exceeds severity (critical|high|medium|low|info|any|none)")
 	flags.StringVar(&global.minSeverity, "min-severity", "", "hide findings below this severity in the rendered output (critical|high|medium|low|info); --json and --fail-on still see the full set")

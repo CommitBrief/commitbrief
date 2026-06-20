@@ -56,7 +56,68 @@ func (d *Detector) Detect(parsed diff.Diff) []render.Finding {
 				}
 			}
 		}
+		out = append(out, d.scanOverMock(f.Path, lang, f.Hunks)...)
 	}
+	return out
+}
+
+// scanOverMock implements the file-scoped over-mock rule. It walks the file's
+// hunks tracking the current enclosing test function (opened by any
+// context-or-added line matching reTestFuncHeader) and counts mock-setup
+// statements on ADDED lines only within that function. A function that
+// accumulates more than overMockThreshold mock setups yields one finding,
+// anchored at the line of its threshold-crossing setup. Counting context
+// lines for the scope (but only added lines for the tally) keeps it precise:
+// the gate fires only when the *change* piles new mocks into a test, while
+// still associating them with their real enclosing function.
+func (d *Detector) scanOverMock(path, lang string, hunks []diff.Hunk) []render.Finding {
+	var out []render.Finding
+
+	// Per-scope state. A scope opens at a test-function header and stays open
+	// until the next header (regex-based scoping has no brace tracking, which
+	// is acceptable for a conservative count-threshold heuristic).
+	inScope := false
+	count := 0
+	emitted := false // at most one finding per function scope
+	var crossLine int
+
+	flush := func() {
+		if inScope && count > overMockThreshold && !emitted {
+			out = append(out, d.makeFinding(path, lang, crossLine,
+				overMockRule.severity, overMockRule.titleKey,
+				overMockRule.descKey, overMockRule.sugKey, ""))
+		}
+		count = 0
+		emitted = false
+	}
+
+	for _, h := range hunks {
+		// A new hunk is a discontinuity in the file; close any open scope so
+		// counts never bleed across an elided region.
+		flush()
+		inScope = false
+
+		line := h.NewStart
+		for _, l := range h.Lines {
+			switch l.Kind {
+			case diff.LineContext, diff.LineAdd:
+				if reTestFuncHeader.MatchString(l.Text) {
+					flush()
+					inScope = true
+				}
+				if inScope && l.Kind == diff.LineAdd && reMockSetup.MatchString(l.Text) {
+					count++
+					if count == overMockThreshold+1 {
+						crossLine = line
+					}
+				}
+				line++
+			case diff.LineDel:
+				// does not advance the new-file cursor
+			}
+		}
+	}
+	flush()
 	return out
 }
 
@@ -69,18 +130,28 @@ func (d *Detector) scanLine(path, lang string, line int, text string) []render.F
 		if !r.appliesTo(lang) || !r.pattern.MatchString(text) {
 			continue
 		}
-		out = append(out, render.Finding{
-			Severity:    r.severity,
-			File:        path,
-			Line:        line,
-			Title:       d.cat.T(r.titleKey),
-			Description: d.cat.T(r.descKey),
-			Suggestion:  d.cat.T(r.sugKey),
-			Language:    lang,
-			Snippet:     "+" + text,
-		})
+		out = append(out, d.makeFinding(path, lang, line, r.severity, r.titleKey, r.descKey, r.sugKey, text))
 	}
 	return out
+}
+
+// makeFinding builds a localized render.Finding for one matched rule. snippet
+// is the raw matched line; when empty (file-scoped rules with no single line
+// of text) the finding carries no snippet rather than a bare "+".
+func (d *Detector) makeFinding(path, lang string, line int, sev render.Severity, titleKey, descKey, sugKey, snippet string) render.Finding {
+	f := render.Finding{
+		Severity:    sev,
+		File:        path,
+		Line:        line,
+		Title:       d.cat.T(titleKey),
+		Description: d.cat.T(descKey),
+		Suggestion:  d.cat.T(sugKey),
+		Language:    lang,
+	}
+	if snippet != "" {
+		f.Snippet = "+" + snippet
+	}
+	return f
 }
 
 // isTestFile reports whether path looks like a test file by convention across

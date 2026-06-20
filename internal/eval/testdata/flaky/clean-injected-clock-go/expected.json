@@ -1,0 +1,9 @@
+{
+  "language": "go",
+  "held_out": true,
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file":"internal/token/refresh_test.go","line":11,"reason":"asserts against the injected fixed clock, not time.Now() — not time-dependent"},
+    {"file":"internal/token/refresh_test.go","line":9,"reason":"a single fake collaborator is below the over-mock threshold"}
+  ]
+}

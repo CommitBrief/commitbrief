@@ -18,12 +18,24 @@ type Config struct {
 }
 
 // ReviewConfig toggles review-time behaviors that aren't pre-send guards.
+//
 // Flaky enables the deterministic static flaky-test detector (ADR-0022): a
 // provider-free pre-pass that flags timing/randomness anti-patterns in
 // changed test files and merges them into the structured findings. On by
 // default; precedence is --no-flaky > review.flaky config > built-in (true).
+//
+// Baseline enables the user-private signal-control baseline (ADR-0027,
+// SC1): when on (the default) and a <repoRoot>/.commitbrief/baseline.json
+// exists, findings whose fingerprint is recorded there are removed from the
+// run (a TRUE removal — fail-on + JSON findings[] + display, distinct from
+// the display-only --min-severity). The file is per-developer and gitignored
+// so it never reaches CI/the senior gate. Precedence is --no-baseline >
+// review.baseline config > built-in (true); --update-baseline rewrites the
+// file from the current findings instead of filtering this run. A missing
+// file is a transparent no-op even when this is true.
 type ReviewConfig struct {
-	Flaky bool `yaml:"flaky"`
+	Flaky    bool `yaml:"flaky"`
+	Baseline bool `yaml:"baseline"`
 }
 
 // CommitConfig sets defaults for the `commit` command (ADR-0019) so a repo

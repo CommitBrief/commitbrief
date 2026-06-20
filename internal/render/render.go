@@ -74,4 +74,13 @@ type Meta struct {
 	LinesAdded   int  // total `+` lines in the reviewed diff
 	LinesRemoved int  // total `-` lines in the reviewed diff
 	RulesLoaded  bool // a non-default COMMITBRIEF.md was loaded
+
+	// Signal-control removals (ADR-0027). Baselined counts findings dropped
+	// because their fingerprint is in the user-private baseline; Suppressed
+	// counts findings dropped by an inline commitbrief-ignore marker. Both
+	// are surfaced as optional additive JSON meta counts and a one-line human
+	// footer; zero values are omitted from the JSON output (omitempty) so the
+	// locked schema-v1 shape is unchanged when no signal control fired.
+	Baselined  int
+	Suppressed int
 }

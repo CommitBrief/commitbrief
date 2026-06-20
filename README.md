@@ -249,21 +249,91 @@ read project files beyond the diff to ground the review; see below),
 the diff), `--no-cost-check` (skip cost preflight),
 `--show-prompt` (print the exact system + user prompt that would be sent,
 then exit — no provider call, no cost; honours `--output`), `--no-flaky`
-(skip the flaky-test detector below), `--color`. See `commitbrief --help`.
+(skip the flaky-test detector below), `--update-baseline` /
+`--no-baseline` (signal-control baseline; see below), `--color`. See
+`commitbrief --help`.
 
 ### Flaky-test detection (deterministic, ADR-0022)
 
 Before the model is called, a **static pre-pass** scans the added lines of any
-changed **test** files for high-precision flakiness anti-patterns — hard-coded
-sleeps / fixed waits (`time.Sleep`, `Thread.sleep`, `Task.Delay`,
-`asyncio.sleep`, `*.waitForTimeout`, numeric `cy.wait`, `usleep`, `sleep(<n>)`)
-and unseeded randomness (`Math.random`, Python `random.*`, Go `math/rand`).
+changed **test** files for high-precision flakiness anti-patterns:
+
+- **hard-coded sleeps / fixed waits** (`medium`): `time.Sleep`, `Thread.sleep`,
+  `Task.Delay`, `asyncio.sleep`, `*.waitForTimeout`, numeric `cy.wait`,
+  `usleep`, `sleep(<n>)`;
+- **unseeded randomness** (`low`): `Math.random`, Python `random.*`, Go
+  `math/rand`;
+- **brittle selectors** (`low`, js/ts): absolute/positional XPath, CSS
+  `:nth-child` / `:nth-of-type`, Cypress `.eq(<n>)`, Playwright `.nth(<n>)` —
+  stable `data-testid` / role / attribute selectors are never flagged;
+- **over-mocking** (`low`): a single test function that sets up more than five
+  mocks/stubs (`jest.mock`/`spyOn`, `when(…).thenReturn`, `sinon.stub`,
+  `patch(…)`, `gomock`/`.EXPECT()`, Mockery) — pinned to implementation, not
+  behaviour;
+- **time-dependent assertions** (`low`): a wall-clock read (`time.Now()`,
+  `Date.now()`, `new Date()`, `datetime.now`, `System.currentTimeMillis()`)
+  used directly in an assertion instead of an injected clock.
+
 Matches merge into the normal findings, so they render, count toward
 `--fail-on`, and `--copy` like any other finding — but they are **deterministic
 and reproducible**: no model call, no JSON-schema change. On by default for the
 API/mock providers; turn it off per-run with `--no-flaky` or persistently with
 `review.flaky: false`. CLI-tool-backed plain-text providers are unaffected for
 now.
+
+### Signal control: baseline + inline suppression (ADR-0027)
+
+Three layers keep the noise down. `--min-severity` (above) is **display-only**.
+The other two are **true removals** — a removed finding no longer counts toward
+`--fail-on`, no longer appears in `--json findings[]`, and is hidden from the
+rendered output:
+
+- **Baseline (per-developer, gitignored).** On a brownfield repo, run
+  `commitbrief --update-baseline` once to accept the current findings — it writes
+  their fingerprints to `.commitbrief/baseline.json` and does **not** filter that
+  run. Every later run then surfaces only **new** findings; the known ones are
+  removed. The fingerprint is resilient to line drift (a finding that moves up or
+  down the file stays baselined). The file is **never committed** — it lives under
+  the already-gitignored `.commitbrief/`, so CI and a reviewer's gate apply no
+  baseline and see everything (it can't be used to hide a real bug). Re-accept any
+  time with `--update-baseline`; ignore the baseline for one run with
+  `--no-baseline`; disable persistently with `review.baseline: false`.
+
+- **Inline suppression (in committed source).** Silence one finding with a visible
+  reason by adding a comment on the offending line — or the line directly above it:
+
+  ```go
+  result := db.Query(userInput) // commitbrief-ignore[high]: input is parameterized below
+  ```
+
+  Use `commitbrief-ignore: <reason>` to silence any finding on the line, or
+  `commitbrief-ignore[<severity>]: <reason>` to silence only that severity. The
+  comment prefix doesn't matter (`//`, `#`, `--`, `/* */` all work). Because the
+  marker is in committed source, a reviewer sees it in the diff.
+
+Neither filter is silent: optional `meta.baselined` / `meta.suppressed` counts
+appear in `--json` (the schema stays v1) and a one-line `N baselined · M
+suppressed` footer prints to stderr.
+
+### Pre-commit framework (`.pre-commit-hooks.yaml`)
+
+Already using [pre-commit](https://pre-commit.com)? Add CommitBrief to your
+`.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/CommitBrief/commitbrief
+    rev: v1.8.0
+    hooks:
+      - id: commitbrief        # language: golang — pre-commit builds the binary
+      # - id: commitbrief-system   # or: use an already-installed binary on PATH
+```
+
+Both ids run the review gate on the staged diff (`--staged --fail-on=high`,
+override `args:` to change the gate). This is **distinct from `commitbrief
+install-hook`** (below), which writes a native git hook script and needs no
+framework — pick whichever fits your setup. The hook runs non-interactively, so a
+flagged secret aborts the commit (it never auto-confirms).
 
 ### `commitbrief commit`
 
@@ -517,6 +587,7 @@ commit:
   generate: 1                      # default --generate (number of message alternatives)
 review:
   flaky: true                      # deterministic flaky-test detector pre-pass (ADR-0022); --no-flaky overrides per-run
+  baseline: true                   # apply the user-private signal-control baseline (ADR-0027); --no-baseline overrides per-run, --update-baseline rewrites it
 ```
 
 ### Default command (`command.default`)

@@ -1,0 +1,9 @@
+{
+  "language": "go",
+  "held_out": true,
+  "expected_findings": [
+    {"id":"time-dependency-require","file":"internal/token/expiry_test.go","line":9,"line_tol":0,"category":"flaky-time-dependency","min_severity":"low","summary":"Assertion compares against time.Now() instead of an injected clock; couples the result to wall-clock time."},
+    {"id":"time-dependency-assert","file":"internal/token/expiry_test.go","line":10,"line_tol":0,"category":"flaky-time-dependency","min_severity":"low","summary":"assert.True against got.After(time.Now()) is wall-clock dependent."}
+  ],
+  "must_stay_silent_on": []
+}

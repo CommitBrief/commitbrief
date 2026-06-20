@@ -33,7 +33,8 @@ func Default() *Config {
 			Generate: 1,
 		},
 		Review: ReviewConfig{
-			Flaky: true,
+			Flaky:    true,
+			Baseline: true,
 		},
 	}
 }

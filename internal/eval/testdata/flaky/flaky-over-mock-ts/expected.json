@@ -1,0 +1,7 @@
+{
+  "language": "ts",
+  "expected_findings": [
+    {"id":"over-mock","file":"src/order/order.test.ts","line":12,"line_tol":1,"category":"flaky-over-mock","min_severity":"low","summary":"Six mock/stub setups in one test pin it to the implementation; mock only true boundaries."}
+  ],
+  "must_stay_silent_on": []
+}

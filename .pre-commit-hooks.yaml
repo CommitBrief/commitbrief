@@ -1,0 +1,52 @@
+# pre-commit framework manifest (https://pre-commit.com) — EC1, ADR-0027 ecosystem note.
+#
+# This is the manifest that the pre-commit.com tool reads when a user adds
+# CommitBrief to their .pre-commit-config.yaml. It is DISTINCT from
+# `commitbrief install-hook`, which writes a native script into
+# .git/hooks/{pre-commit,commit-msg,pre-push}. Pick one:
+#
+#   - pre-commit framework (this file): one-line entry in an existing
+#     .pre-commit-config.yaml; the framework installs/manages the binary.
+#   - `commitbrief install-hook`: no framework, a plain git hook script.
+#
+# Two ids are published so users on either footing can opt in:
+#
+#   - commitbrief         language: golang  — the documented default. The
+#       pre-commit framework builds the binary from this repo in an isolated
+#       environment, so a true one-line add works with no prior install.
+#   - commitbrief-system  language: system  — uses an already-installed
+#       `commitbrief` on PATH (Homebrew / Scoop / `go install`), for users
+#       who don't want pre-commit to manage a Go toolchain.
+#
+# Both run the review gate against the STAGED diff and fail the commit on a
+# high-or-worse finding. The hook runs non-interactively (no TTY): the
+# pre-send secret scanner ABORTS on a non-TTY detection rather than prompting,
+# so a leaked credential blocks the commit. `--yes` does NOT bypass the secret
+# scan. To raise/lower the gate, override `args` in your .pre-commit-config.yaml,
+# e.g. `args: [--staged, --fail-on=critical]`.
+#
+# Example .pre-commit-config.yaml entry:
+#
+#   repos:
+#     - repo: https://github.com/CommitBrief/commitbrief
+#       rev: v1.8.0
+#       hooks:
+#         - id: commitbrief
+
+- id: commitbrief
+  name: CommitBrief (AI code review)
+  description: Run a local LLM code review on the staged diff and block the commit on a high-severity finding.
+  entry: commitbrief
+  args: [--staged, --fail-on=high]
+  language: golang
+  pass_filenames: false
+  stages: [pre-commit]
+
+- id: commitbrief-system
+  name: CommitBrief (AI code review, system binary)
+  description: Same as `commitbrief` but uses an already-installed binary on PATH instead of building from source.
+  entry: commitbrief
+  args: [--staged, --fail-on=high]
+  language: system
+  pass_filenames: false
+  stages: [pre-commit]

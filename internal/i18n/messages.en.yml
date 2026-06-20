@@ -111,6 +111,14 @@ review.no_changes: "No reviewable changes after filtering."
 review.cache_disabled: "Cache disabled: %v"
 review.degraded: "warning: LLM produced malformed JSON; falling back to plain-text view."
 
+# Signal control (ADR-0027). baseline.updated reports a --update-baseline write
+# (count + path); baseline.filtered / suppress.filtered are the two halves of
+# the one-line human footer printed when findings were removed by the
+# user-private baseline or an inline commitbrief-ignore marker.
+baseline.updated: "Baseline updated: %d finding(s) recorded in %s"
+baseline.filtered: "%d baselined"
+suppress.filtered: "%d suppressed"
+
 output.template.invalid: "OUTPUT.md template is invalid at %s:\n  %s\n\nThe pipeline did not contact the provider. Fix the template, or run\n'commitbrief init --yes' to overwrite it with the default."
 
 compress.no_rules: "compress: no %s found at %s; run `commitbrief init` first"
@@ -227,3 +235,12 @@ flaky.hard_sleep.suggestion: "Replace the fixed delay with a condition-based wai
 flaky.unseeded_random.title: "Test relies on unseeded randomness"
 flaky.unseeded_random.description: "A random source without a fixed seed yields different values on every run, so assertions can pass or fail non-deterministically."
 flaky.unseeded_random.suggestion: "Seed the generator with a constant in the test, or inject a deterministic fake, so the run is reproducible."
+flaky.brittle_selector.title: "Test uses a brittle, position-based selector"
+flaky.brittle_selector.description: "Index- or position-based selectors (:nth-child, .eq(n)/.nth(n), absolute XPath) break when unrelated markup shifts, so the test fails on changes it was never meant to cover — a common source of UI flakiness."
+flaky.brittle_selector.suggestion: "Target a stable, intent-revealing handle instead — a data-testid/test id, an accessible role or label, or a semantic text match — so the selector survives layout changes."
+flaky.over_mock.title: "Test sets up an excessive number of mocks"
+flaky.over_mock.description: "A test that stubs many collaborators is pinned to the implementation rather than the behaviour: small refactors break it even when the behaviour is unchanged, and over-mocked seams hide real integration defects."
+flaky.over_mock.suggestion: "Mock only the true external boundaries (network, clock, randomness); prefer real collaborators or lightweight fakes, and split the test so each case exercises one behaviour with a minimal set of doubles."
+flaky.time_dependency.title: "Test assertion depends on the wall clock"
+flaky.time_dependency.description: "Asserting against a non-injected clock (time.Now, Date.now, datetime.now, new Date(), System.currentTimeMillis) couples the result to when the test runs, so it can pass now and fail later — at midnight, across a DST boundary, or under CI scheduling jitter."
+flaky.time_dependency.suggestion: "Inject the clock (pass a fixed time or a fake clock) and assert against that fixed value, so the test is reproducible regardless of when it runs."
