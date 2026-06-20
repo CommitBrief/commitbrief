@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-20
+
 ### Added
 - **Flaky-test detector: three new rules (ADR-0022).** The deterministic static
   pre-pass now flags three more high-precision anti-patterns in changed test files,
@@ -1811,7 +1813,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/CommitBrief/commitbrief/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/CommitBrief/commitbrief/compare/v1.6.0...v1.7.0
 [0.5.0]: https://github.com/CommitBrief/commitbrief/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CommitBrief/commitbrief/compare/v0.2.0...v0.4.0
