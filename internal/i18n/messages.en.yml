@@ -227,6 +227,13 @@ summary.no_changes: "No changes to summarize after filtering."
 summary.generating: "Writing summary…"
 summary.empty: "The provider returned an empty summary."
 
+# MCP server (ADR-0028). The `commitbrief mcp` subcommand runs a Model Context
+# Protocol server over stdio so an AI agent/host can call CommitBrief as a
+# review tool. mcp.serving is a one-line stderr diagnostic; the tool
+# description is host-facing text shown next to the `review` tool.
+mcp.serving: "MCP server ready on stdio (JSON-RPC 2.0); waiting for a host. Press Ctrl-C or close stdin to stop."
+mcp.tool.review.description: "Run a CommitBrief code review on the current git repository's diff and return structured findings (JSON schema v1) plus a short summary. With no arguments it reviews the staged diff; pass `unstaged`, or `diff` git-range arguments, to review other changes. Use this before submitting code to catch issues the way a human reviewer would."
+
 # Deterministic flaky-test detector (ADR-0022). Finding text for the static
 # internal/flaky pre-pass; localized like LLM findings (output language).
 flaky.hard_sleep.title: "Test uses a hard-coded sleep for synchronization"

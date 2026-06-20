@@ -224,6 +224,7 @@ commitbrief doctor                           # health-check the pipeline
 commitbrief install-hook [--hook=...]        # install a git hook that runs commitbrief
 commitbrief dry-run                          # pipeline preview; no API call
 commitbrief list                             # command reference
+commitbrief mcp                              # run an MCP server over stdio (agent review gate; see "MCP server")
 
 # Cache maintenance
 commitbrief cache clear                    # wipe every cached LLM response for this repo
@@ -526,6 +527,59 @@ It posts each finding as an inline review comment plus a verdict
 (`comment` mode, via `remote pr`), or runs an exit-code gate
 (`mode: gate`, via `diff --fail-on`). You can also drive the binary
 directly in any workflow: `commitbrief diff <base>...<head> --fail-on=high`.
+
+## MCP server (agent review gate)
+
+`commitbrief mcp` runs a **Model Context Protocol** server over stdio so an
+AI agent or host (Claude Desktop, an agent runtime, an MCP-aware IDE) can call
+CommitBrief as a tool — typically a **self-review gate the agent runs before it
+submits code**. It speaks JSON-RPC 2.0 over the MCP stdio transport, is
+stdlib-only (no MCP SDK, no new dependency), and is fully opt-in: it changes
+nothing about the existing commands.
+
+The server exposes one tool, **`review`**, which runs the *exact same review
+pipeline* as `commitbrief --json` (diff acquisition, filtering, the pre-send
+guard + secret scan, cost preflight, cache, the flaky-test pre-pass, and signal
+control) and returns the **structured findings (JSON schema v1)** plus a short
+text summary. It does not re-implement the review — it reuses `runReview`.
+
+**Tool: `review`** — all arguments optional:
+
+| Argument | Type | Meaning |
+|----------|------|---------|
+| `staged` | bool | review the staged diff (default) |
+| `unstaged` | bool | review the working tree (⊥ `staged`) |
+| `diff` | string[] | `git diff` range args, e.g. `["HEAD~3","HEAD"]` or `["main...feature"]` |
+| `provider` | string | override the configured provider |
+| `model` | string | override the configured model |
+| `fail_on` | string | `critical\|high\|medium\|low\|info\|any\|none` — reported as a gate failure in the summary; findings are still returned |
+| `min_severity` | string | hide findings below this severity in the returned set |
+| `no_flaky` | bool | skip the deterministic flaky-test detector |
+
+The result carries two content blocks: a one-line summary (finding counts,
+provider, and a `GATE FAILED` note when `--fail-on` trips) and the schema-v1
+JSON document. A genuine failure (no repo/changes, provider error, or an aborted
+secret-scan guard) comes back as an MCP tool error.
+
+**Wiring it into a host.** Register `commitbrief mcp` as a stdio MCP server. For
+a Claude Desktop-style host config:
+
+```json
+{
+  "mcpServers": {
+    "commitbrief": {
+      "command": "commitbrief",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+The host launches the process, performs the `initialize` handshake, discovers the
+`review` tool via `tools/list`, and calls it via `tools/call`. The server reads
+requests on stdin and writes responses on stdout until the host closes the stream;
+diagnostics go to stderr. See [the MCP server wiki page](https://github.com/CommitBrief/commitbrief/wiki/MCP-server)
+for the full handshake and a worked example.
 
 ## Configuration
 

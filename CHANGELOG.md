@@ -10,6 +10,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-20
+
+### Added
+- **MCP server: `commitbrief mcp` (ADR-0028).** A new opt-in subcommand runs a
+  **Model Context Protocol** server over stdio (JSON-RPC 2.0) so an AI agent or
+  host can invoke CommitBrief as a tool — typically a self-review gate the agent
+  runs before it submits code. It is **stdlib-only** (`encoding/json` + `bufio`
+  line framing; no MCP SDK, no new dependency) and implements `initialize`,
+  `tools/list`, `tools/call`, and `ping`. It exposes one tool, **`review`**, that
+  runs the *same* review pipeline as `commitbrief --json` (filtering, the pre-send
+  guard and secret scanner, the cost preflight, the cache, the flaky-test
+  pre-pass, and signal control) and returns the **structured findings (JSON schema
+  v1)** plus a short text summary. Tool arguments expose the meaningful knobs
+  (`staged`/`unstaged`/`diff`/`provider`/`model`/`fail_on`/`min_severity`/`no_flaky`).
+  A `fail_on` gate is reported in the summary (findings are still returned); a
+  genuine failure (no repo/changes, provider error, aborted guard) is an MCP tool
+  error. The path **reuses `runReview`** rather than re-implementing the review, so
+  there is zero behavioral drift from a terminal review. Fully additive — existing
+  commands are unchanged. See the README "MCP server" section and the
+  [MCP server](https://github.com/CommitBrief/commitbrief/wiki/MCP-server) wiki page.
+
 ## [1.8.0] - 2026-06-20
 
 ### Added
@@ -1813,7 +1834,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/CommitBrief/commitbrief/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/CommitBrief/commitbrief/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/CommitBrief/commitbrief/compare/v1.6.0...v1.7.0
 [0.5.0]: https://github.com/CommitBrief/commitbrief/compare/v0.4.0...v0.5.0

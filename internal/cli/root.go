@@ -149,6 +149,7 @@ func newRootCmd() *cobra.Command {
 		newRemoteCmd(),
 		newCommitCmd(),
 		newSummaryCmd(),
+		newMCPCmd(),
 	)
 	return cmd
 }

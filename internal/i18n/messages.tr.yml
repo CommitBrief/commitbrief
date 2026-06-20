@@ -225,6 +225,14 @@ summary.no_changes: "Filtrelemeden sonra özetlenecek değişiklik yok."
 summary.generating: "Özet yazılıyor…"
 summary.empty: "Sağlayıcı boş bir özet döndürdü."
 
+# MCP sunucusu (ADR-0028). `commitbrief mcp` alt komutu stdio üzerinden bir
+# Model Context Protocol sunucusu çalıştırır; böylece bir yapay zekâ
+# ajanı/host'u CommitBrief'i bir inceleme aracı olarak çağırabilir.
+# mcp.serving tek satırlık bir stderr tanılamasıdır; araç açıklaması ise
+# `review` aracının yanında gösterilen host'a yönelik metindir.
+mcp.serving: "MCP sunucusu stdio üzerinde hazır (JSON-RPC 2.0); bir host bekleniyor. Durdurmak için Ctrl-C'ye basın veya stdin'i kapatın."
+mcp.tool.review.description: "Mevcut git deposunun diff'i üzerinde bir CommitBrief kod incelemesi çalıştırır ve yapılandırılmış bulguları (JSON şema v1) kısa bir özetle birlikte döndürür. Argüman verilmezse staged diff'i inceler; başka değişiklikleri incelemek için `unstaged` veya `diff` git-aralığı argümanlarını geçin. Bir insan inceleyicinin yakalayacağı sorunları yakalamak için kodu göndermeden önce bunu kullanın."
+
 # Deterministik flaky-test dedektörü (ADR-0022). Statik internal/flaky
 # ön-süzgecinin bulgu metni; LLM bulguları gibi (çıktı dili) yerelleştirilir.
 flaky.hard_sleep.title: "Test senkronizasyon için sabit bir bekleme (sleep) kullanıyor"
