@@ -110,6 +110,8 @@ init.skipped: "Skipped %s (already exists; pass --force to overwrite)"
 review.no_changes: "No reviewable changes after filtering."
 review.cache_disabled: "Cache disabled: %v"
 review.degraded: "warning: LLM produced malformed JSON; falling back to plain-text view."
+review.architecture.loaded: "ℹ Architecture-aware review: loaded import-boundary rules from %s"
+review.architecture.invalid: "architecture file: %s"
 
 # Signal control (ADR-0027). baseline.updated reports a --update-baseline write
 # (count + path); baseline.filtered / suppress.filtered are the two halves of

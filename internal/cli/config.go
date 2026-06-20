@@ -244,8 +244,12 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return strconv.FormatBool(cfg.Review.Flaky), nil
 		case "baseline":
 			return strconv.FormatBool(cfg.Review.Baseline), nil
+		case "architecture":
+			return strconv.FormatBool(cfg.Review.Architecture), nil
+		case "architecture_file":
+			return cfg.Review.ArchitectureFile, nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file)", parts[1])
 		}
 
 	case "version":
@@ -444,8 +448,18 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 				return fmt.Errorf("config: review.baseline: %w", err)
 			}
 			cfg.Review.Baseline = b
+		case "architecture":
+			b, err := parseConfigBool(value)
+			if err != nil {
+				return fmt.Errorf("config: review.architecture: %w", err)
+			}
+			cfg.Review.Architecture = b
+		case "architecture_file":
+			// Free-form path (relative to repo root, or absolute); empty
+			// restores auto-discovery of ./architecture.json.
+			cfg.Review.ArchitectureFile = value
 		default:
-			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline)", parts[1])
+			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file)", parts[1])
 		}
 		return nil
 

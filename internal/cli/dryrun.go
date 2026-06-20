@@ -65,6 +65,16 @@ func newDryRunCmd() *cobra.Command {
 					return errors.New(app.Catalog.T("output.template.invalid", outputLoaded.Path, vErr.Error()))
 				}
 			}
+			// Architecture-aware review (ADR-0030): resolve the same
+			// architecture-constraints block the real review would inject so
+			// the token/cost estimate and the cache key match. emitInfo=false
+			// — the dry-run report lists the prompt contents itself, so a
+			// "loaded" line would be redundant. A configured-but-missing file
+			// fails here exactly as it would in the real run.
+			archContext, err := resolveArchContext(app, false)
+			if err != nil {
+				return err
+			}
 			// Hoist the diff text once; prompt build + cache key both
 			// need it and Diff.String() rewalks the file tree on
 			// every call.
@@ -72,7 +82,7 @@ func newDryRunCmd() *cobra.Command {
 			// Estimate against the line-numbered diff the review will
 			// actually send (see review.go); the cache key still keys on
 			// the plain diffText so dry-run and the real run collide.
-			p := prompt.Build(loaded, app.Lang, parsed.NumberedString())
+			p := prompt.Build(loaded, app.Lang, parsed.NumberedString(), archContext)
 
 			// UC-19: surface output-tokens / context-window / cost
 			// alongside the input-tokens estimate so dry-run answers

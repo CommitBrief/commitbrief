@@ -10,6 +10,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-06-21
+
+### Added
+- **Architecture-aware review (ADR-0030).** When a repo ships an
+  `architecture.json` — the config of the sibling tool
+  [archlint](https://github.com/muhammetsafak/archlint), declaring `layers`
+  (path prefixes) and `rules` (allowed import edges) — CommitBrief now reads it
+  and injects a compact, deterministic summary of the layers and their
+  allowed/**forbidden** boundary edges into the review prompt as a distinct
+  `<architecture_constraints>` block. The reviewer can then flag a diff that
+  crosses a declared boundary (e.g. "this adds `domain → db`, which the
+  architecture forbids"). It is a **one-way read** of archlint's public config
+  — CommitBrief never lints or enforces (archlint owns that) — and a missing or
+  malformed file is a transparent no-op that never breaks a review. On by
+  default (`review.architecture`, default true); the discovery path is
+  overridable via `review.architecture_file`; opt out per-run with
+  `--no-architecture`. The block folds into the system prompt, so editing
+  `architecture.json` invalidates stale cached reviews while a repo without the
+  file keeps a byte-identical cache key (no mass invalidation). Applies to
+  `review` and `dry-run`. No new dependency.
+
 ## [1.10.0] - 2026-06-20
 
 ### Added
@@ -1848,7 +1869,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/CommitBrief/commitbrief/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/CommitBrief/commitbrief/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/CommitBrief/commitbrief/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/CommitBrief/commitbrief/compare/v1.7.0...v1.8.0

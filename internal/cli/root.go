@@ -32,6 +32,7 @@ type globalFlags struct {
 	allowSecrets   bool
 	noCostCheck    bool
 	noFlaky        bool
+	noArchitecture bool // --no-architecture; skip architecture-aware review even if architecture.json exists (ADR-0030)
 	updateBaseline bool // --update-baseline; absorb the current findings into .commitbrief/baseline.json instead of filtering (ADR-0027)
 	noBaseline     bool // --no-baseline; ignore the baseline for this run (ADR-0027)
 	copy           bool
@@ -99,6 +100,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
 	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
 	flags.BoolVar(&global.noFlaky, "no-flaky", false, "skip the deterministic flaky-test detector (ADR-0022)")
+	flags.BoolVar(&global.noArchitecture, "no-architecture", false, "skip architecture-aware review (do not read architecture.json into the prompt) for this run (ADR-0030)")
 	flags.BoolVar(&global.updateBaseline, "update-baseline", false, "rewrite .commitbrief/baseline.json from the current findings (accepts them all) instead of filtering this run; user-private, gitignored (ADR-0027)")
 	flags.BoolVar(&global.noBaseline, "no-baseline", false, "ignore the signal-control baseline for this run (show everything, even baselined findings)")
 	flags.BoolVar(&global.copy, "copy", false, "copy findings (severity, path, title, description) to the system clipboard via OSC 52 + native tool")

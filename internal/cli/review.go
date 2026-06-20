@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/CommitBrief/commitbrief/internal/arch"
 	"github.com/CommitBrief/commitbrief/internal/cache"
 	"github.com/CommitBrief/commitbrief/internal/clipboard"
 	"github.com/CommitBrief/commitbrief/internal/config"
@@ -94,6 +95,19 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		// a malformed user template doesn't burn tokens. The embedded
 		// default is presumed-valid via release-check.sh and skipped here.
 		return errors.New(app.Catalog.T("output.template.invalid", outputLoaded.Path, err.Error()))
+	}
+
+	// Architecture-aware review (ADR-0030): when enabled (default) and the
+	// repo ships an archlint architecture.json, render a compact summary of
+	// the declared layers + import-boundary rules into the prompt so the LLM
+	// can flag a diff that crosses a forbidden edge. It is a one-way READ of
+	// archlint's public config; CommitBrief never lints. Missing/malformed →
+	// transparent no-op. The block folds into the system prompt and thus the
+	// cache key, so editing architecture.json invalidates stale reviews.
+	// Resolved up front (like rules) so the info line precedes the progress UI.
+	archContext, err := resolveArchContext(app, true)
+	if err != nil {
+		return err
 	}
 
 	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
@@ -250,9 +264,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	numberedDiff := parsed.NumberedString()
 	var p prompt.Prompt
 	if plainText {
-		p = prompt.BuildPlainText(loaded, app.Lang, numberedDiff, global.withContext)
+		p = prompt.BuildPlainText(loaded, app.Lang, numberedDiff, archContext, global.withContext)
 	} else {
-		p = prompt.Build(loaded, app.Lang, numberedDiff)
+		p = prompt.Build(loaded, app.Lang, numberedDiff, archContext)
 	}
 
 	// --show-prompt: emit the exact system + user prompt that would be sent
@@ -786,6 +800,32 @@ func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, diffArgs []string
 		return repo.UnstagedDiff()
 	}
 	return repo.StagedDiff()
+}
+
+// resolveArchContext discovers and renders the architecture-constraints block
+// (ADR-0030) shared by the review and dry-run paths so both build the same
+// system prompt (and therefore the same cache key). Returns "" — a clean
+// no-op — when the feature is disabled (review.architecture=false or
+// --no-architecture) or no architecture.json is found. An explicitly
+// configured-but-missing/unreadable file is a hard error: a typo in
+// review.architecture_file should surface, not silently disable the feature;
+// an auto-discovery miss stays silent (the common case).
+//
+// emitInfo gates the "loaded" info line: runReview wants it (before the
+// progress UI), dry-run does not (its report already lists the prompt
+// contents), so a duplicate would be noise.
+func resolveArchContext(app *appContext, emitInfo bool) (string, error) {
+	if !app.Config.Review.Architecture || global.noArchitecture {
+		return "", nil
+	}
+	res, err := arch.Discover(app.RepoRoot, app.Config.Review.ArchitectureFile)
+	if err != nil {
+		return "", errors.New(app.Catalog.T("review.architecture.invalid", err.Error()))
+	}
+	if res.Context != "" && emitInfo {
+		infof("%s", app.Catalog.T("review.architecture.loaded", res.Path))
+	}
+	return res.Context, nil
 }
 
 func buildMatcher(repoRoot string) *ignore.Matcher {

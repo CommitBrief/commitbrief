@@ -160,10 +160,17 @@ issues, emit a single line:
 // govern the prompt shape — the LLM's only output channel is the JSON
 // findings document; OUTPUT.md no longer participates in prompt
 // construction (it has become a client-side renderer template).
-func Build(rulesLoaded Loaded, langRes lang.Resolution) (system, userTpl string) {
+//
+// archContext (ADR-0030), when non-empty, inserts an <architecture_constraints>
+// block between the rules and the rubric so the reviewer can flag diffs that
+// cross a declared import boundary. Empty (the default / no architecture.json)
+// emits nothing, keeping the system prompt — and therefore the cache key —
+// byte-identical to a pre-ADR-0030 run.
+func Build(rulesLoaded Loaded, langRes lang.Resolution, archContext string) (system, userTpl string) {
 	var sb strings.Builder
 	writeBlock(&sb, "project_rules", rulesLoaded.Content)
 	sb.WriteString("\n")
+	writeArchContext(&sb, archContext)
 	writeBlock(&sb, "severity_rubric", severityRubric)
 	sb.WriteString("\n")
 	writeBlock(&sb, "response_format", jsonContract)
@@ -188,11 +195,12 @@ func Build(rulesLoaded Loaded, langRes lang.Resolution) (system, userTpl string)
 // Used when the active provider satisfies provider.PlainTextEmitter.
 // The user prompt template (`userTpl`) is shared with Build so the
 // review pipeline (cache key, token estimation) doesn't branch on
-// mode.
-func BuildPlainText(rulesLoaded Loaded, langRes lang.Resolution) (system, userTpl string) {
+// mode. archContext (ADR-0030) is injected the same way as in Build.
+func BuildPlainText(rulesLoaded Loaded, langRes lang.Resolution, archContext string) (system, userTpl string) {
 	var sb strings.Builder
 	writeBlock(&sb, "project_rules", rulesLoaded.Content)
 	sb.WriteString("\n")
+	writeArchContext(&sb, archContext)
 	writeBlock(&sb, "severity_rubric", severityRubric)
 	sb.WriteString("\n")
 	writeBlock(&sb, "response_format", plainTextContract)
@@ -208,6 +216,19 @@ func BuildPlainText(rulesLoaded Loaded, langRes lang.Resolution) (system, userTp
 		langRes.Name, langRes.Code,
 	)
 	return sb.String(), userTemplate
+}
+
+// writeArchContext emits the <architecture_constraints> block (ADR-0030)
+// followed by a blank separator line, but ONLY when content is non-empty.
+// On empty input it writes nothing at all — not even the tag — so a repo
+// without an architecture.json produces a system prompt byte-identical to
+// the pre-ADR-0030 shape, leaving every existing cache key valid.
+func writeArchContext(sb *strings.Builder, content string) {
+	if content == "" {
+		return
+	}
+	writeBlock(sb, "architecture_constraints", content)
+	sb.WriteString("\n")
 }
 
 func writeBlock(sb *strings.Builder, tag, content string) {

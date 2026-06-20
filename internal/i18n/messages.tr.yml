@@ -108,6 +108,8 @@ init.skipped: "%s atlandı (zaten mevcut; üzerine yazmak için --force kullanı
 review.no_changes: "Filtreleme sonrası review edilecek değişiklik yok."
 review.cache_disabled: "Önbellek kapalı: %v"
 review.degraded: "uyarı: LLM bozuk JSON üretti; düz metin görünümüne geçildi."
+review.architecture.loaded: "ℹ Mimari farkında review: içe-aktarım sınır kuralları %s dosyasından yüklendi"
+review.architecture.invalid: "mimari dosyası: %s"
 
 # Sinyal kontrolü (ADR-0027). baseline.updated bir --update-baseline yazımını
 # raporlar (sayı + yol); baseline.filtered / suppress.filtered, bulgular

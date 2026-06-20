@@ -109,7 +109,7 @@ func TestDefaultHasNoTBDPlaceholder(t *testing.T) {
 func TestBuildXMLWrap(t *testing.T) {
 	rulesLoaded := Loaded{Content: "rule one\nrule two"}
 	res := lang.Resolution{Code: "tr", Name: "Türkçe", Source: lang.SourceRepoConfig}
-	system, userTpl := Build(rulesLoaded, res)
+	system, userTpl := Build(rulesLoaded, res, "")
 
 	wantTags := []string{
 		"<project_rules>", "</project_rules>",
@@ -153,8 +153,8 @@ func TestBuildPreservesTrailingNewline(t *testing.T) {
 	withNL := Loaded{Content: "rules\n"}
 	withoutNL := Loaded{Content: "rules"}
 	res := lang.Resolution{Code: "en", Name: "English"}
-	a, _ := Build(withNL, res)
-	b, _ := Build(withoutNL, res)
+	a, _ := Build(withNL, res, "")
+	b, _ := Build(withoutNL, res, "")
 	if !strings.Contains(a, "rules\n</project_rules>") {
 		t.Error("trailing newline content broken")
 	}

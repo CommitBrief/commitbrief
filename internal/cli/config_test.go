@@ -191,6 +191,36 @@ func TestConfigReviewBaselineRoundTrips(t *testing.T) {
 	}
 }
 
+func TestConfigReviewArchitectureRoundTrips(t *testing.T) {
+	// ADR-0030: review.architecture defaults to true and toggles via config.
+	e := newCLIEnv(t)
+	if err := e.run("config", "get", "review.architecture"); err != nil {
+		t.Fatalf("config get review.architecture: %v", err)
+	}
+	if got := strings.TrimSpace(e.out.String()); got != "true" {
+		t.Errorf("review.architecture default = %q, want true", got)
+	}
+	if err := e.run("config", "set", "review.architecture", "false"); err != nil {
+		t.Fatalf("config set review.architecture false: %v", err)
+	}
+	cfg := loadCfg(t, e.homeDir)
+	if cfg.Review.Architecture {
+		t.Error("review.architecture should be false after set")
+	}
+}
+
+func TestConfigReviewArchitectureFileRoundTrips(t *testing.T) {
+	// ADR-0030: review.architecture_file overrides the discovery path.
+	e := newCLIEnv(t)
+	if err := e.run("config", "set", "review.architecture_file", "config/arch.json"); err != nil {
+		t.Fatalf("config set review.architecture_file: %v", err)
+	}
+	cfg := loadCfg(t, e.homeDir)
+	if got := cfg.Review.ArchitectureFile; got != "config/arch.json" {
+		t.Errorf("review.architecture_file = %q, want config/arch.json", got)
+	}
+}
+
 // ---------- config set ----------
 
 func TestConfigSetStringField(t *testing.T) {

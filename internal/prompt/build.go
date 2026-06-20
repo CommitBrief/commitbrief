@@ -17,13 +17,18 @@ type Prompt struct {
 	User   string
 }
 
-// Build assembles the system prompt (project rules + severity rubric + JSON
-// response contract + lang directive + prompt-injection guard) and the user
-// prompt (diff fenced block). OUTPUT.md is no longer part of prompt
-// construction — under ADR-0014 it is a client-side renderer template
-// consumed only by the local Go runtime.
-func Build(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText string) Prompt {
-	system, userTpl := rules.Build(rulesLoaded, langRes)
+// Build assembles the system prompt (project rules + optional architecture
+// constraints + severity rubric + JSON response contract + lang directive +
+// prompt-injection guard) and the user prompt (diff fenced block). OUTPUT.md
+// is no longer part of prompt construction — under ADR-0014 it is a
+// client-side renderer template consumed only by the local Go runtime.
+//
+// archContext (ADR-0030) is the rendered architecture-constraints block from
+// internal/arch; pass "" to omit it entirely (no architecture.json, or the
+// feature disabled). It folds into the system prompt and therefore into the
+// SHA-256 cache key, so changing architecture.json invalidates stale reviews.
+func Build(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText, archContext string) Prompt {
+	system, userTpl := rules.Build(rulesLoaded, langRes, archContext)
 	return Prompt{
 		System: system,
 		User:   fmt.Sprintf(userTpl, diffText),
@@ -40,8 +45,10 @@ func Build(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText string) P
 // system prompt gains a section telling the agentic host CLI it may read
 // surrounding project files to ground the review. It is appended only for
 // the CLI path; API providers (Build) have no filesystem and never see it.
-func BuildPlainText(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText string, withContext bool) Prompt {
-	system, userTpl := rules.BuildPlainText(rulesLoaded, langRes)
+//
+// archContext (ADR-0030) is threaded through the same way as in Build.
+func BuildPlainText(rulesLoaded rules.Loaded, langRes lang.Resolution, diffText, archContext string, withContext bool) Prompt {
+	system, userTpl := rules.BuildPlainText(rulesLoaded, langRes, archContext)
 	if withContext {
 		system += contextInstruction
 	}

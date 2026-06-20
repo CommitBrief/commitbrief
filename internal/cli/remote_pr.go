@@ -323,11 +323,14 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		}
 	}
 
+	// archContext "" — architecture-aware review (ADR-0030) is scoped to the
+	// local review/dry-run paths for now; the remote PR path keeps its prompt
+	// (and cache identity) unchanged. Extending it here is a future follow-up.
 	var p prompt.Prompt
 	if plainText {
-		p = prompt.BuildPlainText(loaded, app.Lang, numbered, false)
+		p = prompt.BuildPlainText(loaded, app.Lang, numbered, "", false)
 	} else {
-		p = prompt.Build(loaded, app.Lang, numbered)
+		p = prompt.Build(loaded, app.Lang, numbered, "")
 	}
 
 	cacheKey := cache.Compute(cache.ComputeArgs{
@@ -569,7 +572,7 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	// The model sees the line-numbered diff so it copies line numbers
 	// instead of estimating them (see review.go); anchors above are built
 	// from the same parsed diff.
-	p := prompt.Build(loaded, app.Lang, parsed.NumberedString())
+	p := prompt.Build(loaded, app.Lang, parsed.NumberedString(), "")
 	req := provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,

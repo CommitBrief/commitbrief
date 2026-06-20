@@ -251,7 +251,8 @@ read project files beyond the diff to ground the review; see below),
 the diff), `--no-cost-check` (skip cost preflight),
 `--show-prompt` (print the exact system + user prompt that would be sent,
 then exit — no provider call, no cost; honours `--output`), `--no-flaky`
-(skip the flaky-test detector below), `--update-baseline` /
+(skip the flaky-test detector below), `--no-architecture` (skip
+architecture-aware review; see below), `--update-baseline` /
 `--no-baseline` (signal-control baseline; see below), `--color`. See
 `commitbrief --help`.
 
@@ -316,6 +317,36 @@ rendered output:
 Neither filter is silent: optional `meta.baselined` / `meta.suppressed` counts
 appear in `--json` (the schema stays v1) and a one-line `N baselined · M
 suppressed` footer prints to stderr.
+
+### Architecture-aware review (ADR-0030)
+
+If your repo ships an `architecture.json` — the config of the sibling tool
+[archlint](https://github.com/muhammetsafak/archlint), which deterministically
+lints import-boundary rules — CommitBrief reads it and feeds a compact summary of
+your declared **layers** and their **allowed / forbidden import edges** into the
+review prompt. The reviewer can then flag a diff that crosses an architectural
+boundary, e.g. an import that adds a `domain → db` dependency the architecture
+forbids:
+
+```json
+{
+  "layers": { "domain": ["internal/domain"], "db": ["internal/db"] },
+  "rules":  { "domain": [], "db": ["domain"] }
+}
+```
+
+(`rules` lists, per layer, the layers it is **allowed** to import; `[]` means it
+may import no other layer.) This is a strict **one-way read** of archlint's public
+config — CommitBrief never lints the import graph or enforces anything itself
+(run `archlint check` in CI for the deterministic gate); it only grounds the LLM
+so it can reason about the change. A missing or malformed file is a transparent
+no-op that never breaks a review.
+
+On by default; turn it off per-run with `--no-architecture` or persistently with
+`review.architecture: false`. Point it at a non-default location with
+`review.architecture_file`. Because the architecture summary folds into the
+prompt, editing `architecture.json` automatically invalidates stale cached
+reviews, while a repo without the file keeps a byte-identical cache key.
 
 ### Pre-commit framework (`.pre-commit-hooks.yaml`)
 
@@ -686,6 +717,8 @@ commit:
 review:
   flaky: true                      # deterministic flaky-test detector pre-pass (ADR-0022); --no-flaky overrides per-run
   baseline: true                   # apply the user-private signal-control baseline (ADR-0027); --no-baseline overrides per-run, --update-baseline rewrites it
+  architecture: true               # architecture-aware review (ADR-0030): read architecture.json into the prompt; --no-architecture overrides per-run
+  architecture_file: ""            # override the architecture.json discovery path (relative to repo root, or absolute); empty = auto-discover
 ```
 
 ### Default command (`command.default`)

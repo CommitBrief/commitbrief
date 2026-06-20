@@ -33,9 +33,21 @@ type Config struct {
 // review.baseline config > built-in (true); --update-baseline rewrites the
 // file from the current findings instead of filtering this run. A missing
 // file is a transparent no-op even when this is true.
+// Architecture enables architecture-aware review (ADR-0030): when on (the
+// default) and a <repoRoot>/architecture.json (archlint's config) exists,
+// CommitBrief renders a compact summary of the declared layers and their
+// allowed/forbidden import edges into the review prompt as an
+// <architecture_constraints> block, so the LLM can flag a diff that crosses a
+// declared boundary. It is a one-way READ of archlint's public config —
+// CommitBrief never lints or enforces, archlint owns that. A missing or
+// malformed file is a transparent no-op. Precedence is --no-architecture >
+// review.architecture config > built-in (true); the file location is
+// overridable via review.architecture_file (default architecture.json).
 type ReviewConfig struct {
-	Flaky    bool `yaml:"flaky"`
-	Baseline bool `yaml:"baseline"`
+	Flaky            bool   `yaml:"flaky"`
+	Baseline         bool   `yaml:"baseline"`
+	Architecture     bool   `yaml:"architecture"`
+	ArchitectureFile string `yaml:"architecture_file"`
 }
 
 // CommitConfig sets defaults for the `commit` command (ADR-0019) so a repo
