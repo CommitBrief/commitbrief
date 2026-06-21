@@ -258,3 +258,6 @@ flaky.over_mock.suggestion: "Yalnızca gerçek dış sınırları (ağ, saat, ra
 flaky.time_dependency.title: "Test doğrulaması duvar saatine bağımlı"
 flaky.time_dependency.description: "Enjekte edilmemiş bir saate (time.Now, Date.now, datetime.now, new Date(), System.currentTimeMillis) karşı doğrulama yapmak, sonucu testin çalıştığı ana bağlar; bu yüzden şimdi geçip sonra başarısız olabilir — gece yarısı, bir DST sınırında ya da CI zamanlama sapması altında."
 flaky.time_dependency.suggestion: "Saati enjekte et (sabit bir zaman ya da sahte bir saat ver) ve o sabit değere karşı doğrula; böylece test ne zaman çalışırsa çalışsın tekrar üretilebilir olur."
+flaky.sandbox.flaky: "Sandbox yeniden çalıştırma kararsızlığı doğruladı: test, aynı koşullar altında %d yalıtılmış yeniden çalıştırmada hem geçti hem de başarısız oldu."
+flaky.sandbox.real_failure: "Sandbox yeniden çalıştırma kararsızlık değil gerçek bir başarısızlık gösteriyor: test, %d yalıtılmış yeniden çalıştırmanın hepsinde başarısız oldu — karantinaya almak yerine testi düzelt."
+flaky.sandbox.transient: "Sandbox yeniden çalıştırma kararsızlığı yeniden üretmedi: test, %d yalıtılmış yeniden çalıştırmanın tümünde geçti; bu yüzden ilk sinyal büyük olasılıkla tek seferlikti."

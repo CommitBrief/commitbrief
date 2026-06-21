@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,6 +21,12 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/version"
 )
 
+// sandboxRerunDefault is the rerun count used when --sandbox-rerun is passed
+// without an explicit value. Five reruns is enough to surface a mixed
+// pass+fail (the early-exit means a flaky test usually confirms in 2) while
+// keeping a deterministic all-pass/all-fail campaign cheap.
+const sandboxRerunDefault = 5
+
 type globalFlags struct {
 	json           bool
 	markdown       bool
@@ -32,6 +39,7 @@ type globalFlags struct {
 	allowSecrets   bool
 	noCostCheck    bool
 	noFlaky        bool
+	sandboxRerun   int  // --sandbox-rerun[=N]; re-run a statically flagged flaky candidate N times in isolation to confirm/refute it (ADR-0022); 0 = off, bare flag = sandboxRerunDefault
 	noArchitecture bool // --no-architecture; skip architecture-aware review even if architecture.json exists (ADR-0030)
 	updateBaseline bool // --update-baseline; absorb the current findings into .commitbrief/baseline.json instead of filtering (ADR-0027)
 	noBaseline     bool // --no-baseline; ignore the baseline for this run (ADR-0027)
@@ -100,6 +108,13 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
 	flags.BoolVar(&global.noCostCheck, "no-cost-check", false, "skip the pre-send cost estimate prompt")
 	flags.BoolVar(&global.noFlaky, "no-flaky", false, "skip the deterministic flaky-test detector (ADR-0022)")
+	flags.IntVar(&global.sandboxRerun, "sandbox-rerun", 0, "confirm flagged flaky tests by re-running each in isolation N times (ADR-0022); mixed pass+fail = confirmed flaky, all-fail = real failure, all-pass = transient. 0 = off; bare --sandbox-rerun uses N="+strconv.Itoa(sandboxRerunDefault)+". Requires a bound rerun executor")
+	// Optional-value flag: `--sandbox-rerun` (no value) opts in with the
+	// default N; `--sandbox-rerun=5` sets N explicitly; absent leaves the
+	// config/default. NoOptDefVal is what makes the value optional in pflag.
+	if f := flags.Lookup("sandbox-rerun"); f != nil {
+		f.NoOptDefVal = strconv.Itoa(sandboxRerunDefault)
+	}
 	flags.BoolVar(&global.noArchitecture, "no-architecture", false, "skip architecture-aware review (do not read architecture.json into the prompt) for this run (ADR-0030)")
 	flags.BoolVar(&global.updateBaseline, "update-baseline", false, "rewrite .commitbrief/baseline.json from the current findings (accepts them all) instead of filtering this run; user-private, gitignored (ADR-0027)")
 	flags.BoolVar(&global.noBaseline, "no-baseline", false, "ignore the signal-control baseline for this run (show everything, even baselined findings)")

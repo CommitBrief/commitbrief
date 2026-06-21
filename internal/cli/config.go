@@ -248,8 +248,10 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return strconv.FormatBool(cfg.Review.Architecture), nil
 		case "architecture_file":
 			return cfg.Review.ArchitectureFile, nil
+		case "sandbox_rerun":
+			return strconv.Itoa(cfg.Review.SandboxRerun), nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun)", parts[1])
 		}
 
 	case "version":
@@ -458,8 +460,17 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 			// Free-form path (relative to repo root, or absolute); empty
 			// restores auto-discovery of ./architecture.json.
 			cfg.Review.ArchitectureFile = value
+		case "sandbox_rerun":
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return fmt.Errorf("config: review.sandbox_rerun must be an integer; got %q", value)
+			}
+			if i < 0 {
+				return errors.New("config: review.sandbox_rerun cannot be negative; use 0 to disable")
+			}
+			cfg.Review.SandboxRerun = i
 		default:
-			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file)", parts[1])
+			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun)", parts[1])
 		}
 		return nil
 

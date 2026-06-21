@@ -43,11 +43,21 @@ type Config struct {
 // malformed file is a transparent no-op. Precedence is --no-architecture >
 // review.architecture config > built-in (true); the file location is
 // overridable via review.architecture_file (default architecture.json).
+//
+// SandboxRerun opts into sandbox-rerun confirmation for the flaky detector
+// (ADR-0022 §Update 2026-06-21): the number of times a statically flagged
+// candidate is re-run in isolation to classify it empirically (mixed
+// pass+fail → confirmed flaky, all-fail → real failure, all-pass →
+// transient). 0 (the default) disables it, so the static-only behaviour is
+// unchanged. It is effective only when a rerun Executor is bound (the seam is
+// caller-provided), and only the flaky pre-pass is affected. Precedence is
+// --sandbox-rerun[=N] > review.sandbox_rerun config > built-in (0 / off).
 type ReviewConfig struct {
 	Flaky            bool   `yaml:"flaky"`
 	Baseline         bool   `yaml:"baseline"`
 	Architecture     bool   `yaml:"architecture"`
 	ArchitectureFile string `yaml:"architecture_file"`
+	SandboxRerun     int    `yaml:"sandbox_rerun"`
 }
 
 // CommitConfig sets defaults for the `commit` command (ADR-0019) so a repo

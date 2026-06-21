@@ -251,7 +251,9 @@ read project files beyond the diff to ground the review; see below),
 the diff), `--no-cost-check` (skip cost preflight),
 `--show-prompt` (print the exact system + user prompt that would be sent,
 then exit — no provider call, no cost; honours `--output`), `--no-flaky`
-(skip the flaky-test detector below), `--no-architecture` (skip
+(skip the flaky-test detector below), `--sandbox-rerun[=N]` (opt-in
+sandbox-rerun confirmation of flagged flaky tests; see below),
+`--no-architecture` (skip
 architecture-aware review; see below), `--update-baseline` /
 `--no-baseline` (signal-control baseline; see below), `--color`. See
 `commitbrief --help`.
@@ -283,6 +285,25 @@ and reproducible**: no model call, no JSON-schema change. On by default for the
 API/mock providers; turn it off per-run with `--no-flaky` or persistently with
 `review.flaky: false`. CLI-tool-backed plain-text providers are unaffected for
 now.
+
+**Sandbox-rerun confirmation (opt-in).** The rules above *infer* flakiness from
+anti-patterns; sandbox-rerun *confirms* it by actually re-running a flagged test
+in isolation N times and classifying it by the observed pass/fail mix:
+
+- **mixed** pass + fail → **confirmed flaky** (the finding is kept and its
+  suggestion notes the empirical confirmation);
+- **all fail** → a **real failure**, not flakiness — the test is genuinely red,
+  so the note says so plainly (don't quarantine it as a flake);
+- **all pass** → **transient / resolved** — the flake did not reproduce, so the
+  finding is **demoted to `info`** and won't trip a commit-stage `--fail-on`.
+
+Enable it with `--sandbox-rerun[=N]` (bare flag uses N=5) or persistently with
+`review.sandbox_rerun: <N>` (0 = off, the default). The actual test runner is a
+**bound seam** (`func(ctx, testID) (passed bool, err error)`): CommitBrief ships
+the rerun orchestration — the N-rerun loop, the classification, and an early
+exit once a mixed result is proven — but binds no language-specific runner yet,
+so the flag/config is reserved and is a transparent no-op until a runner is
+wired. Default off, so existing behaviour is byte-identical.
 
 ### Signal control: baseline + inline suppression (ADR-0027)
 
@@ -716,6 +737,7 @@ commit:
   generate: 1                      # default --generate (number of message alternatives)
 review:
   flaky: true                      # deterministic flaky-test detector pre-pass (ADR-0022); --no-flaky overrides per-run
+  sandbox_rerun: 0                  # opt-in sandbox-rerun confirmation (ADR-0022): re-run a flagged test N times in isolation; 0 = off; --sandbox-rerun[=N] overrides per-run
   baseline: true                   # apply the user-private signal-control baseline (ADR-0027); --no-baseline overrides per-run, --update-baseline rewrites it
   architecture: true               # architecture-aware review (ADR-0030): read architecture.json into the prompt; --no-architecture overrides per-run
   architecture_file: ""            # override the architecture.json discovery path (relative to repo root, or absolute); empty = auto-discover

@@ -259,3 +259,6 @@ flaky.over_mock.suggestion: "Mock only the true external boundaries (network, cl
 flaky.time_dependency.title: "Test assertion depends on the wall clock"
 flaky.time_dependency.description: "Asserting against a non-injected clock (time.Now, Date.now, datetime.now, new Date(), System.currentTimeMillis) couples the result to when the test runs, so it can pass now and fail later — at midnight, across a DST boundary, or under CI scheduling jitter."
 flaky.time_dependency.suggestion: "Inject the clock (pass a fixed time or a fake clock) and assert against that fixed value, so the test is reproducible regardless of when it runs."
+flaky.sandbox.flaky: "Sandbox rerun confirmed flaky: the test produced both a pass and a fail across %d isolated reruns under identical conditions."
+flaky.sandbox.real_failure: "Sandbox rerun shows a real failure, not flakiness: the test failed every one of %d isolated reruns — fix the test rather than quarantining it."
+flaky.sandbox.transient: "Sandbox rerun did not reproduce the flake: the test passed all %d isolated reruns, so the original signal was likely a one-off."

@@ -10,6 +10,28 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-06-21
+
+### Added
+- **Sandbox-rerun confirmation for the flaky detector (ADR-0022).** The static
+  flaky rules *infer* flakiness from anti-patterns; sandbox-rerun raises
+  confidence by actually **re-running a flagged test in isolation N times** and
+  classifying it by the observed pass/fail mix: a **mixed** pass+fail confirms
+  it is **flaky**, **all fails** is a **real failure** (genuinely red — not
+  quarantined as a flake), and **all passes** is **transient** (the flake did
+  not reproduce, so the finding is demoted to `info`). CommitBrief ships the
+  orchestration — the N-rerun loop, the classification, and an early exit once a
+  mixed result is proven (a flaky test usually confirms in 2 runs) — behind an
+  **executor seam** (`func(ctx, testID) (passed bool, err error)`) so the core
+  stays pure and testable with a fake; no language-specific test runner is
+  embedded. Opt-in and **off by default** via `--sandbox-rerun[=N]` (bare flag
+  uses N=5; precedence: flag > `review.sandbox_rerun` config > 0) and inert
+  until a runner is bound, so existing behaviour is byte-identical. The verdict
+  rides the existing localized `render.Finding` (suggestion text + a transient
+  demotion) — **no JSON-schema change** (schema stays `1`). New surface is
+  additive: the `--sandbox-rerun` flag and the `review.sandbox_rerun` config
+  key. No new dependency.
+
 ## [1.11.0] - 2026-06-21
 
 ### Added
