@@ -439,6 +439,8 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		content string
 		usage   provider.Usage
 		format  string
+		retries int
+		degrade string
 	)
 	if plainText {
 		// CLI-backed providers: single-shot call, no JSON parsing, no
@@ -451,12 +453,12 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		}
 		content, usage, format = resp.Content, resp.Usage, cache.FormatPlainText
 	} else {
-		var callErr error
-		content, usage, format, callErr = tryStructuredReview(ctx, prov, req, func() {
-			// First attempt produced unparseable JSON; ADR-0014 §4
-			// retry fires next. Mark the current "Thinking..." as
-			// Soft (neutral) and start a fresh "Retrying..." stage so
-			// the user sees we noticed the first attempt was iffy.
+		outcome, callErr := tryStructuredReview(ctx, prov, req, func() {
+			// First attempt produced unparseable JSON; the ADR-0031
+			// repair-oriented retry fires next. Mark the current
+			// "Thinking..." as Soft (neutral) and start a fresh
+			// "Retrying..." stage so the user sees we noticed the first
+			// attempt was iffy.
 			prog.Soft()
 			prog.Start(app.Catalog.T("progress.retrying"))
 		})
@@ -464,6 +466,8 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			prog.Fail(callErr)
 			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
 		}
+		content, usage, format = outcome.Content, outcome.Usage, outcome.Format
+		retries, degrade = outcome.Retries, outcome.DegradeReason
 	}
 	prog.Finish()
 	// Cards / JSON / Markdown render takes over the screen below —
@@ -497,19 +501,21 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 
 	respModel := model
 	meta := render.Meta{
-		Provider:     prov.Name(),
-		Model:        respModel,
-		Lang:         app.Lang.Code,
-		Usage:        usage,
-		Cost:         resolvePricing(app.Config, prov, respModel).Cost(usage),
-		Latency:      latency,
-		Timestamp:    time.Now().UTC(),
-		Files:        parsed.FileCount(),
-		LinesAdded:   parsed.AddedLines(),
-		LinesRemoved: parsed.DeletedLines(),
-		RulesLoaded:  loaded.Source != rules.SourceDefault,
-		Baselined:    baselined,
-		Suppressed:   suppressed,
+		Provider:      prov.Name(),
+		Model:         respModel,
+		Lang:          app.Lang.Code,
+		Usage:         usage,
+		Cost:          resolvePricing(app.Config, prov, respModel).Cost(usage),
+		Latency:       latency,
+		Timestamp:     time.Now().UTC(),
+		Files:         parsed.FileCount(),
+		LinesAdded:    parsed.AddedLines(),
+		LinesRemoved:  parsed.DeletedLines(),
+		RulesLoaded:   loaded.Source != rules.SourceDefault,
+		Baselined:     baselined,
+		Suppressed:    suppressed,
+		Retries:       retries,
+		DegradeReason: degrade,
 	}
 
 	if !global.noCache && cacheStore != nil {
@@ -805,53 +811,138 @@ func handleCopyFlag(cmd *cobra.Command, app *appContext, findings []render.Findi
 	hint("clipboard.copied", len(findings), label)
 }
 
-// tryStructuredReview runs Review and, on parse failure, retries once.
-// Returns (content, totalUsage, format, err). format is FormatJSON when
-// either the first or retry response parses cleanly; FormatMarkdownFallback
-// when both attempts fail (the caller emits the user warning and stores
-// the marker in cache so replays stay silent).
+// structuredOutcome carries the result of a structured review plus the
+// observability signals (ADR-0031): how many repair retries were issued and,
+// on a graceful degrade, why. Retries is 0 on a first-attempt success and 1
+// when a repair retry was made (whether it recovered or degraded).
+// DegradeReason is empty unless Format == cache.FormatMarkdownFallback.
+type structuredOutcome struct {
+	Content       string
+	Usage         provider.Usage
+	Format        string
+	Retries       int
+	DegradeReason string
+}
+
+// repairMaxTokens is the raised output ceiling used on the truncation-repair
+// branch: a truncated first response is often max_tokens exhaustion (providers
+// default to 4096 when req.MaxTokens is 0), so the "complete the JSON" retry
+// gets more room. Not a cache-key input.
+const repairMaxTokens = 8192
+
+// tryStructuredReview runs Review and, on parse failure, retries once with a
+// repair-oriented request (ADR-0031) instead of the byte-identical prompt: the
+// retry classifies the parse failure and appends a failure-mode-specific
+// recovery directive (and, for truncation, embeds the partial output and
+// raises the token ceiling). Format is FormatJSON when either the first or the
+// repair response parses cleanly; FormatMarkdownFallback when both attempts
+// fail (the caller emits the user warning and stores the marker in cache so
+// replays stay silent).
 //
 // Token usage is summed across both attempts so the verbose footer / cost
 // reflects what the user actually spent, even on a graceful degrade.
 //
-// onRetry, if non-nil, fires after the first attempt parses-fails but
-// before the retry call goes out. The progress UI uses it to flip the
-// "Thinking..." stage to a soft (neutral) state and start a fresh
-// "Retrying..." stage so the user sees what happened.
+// onRetry, if non-nil, fires after the first attempt parse-fails but before
+// the repair call goes out. The progress UI uses it to flip the "Thinking..."
+// stage to a soft (neutral) state and start a fresh "Retrying..." stage so the
+// user sees what happened.
 func tryStructuredReview(
 	ctx context.Context,
 	prov provider.Provider,
 	req provider.Request,
 	onRetry func(),
-) (string, provider.Usage, string, error) {
+) (structuredOutcome, error) {
 	resp, err := prov.Review(ctx, req)
 	if err != nil {
-		return "", provider.Usage{}, "", err
+		return structuredOutcome{}, err
 	}
-	if _, parseErr := render.ParseFindings(resp.Content); parseErr == nil {
-		return resp.Content, resp.Usage, cache.FormatJSON, nil
+	_, parseErr := render.ParseFindings(resp.Content)
+	if parseErr == nil {
+		return structuredOutcome{Content: resp.Content, Usage: resp.Usage, Format: cache.FormatJSON}, nil
 	}
-	// First attempt unparseable — ADR-0014 §4 retry-once.
+	// First attempt unparseable — ADR-0031 repair-oriented retry-once.
 	if onRetry != nil {
 		onRetry()
 	}
-	resp2, err2 := prov.Review(ctx, req)
+	repairReq := repairRequest(req, classifyParseError(parseErr), resp.Content)
+	resp2, err2 := prov.Review(ctx, repairReq)
 	if err2 != nil {
-		// Network/auth failure on retry: surface the first response with
-		// the fallback marker; the caller can still render via degrade.
-		return resp.Content, resp.Usage, cache.FormatMarkdownFallback, nil
+		// Network/auth failure on retry: surface the first response with the
+		// fallback marker; the caller can still render via degrade.
+		return structuredOutcome{
+			Content:       resp.Content,
+			Usage:         resp.Usage,
+			Format:        cache.FormatMarkdownFallback,
+			Retries:       1,
+			DegradeReason: "retry-error",
+		}, nil
 	}
 	totalUsage := provider.Usage{
 		InputTokens:       resp.Usage.InputTokens + resp2.Usage.InputTokens,
 		OutputTokens:      resp.Usage.OutputTokens + resp2.Usage.OutputTokens,
 		CachedInputTokens: resp.Usage.CachedInputTokens + resp2.Usage.CachedInputTokens,
 	}
-	if _, parseErr := render.ParseFindings(resp2.Content); parseErr == nil {
-		return resp2.Content, totalUsage, cache.FormatJSON, nil
+	if _, parseErr2 := render.ParseFindings(resp2.Content); parseErr2 == nil {
+		return structuredOutcome{Content: resp2.Content, Usage: totalUsage, Format: cache.FormatJSON, Retries: 1}, nil
+	} else {
+		// Both attempts produced unparseable output — degrade with the first
+		// response cached as the canonical fallback content.
+		return structuredOutcome{
+			Content:       resp.Content,
+			Usage:         totalUsage,
+			Format:        cache.FormatMarkdownFallback,
+			Retries:       1,
+			DegradeReason: degradeReason(parseErr2),
+		}, nil
 	}
-	// Both attempts produced unparseable output — degrade with first
-	// response cached as the canonical fallback content.
-	return resp.Content, totalUsage, cache.FormatMarkdownFallback, nil
+}
+
+// repairRequest builds the ADR-0031 repair retry: a fresh single-shot request
+// (the Provider interface is single-shot and semver-locked) that appends a
+// failure-mode-specific recovery directive to the system prompt instead of
+// resending the identical prompt. For truncated/malformed JSON it also embeds
+// the partial output in the user prompt and raises the output ceiling, since
+// truncation is often max_tokens exhaustion.
+func repairRequest(req provider.Request, kind render.ParseErrorKind, prevOutput string) provider.Request {
+	r := req
+	switch kind {
+	case render.ParseErrMalformedJSON:
+		r.SystemPrompt = req.SystemPrompt + "\n\n" + rules.RepairJSONComplete
+		r.UserPrompt = req.UserPrompt + "\n\n" + fmt.Sprintf(rules.RepairPrevOutputTemplate, prevOutput)
+		if r.MaxTokens <= 0 {
+			r.MaxTokens = repairMaxTokens
+		}
+	default: // ParseErrEmpty, ParseErrProse, ParseErrSchema → schema-ignored
+		r.SystemPrompt = req.SystemPrompt + "\n\n" + rules.RepairSchemaReset
+	}
+	return r
+}
+
+// classifyParseError extracts the ParseErrorKind from a ParseFindings error so
+// the repair prompt can branch by failure mode; a non-ParseError falls back to
+// the schema-reset branch.
+func classifyParseError(err error) render.ParseErrorKind {
+	var pe *render.ParseError
+	if errors.As(err, &pe) {
+		return pe.Kind
+	}
+	return render.ParseErrSchema
+}
+
+// degradeReason maps a final (post-retry) parse failure to a stable snake-case
+// reason surfaced as meta.degrade_reason (ADR-0031), kept machine-stable for
+// `make eval` model comparison.
+func degradeReason(err error) string {
+	switch classifyParseError(err) {
+	case render.ParseErrEmpty:
+		return "empty"
+	case render.ParseErrProse:
+		return "prose"
+	case render.ParseErrMalformedJSON:
+		return "malformed-json"
+	default:
+		return "schema"
+	}
 }
 
 func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, diffArgs []string) (git.Diff, error) {

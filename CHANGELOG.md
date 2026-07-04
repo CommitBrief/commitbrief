@@ -10,6 +10,31 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **Repair-oriented structured-output recovery (ADR-0031).** When a provider
+  returns output that fails findings-JSON parsing, the pipeline no longer retries
+  with the byte-identical request. **Phase 0** — `ParseFindings` now unwraps a
+  lone markdown code-fence pair (` ```json … ``` `) before parsing, so a provider
+  that fenced otherwise-valid JSON (common for prompt-only / OpenAI-compatible /
+  Ollama models) parses on the **first** attempt with **zero** retries; non-fenced
+  input is byte-identical, so the cache key is unchanged and cached results that
+  happen to be fenced now render as findings on replay. **Phase 1+2** — the parse
+  error is classified (empty / prose / truncated-JSON / schema violation) and the
+  single retry sends a **failure-mode-specific repair prompt** instead of the
+  identical one: a hard "JSON only, no prose" reset for prose / schema-ignored
+  output, or a "complete the JSON" nudge (with the partial output embedded and a
+  raised `max_tokens` ceiling) for a truncated attempt. The retry stays a fresh
+  single-shot request; the terminal `markdown-fallback` degrade state and summed
+  token usage are unchanged. CLI plain-text providers are unaffected.
+
+### Added
+- **Recovery observability (ADR-0031).** New additive optional
+  `meta.retry_count` / `meta.degrade_reason` fields in the `--json` output
+  (`omitempty`, so a clean review is byte-for-byte the same and schema stays `1`)
+  plus two `--verbose` footer lines, making retries and degrades visible for
+  `make eval` model comparison. Both are live-call-only (a cache replay reports
+  neither).
+
 ## [1.12.0] - 2026-06-21
 
 ### Added
