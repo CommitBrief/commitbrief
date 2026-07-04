@@ -83,4 +83,13 @@ type Meta struct {
 	// locked schema-v1 shape is unchanged when no signal control fired.
 	Baselined  int
 	Suppressed int
+
+	// Recovery observability (ADR-0031). Retries counts repair retries issued
+	// on this live review (0 or 1); DegradeReason is a stable snake-case tag
+	// ("malformed-json" / "schema" / "empty" / "retry-error") set only when the
+	// review degraded to markdown-fallback. Both are additive optional JSON
+	// meta fields (omitempty) plus verbose-footer lines; both are zero on a
+	// cache replay, which made no provider call.
+	Retries       int
+	DegradeReason string
 }

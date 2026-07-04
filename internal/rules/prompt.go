@@ -88,6 +88,28 @@ Optional fields:
 
 Emit "findings": [] when the diff has no review-worthy issues.`
 
+// Repair directives (ADR-0031). When a first structured attempt fails to
+// parse, the retry appends one of these to the system prompt instead of
+// resending the byte-identical request. They are English constants — like
+// jsonContract — because they instruct the model *how* to shape its output;
+// the separate language directive still governs the language findings are
+// written in. Kept short so they don't dominate the (already large) system
+// prompt on the second pass.
+
+// RepairSchemaReset is the recovery directive for prose / schema-ignored
+// output (ParseErrEmpty, ParseErrSchema): a hard "JSON only" reset.
+const RepairSchemaReset = `Your previous response did not parse as valid findings JSON. Output ONLY a single JSON object matching the <response_format> schema above — no prose, no markdown code fences, no commentary before, after, or between objects. If there are no review-worthy issues, return {"findings": []}.`
+
+// RepairJSONComplete is the recovery directive for truncated / malformed JSON
+// (ParseErrMalformedJSON): ask the model to finish and correct the document.
+const RepairJSONComplete = `Your previous response was not valid JSON — it was truncated or malformed. Return the COMPLETE, corrected JSON object matching the <response_format> schema above, in full. Output JSON only: no prose, no markdown code fences, no commentary.`
+
+// RepairPrevOutputTemplate embeds the previous (partial) output in the repair
+// user prompt so the model can complete it. Single %s for the prior response.
+// The Provider interface is single-shot (ADR-0014); "continue" must be a fresh
+// request carrying the partial output, not a multi-turn continuation.
+const RepairPrevOutputTemplate = "Your previous response, which failed to parse, was:\n```\n%s\n```\nReturn the complete corrected JSON object now."
+
 // plainTextContract is the response-format block used by CLI-based
 // providers (claude-cli, gemini-cli, …) instead of jsonContract. The
 // agentic CLI tools don't expose native structured-output mechanisms

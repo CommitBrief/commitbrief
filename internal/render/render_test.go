@@ -215,6 +215,49 @@ func TestJSONSignalControlCountsPresentWhenSet(t *testing.T) {
 	}
 }
 
+func TestJSONRecoveryFieldsOmittedWhenZero(t *testing.T) {
+	var w bytes.Buffer
+	if err := JSON(&w, samplePayload()); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(w.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	meta := doc["meta"].(map[string]any)
+	if _, ok := meta["retry_count"]; ok {
+		t.Error("retry_count must be omitted when zero (schema-v1 byte stability)")
+	}
+	if _, ok := meta["degrade_reason"]; ok {
+		t.Error("degrade_reason must be omitted when empty")
+	}
+}
+
+func TestJSONRecoveryFieldsPresentWhenSet(t *testing.T) {
+	p := samplePayload()
+	p.Meta.Retries = 1
+	p.Meta.DegradeReason = "malformed-json"
+	var w bytes.Buffer
+	if err := JSON(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(w.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	meta := doc["meta"].(map[string]any)
+	if meta["retry_count"] != float64(1) {
+		t.Errorf("retry_count = %v, want 1", meta["retry_count"])
+	}
+	if meta["degrade_reason"] != "malformed-json" {
+		t.Errorf("degrade_reason = %v, want malformed-json", meta["degrade_reason"])
+	}
+	// schema int must remain 1 — additive fields are not a version bump.
+	if doc["schema"] != float64(1) {
+		t.Errorf("schema = %v, want 1 (additive change must not bump)", doc["schema"])
+	}
+}
+
 // TestJSONv1Golden is the drift guard for the v1 JSON schema. Any change to
 // JSON output bytes (field rename, type change, ordering, formatting) trips
 // this test. If the change is intentional and v1-compatible (additive only —
@@ -337,6 +380,27 @@ func TestVerboseFooterOmitsEmptyFields(t *testing.T) {
 	// Tokens line always present
 	if !strings.Contains(out, "Tokens:") {
 		t.Error("Tokens line must always be present in footer")
+	}
+}
+
+func TestVerboseFooterRecoveryFields(t *testing.T) {
+	m := samplePayload().Meta
+	m.Retries = 1
+	m.DegradeReason = "prose"
+	out := VerboseFooter(m)
+	if !strings.Contains(out, "Retries:   1") {
+		t.Errorf("footer missing Retries line; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Degraded:  prose") {
+		t.Errorf("footer missing Degraded line; got:\n%s", out)
+	}
+	// Omitted on a clean review (no retry, no degrade).
+	clean := VerboseFooter(samplePayload().Meta)
+	if strings.Contains(clean, "Retries:") {
+		t.Errorf("Retries line should be omitted when zero; got:\n%s", clean)
+	}
+	if strings.Contains(clean, "Degraded:") {
+		t.Errorf("Degraded line should be omitted when empty; got:\n%s", clean)
 	}
 }
 

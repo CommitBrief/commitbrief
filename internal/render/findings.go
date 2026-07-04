@@ -4,7 +4,6 @@ package render
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -96,40 +95,143 @@ type findingsEnvelope struct {
 	Findings []Finding `json:"findings"`
 }
 
+// ParseErrorKind classifies why ParseFindings rejected a payload so the
+// retry/repair path (ADR-0031) can pick a failure-mode-specific recovery
+// prompt instead of a blind re-roll of the identical request.
+type ParseErrorKind int
+
+const (
+	// ParseErrEmpty — the response was empty (or whitespace only) after
+	// trimming; there was no JSON at all. Recovered with a hard "JSON only"
+	// reset, same as prose / schema-ignored output.
+	ParseErrEmpty ParseErrorKind = iota
+	// ParseErrProse — json.Unmarshal failed and the payload does not even look
+	// like a JSON attempt (it starts with commentary, not `{`/`[`): the model
+	// ignored the schema and wrote prose. Recovered with a hard "JSON only,
+	// no prose" reset — asking it to "complete the JSON" would be nonsense.
+	ParseErrProse
+	// ParseErrMalformedJSON — json.Unmarshal failed but the payload looks like
+	// a genuine JSON attempt that is truncated or syntactically broken (often
+	// max_tokens exhaustion). Recovered by asking the model to complete/correct
+	// the JSON, with a raised token ceiling.
+	ParseErrMalformedJSON
+	// ParseErrSchema — the payload decoded as JSON but violated the findings
+	// contract (unknown severity or a missing required field). Recovered with
+	// a clean schema-conformant redraw.
+	ParseErrSchema
+)
+
+// ParseError is the typed error ParseFindings returns. Its Error() text is
+// kept byte-identical to the pre-ADR-0031 messages so existing substring
+// assertions keep working; Kind adds machine-readable classification and
+// Unwrap exposes the underlying json error for further inspection.
+type ParseError struct {
+	Kind ParseErrorKind
+	msg  string
+	err  error
+}
+
+func (e *ParseError) Error() string { return e.msg }
+func (e *ParseError) Unwrap() error { return e.err }
+
 // ParseFindings decodes the LLM-emitted JSON payload into a slice. The
 // returned slice may be empty (a clean review) but is non-nil on success.
-// Errors trigger graceful degrade at the caller (ADR-0014 §4) — the
-// pipeline never crashes on a malformed response.
+// Errors are *ParseError (classifiable via errors.As) and trigger the
+// repair-oriented retry, then graceful degrade, at the caller (ADR-0014 §4,
+// ADR-0031) — the pipeline never crashes on a malformed response.
 func ParseFindings(content string) ([]Finding, error) {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
-		return nil, errors.New("parse findings: empty content")
+		return nil, &ParseError{Kind: ParseErrEmpty, msg: "parse findings: empty content"}
 	}
+	// Phase-0 salvage (ADR-0031): unwrap a lone ```json … ``` fence pair so a
+	// provider that fenced otherwise-valid findings JSON parses cleanly with
+	// no retry. Non-fenced input is returned unchanged (byte-identical path).
+	trimmed = stripCodeFence(trimmed)
 	var env findingsEnvelope
 	if err := json.Unmarshal([]byte(trimmed), &env); err != nil {
-		return nil, fmt.Errorf("parse findings: %w", err)
+		// Distinguish a broken JSON *attempt* (starts with `{`/`[` → truncated
+		// or syntactically malformed) from prose the model wrote instead of
+		// JSON. The two need different repair prompts (ADR-0031): complete-the-
+		// JSON vs a hard schema reset.
+		kind := ParseErrMalformedJSON
+		if !looksLikeJSON(trimmed) {
+			kind = ParseErrProse
+		}
+		return nil, &ParseError{Kind: kind, msg: fmt.Sprintf("parse findings: %v", err), err: err}
 	}
 	for i, f := range env.Findings {
 		if !f.Severity.IsValid() {
-			return nil, fmt.Errorf("parse findings: finding %d: unknown severity %q", i, f.Severity)
+			return nil, &ParseError{Kind: ParseErrSchema, msg: fmt.Sprintf("parse findings: finding %d: unknown severity %q", i, f.Severity)}
 		}
 		if f.File == "" {
-			return nil, fmt.Errorf("parse findings: finding %d: missing file", i)
+			return nil, &ParseError{Kind: ParseErrSchema, msg: fmt.Sprintf("parse findings: finding %d: missing file", i)}
 		}
 		if f.Title == "" {
-			return nil, fmt.Errorf("parse findings: finding %d: missing title", i)
+			return nil, &ParseError{Kind: ParseErrSchema, msg: fmt.Sprintf("parse findings: finding %d: missing title", i)}
 		}
 		if f.Description == "" {
-			return nil, fmt.Errorf("parse findings: finding %d: missing description", i)
+			return nil, &ParseError{Kind: ParseErrSchema, msg: fmt.Sprintf("parse findings: finding %d: missing description", i)}
 		}
 		if f.Suggestion == "" {
-			return nil, fmt.Errorf("parse findings: finding %d: missing suggestion", i)
+			return nil, &ParseError{Kind: ParseErrSchema, msg: fmt.Sprintf("parse findings: finding %d: missing suggestion", i)}
 		}
 	}
 	if env.Findings == nil {
 		return []Finding{}, nil
 	}
 	return env.Findings, nil
+}
+
+// stripCodeFence unwraps a single markdown code-fence pair (```json … ``` or
+// ``` … ```) when — and only when — the content is exactly one fenced block:
+// a leading fence line and a trailing fence line with the payload between
+// them. This is the deterministic Phase-0 salvage (ADR-0031) for providers
+// that wrap otherwise-valid findings JSON in fences. It is intentionally
+// conservative: it never hunts for a {…} substring inside surrounding prose
+// (that would blur failure-mode classification and risk accepting truncated
+// fragments). Non-fenced input is returned unchanged so the happy path — and
+// therefore the cache key — stays byte-identical.
+func stripCodeFence(s string) string {
+	if !strings.HasPrefix(s, "```") {
+		return s
+	}
+	nl := strings.IndexByte(s, '\n')
+	if nl < 0 {
+		return s // a single line starting with ``` is not a fence pair
+	}
+	if !isFenceOpener(strings.TrimSpace(s[:nl])) {
+		return s
+	}
+	body := strings.TrimRight(s[nl+1:], " \t\r\n")
+	lastNL := strings.LastIndexByte(body, '\n')
+	if strings.TrimSpace(body[lastNL+1:]) != "```" {
+		return s // no matching closing fence — leave untouched
+	}
+	return strings.TrimSpace(body[:lastNL+1])
+}
+
+// looksLikeJSON reports whether s begins with a JSON object/array opener,
+// used to tell a truncated/broken JSON attempt apart from prose the model
+// wrote instead. s is assumed already trimmed and fence-stripped.
+func looksLikeJSON(s string) bool {
+	return strings.HasPrefix(s, "{") || strings.HasPrefix(s, "[")
+}
+
+// isFenceOpener reports whether line is a bare ``` optionally followed by a
+// simple language tag (letters/digits only, e.g. ```json). Anything else —
+// including a prose line that merely happens to start with ``` — is rejected
+// so it is not mistaken for a fence.
+func isFenceOpener(line string) bool {
+	tag := strings.TrimPrefix(line, "```")
+	for i := 0; i < len(tag); i++ {
+		c := tag[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // SeverityGroup is the value type produced by GroupBySeverity for template

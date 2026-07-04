@@ -59,6 +59,15 @@ type jsonMeta struct {
 	// never silent.
 	Baselined  int `json:"baselined,omitempty"`
 	Suppressed int `json:"suppressed,omitempty"`
+
+	// Recovery observability (ADR-0031). Additive optional fields, same
+	// omitempty discipline as baselined/suppressed: RetryCount is emitted only
+	// when a repair retry ran; DegradeReason only when the review degraded to
+	// markdown-fallback. A clean first-attempt review omits both, so schema
+	// stays 1 and the byte-for-byte v1 meta shape is unchanged. Both are
+	// live-call-only (a cache replay reports neither).
+	RetryCount    int    `json:"retry_count,omitempty"`
+	DegradeReason string `json:"degrade_reason,omitempty"`
 }
 
 type jsonUsage struct {
@@ -87,15 +96,17 @@ func JSON(w io.Writer, p Payload) error {
 		Content:  content,
 		Findings: findings,
 		Meta: jsonMeta{
-			Provider:   p.Meta.Provider,
-			Model:      p.Meta.Model,
-			Lang:       p.Meta.Lang,
-			Cost:       p.Meta.Cost,
-			LatencyMS:  p.Meta.Latency.Milliseconds(),
-			Cached:     p.Meta.Cached,
-			Timestamp:  p.Meta.Timestamp,
-			Baselined:  p.Meta.Baselined,
-			Suppressed: p.Meta.Suppressed,
+			Provider:      p.Meta.Provider,
+			Model:         p.Meta.Model,
+			Lang:          p.Meta.Lang,
+			Cost:          p.Meta.Cost,
+			LatencyMS:     p.Meta.Latency.Milliseconds(),
+			Cached:        p.Meta.Cached,
+			Timestamp:     p.Meta.Timestamp,
+			Baselined:     p.Meta.Baselined,
+			Suppressed:    p.Meta.Suppressed,
+			RetryCount:    p.Meta.Retries,
+			DegradeReason: p.Meta.DegradeReason,
 			Usage: jsonUsage{
 				InputTokens:       p.Meta.Usage.InputTokens,
 				OutputTokens:      p.Meta.Usage.OutputTokens,

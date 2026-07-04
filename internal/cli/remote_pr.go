@@ -412,6 +412,8 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		content string
 		usage   provider.Usage
 		format  string
+		retries int
+		degrade string
 	)
 	if plainText {
 		resp, callErr := prov.Review(ctx, req)
@@ -421,8 +423,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		}
 		content, usage, format = resp.Content, resp.Usage, cache.FormatPlainText
 	} else {
-		var callErr error
-		content, usage, format, callErr = tryStructuredReview(ctx, prov, req, func() {
+		outcome, callErr := tryStructuredReview(ctx, prov, req, func() {
 			prog.Soft()
 			prog.Start(cat.T("progress.retrying"))
 		})
@@ -430,6 +431,8 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 			prog.Fail(callErr)
 			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
 		}
+		content, usage, format = outcome.Content, outcome.Usage, outcome.Format
+		retries, degrade = outcome.Retries, outcome.DegradeReason
 	}
 	prog.Finish()
 	prog.Clear()
@@ -444,17 +447,19 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 	}
 
 	meta := render.Meta{
-		Provider:     prov.Name(),
-		Model:        model,
-		Lang:         app.Lang.Code,
-		Usage:        usage,
-		Cost:         resolvePricing(app.Config, prov, model).Cost(usage),
-		Latency:      latency,
-		Timestamp:    time.Now().UTC(),
-		Files:        parsed.FileCount(),
-		LinesAdded:   parsed.AddedLines(),
-		LinesRemoved: parsed.DeletedLines(),
-		RulesLoaded:  loaded.Source != rules.SourceDefault,
+		Provider:      prov.Name(),
+		Model:         model,
+		Lang:          app.Lang.Code,
+		Usage:         usage,
+		Cost:          resolvePricing(app.Config, prov, model).Cost(usage),
+		Latency:       latency,
+		Timestamp:     time.Now().UTC(),
+		Files:         parsed.FileCount(),
+		LinesAdded:    parsed.AddedLines(),
+		LinesRemoved:  parsed.DeletedLines(),
+		RulesLoaded:   loaded.Source != rules.SourceDefault,
+		Retries:       retries,
+		DegradeReason: degrade,
 	}
 
 	if !global.noCache && cacheStore != nil {
@@ -580,19 +585,19 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 		Lang:         app.Lang.Code,
 	}
 	start := time.Now()
-	content, usage, format, err := tryStructuredReview(ctx, prov, req, func() {})
+	outcome, err := tryStructuredReview(ctx, prov, req, func() {})
 	if err != nil {
 		return prReviewResult{}, err
 	}
 	latency := time.Since(start)
-	if format != cache.FormatJSON {
+	if outcome.Format != cache.FormatJSON {
 		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
-	findings, err := render.ParseFindings(content)
+	findings, err := render.ParseFindings(outcome.Content)
 	if err != nil {
 		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
-	return prReviewResult{findings: findings, anchors: anchors, usage: usage, latency: latency}, nil
+	return prReviewResult{findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency}, nil
 }
 
 // submitPRReview posts the selected inline comments and the review-level

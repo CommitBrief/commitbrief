@@ -3,6 +3,7 @@
 package render
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -111,6 +112,81 @@ func TestParseFindings_Errors(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("ParseFindings(%q): error %q does not contain %q", tc.in, err.Error(), tc.want)
+			}
+		})
+	}
+}
+
+func TestParseFindings_FenceSalvage(t *testing.T) {
+	// Phase-0 salvage (ADR-0031): valid findings JSON wrapped in a lone code
+	// fence pair parses cleanly, across common fence spellings and surrounding
+	// whitespace.
+	valid := `{"findings":[{"severity":"info","file":"a.go","line":1,"title":"t","description":"d","suggestion":"s"}]}`
+	ok := map[string]string{
+		"json fence":      "```json\n" + valid + "\n```",
+		"bare fence":      "```\n" + valid + "\n```",
+		"uppercase fence": "```JSON\n" + valid + "\n```",
+		"padded fence":    "\n\n```json\n" + valid + "\n```\n\n",
+	}
+	for name, in := range ok {
+		t.Run(name, func(t *testing.T) {
+			got, err := ParseFindings(in)
+			if err != nil {
+				t.Fatalf("fenced valid JSON should parse: %v\ninput=%q", err, in)
+			}
+			if len(got) != 1 {
+				t.Errorf("len(findings) = %d, want 1", len(got))
+			}
+		})
+	}
+
+	// Fenced but the inner payload is truncated → still an error, and it is
+	// classified as a malformed JSON attempt (not prose), because the unwrapped
+	// content starts with `{`.
+	_, err := ParseFindings("```json\n{\"findings\":\n```")
+	if err == nil {
+		t.Fatal("fenced-but-broken inner should error")
+	}
+	var pe *ParseError
+	if errors.As(err, &pe) && pe.Kind != ParseErrMalformedJSON {
+		t.Errorf("fenced broken inner Kind = %d, want ParseErrMalformedJSON (%d)", pe.Kind, ParseErrMalformedJSON)
+	}
+
+	// Unfenced valid JSON is byte-identical behavior — still parses.
+	if _, err := ParseFindings(valid); err != nil {
+		t.Errorf("unfenced valid JSON should parse: %v", err)
+	}
+
+	// A prose line that merely mentions ``` mid-text is not a fence pair and is
+	// left untouched (→ prose classification, below).
+	if _, err := ParseFindings("see the ```json block above"); err == nil {
+		t.Error("non-fenced prose should not be salvaged into a parse")
+	}
+}
+
+func TestParseFindings_ErrorKinds(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want ParseErrorKind
+	}{
+		{"empty", "", ParseErrEmpty},
+		{"whitespace", "   \n ", ParseErrEmpty},
+		{"prose", "Here are the findings I noticed in your diff.", ParseErrProse},
+		{"truncated json", `{"findings":[{"severity":"info","file":"a.go"`, ParseErrMalformedJSON},
+		{"array attempt", `[{"severity":`, ParseErrMalformedJSON},
+		{"unknown severity", `{"findings":[{"severity":"blocker","file":"a.go","line":1,"title":"t","description":"d","suggestion":"s"}]}`, ParseErrSchema},
+		{"missing field", `{"findings":[{"severity":"high","file":"","line":1,"title":"t","description":"d","suggestion":"s"}]}`, ParseErrSchema},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseFindings(tc.in)
+			var pe *ParseError
+			if !errors.As(err, &pe) {
+				t.Fatalf("error %v is not *ParseError", err)
+			}
+			if pe.Kind != tc.want {
+				t.Errorf("Kind = %d, want %d", pe.Kind, tc.want)
 			}
 		})
 	}

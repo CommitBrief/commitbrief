@@ -45,6 +45,14 @@ func VerboseFooter(m Meta) string {
 	if m.Latency > 0 {
 		fmt.Fprintf(&sb, "Latency:   %s\n", formatDuration(m.Latency))
 	}
+	// Recovery observability (ADR-0031): only shown when a repair retry ran or
+	// the review degraded, so a clean review's footer is unchanged.
+	if m.Retries > 0 {
+		fmt.Fprintf(&sb, "Retries:   %d\n", m.Retries)
+	}
+	if m.DegradeReason != "" {
+		fmt.Fprintf(&sb, "Degraded:  %s\n", m.DegradeReason)
+	}
 	sb.WriteString(verboseRule)
 	sb.WriteString("\n")
 	return sb.String()
