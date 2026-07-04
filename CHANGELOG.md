@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-04
+
 ### Changed
 - **Repair-oriented structured-output recovery (ADR-0031).** When a provider
   returns output that fails findings-JSON parsing, the pipeline no longer retries
@@ -1916,7 +1918,9 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/CommitBrief/commitbrief/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/CommitBrief/commitbrief/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/CommitBrief/commitbrief/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/CommitBrief/commitbrief/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/CommitBrief/commitbrief/compare/v1.8.0...v1.9.0
