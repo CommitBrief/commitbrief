@@ -339,6 +339,15 @@ signal. Python/JS/PHP/Java tests keep full static flaky detection — they just
 never get sandbox-rerun confirmation. See ADR-0033 for the full execution-boundary
 rationale.
 
+Resolution also skips any file the Go toolchain would not compile on **this**
+machine: a `//go:build` constraint that is not satisfied, a `_windows_test.go`
+on Linux, anything under `testdata/`. That includes build tags your
+`sandbox_command` itself supplies — a `-tags=integration` in your command does
+not make an `//go:build integration` file resolvable, so those tests keep their
+static finding and skip confirmation. The alternative would be naming a test
+`go test` cannot select, which exits 0 and would report a flake as "did not
+reproduce" without ever running it.
+
 ### Signal control: baseline + inline suppression (ADR-0027)
 
 Three layers keep the noise down. `--min-severity` (above) is **display-only**.
