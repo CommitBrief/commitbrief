@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-25
+
 ### Added
 - **`review.sandbox_command` binds the sandbox-rerun executor (ADR-0033).**
   `--sandbox-rerun[=N]` / `review.sandbox_rerun` shipped in v1.12.0 as a
