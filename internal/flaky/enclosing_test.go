@@ -8,10 +8,15 @@ import (
 	"testing"
 )
 
-// write drops src into a temp file and returns its path.
+// write drops src into a temp file and returns its path. name may include
+// subdirectory segments (e.g. "tests/helpers.go"); the parent is created as
+// needed.
 func write(t *testing.T, name, src string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir for %s: %v", name, err)
+	}
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
@@ -440,5 +445,57 @@ func Testfoo(t *testing.T) {
 `)
 	if name, ok := EnclosingTest(path, 4); ok {
 		t.Fatalf("EnclosingTest = %q, true; want not found (go test does not register Testfoo as a test)", name)
+	}
+}
+
+// --- Fix round 4: guard on the _test.go suffix ------------------------------
+//
+// go/parser correctly resolves a Test-shaped function from ANY .go file,
+// _test.go or not -- go/ast has no notion of Go's own "is this file compiled
+// into the test binary" rule, which is a pure filename convention the build
+// tool applies, not something the parser or the language spec enforces.
+// `go test` only ever discovers test functions in *_test.go files; a name
+// resolved from a plain .go file renders a `-run` pattern that matches zero
+// tests -- exit 0, a false VerdictTransient, the same failure chain ADR-0033
+// §10 exists to prevent, now closed at the one place a caller cannot forget
+// to check it.
+//
+// This is reachable, not theoretical: flaky.isTestFile (internal/flaky/
+// flaky.go) has a directory-based rule -- any path with a "tests/", "test/",
+// "spec/", "e2e/", "cypress/", or "__tests__/" segment qualifies for static
+// scanning, regardless of the file's own name or suffix. An ordinary Go
+// source file living in such a directory (e.g. internal/foo/tests/helpers.go)
+// can carry a flaky finding and hand this function exactly this path.
+
+func TestEnclosingTest_NonTestGoFile(t *testing.T) {
+	// The realistic path: an ordinary .go file (not *_test.go) inside a
+	// "tests/" directory, which flaky.isTestFile's directory rule already
+	// lets the static detector scan.
+	path := write(t, "tests/helpers.go", `package tests
+
+func TestLooksLikeATest(t *testing.T) {
+	sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helpers.go is not a _test.go file)", name)
+	}
+}
+
+func TestEnclosingTest_TestGoFileInTestsDir(t *testing.T) {
+	// Positive control paired with TestEnclosingTest_NonTestGoFile: the
+	// guard is a filename check (does the base name end in "_test.go"),
+	// not a directory check -- a real _test.go file inside the very same
+	// "tests/" directory shape must still resolve, so the guard cannot be
+	// passing by rejecting everything under that directory.
+	path := write(t, "tests/helpers_test.go", `package tests
+
+func TestRealOne(t *testing.T) {
+	sleep(1)
+}
+`)
+	name, ok := EnclosingTest(path, 4)
+	if !ok || name != "TestRealOne" {
+		t.Fatalf("EnclosingTest = %q, %v; want \"TestRealOne\", true", name, ok)
 	}
 }

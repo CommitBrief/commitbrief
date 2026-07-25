@@ -39,18 +39,31 @@ import (
 // command a caller binds will run against the worktree too, so resolving
 // against the same bytes keeps the name and the execution consistent.
 //
-// Returns ok=false — never a guess — when the file cannot be read, is not
-// Go, fails to parse, line falls outside every function's body, or falls
-// inside a function that is not one `go test -run '^NAME$'` can actually
-// select and re-execute on its own (see isRerunnableTestFunc). A wrong name
-// would run the wrong test and yield a confident, wrong verdict, which is
-// worse than no verdict (ADR-0033 §10).
+// Returns ok=false — never a guess — when the file cannot be read, is not a
+// Go *_test.go file, fails to parse, line falls outside every function's
+// body, or falls inside a function that is not one `go test -run '^NAME$'`
+// can actually select and re-execute on its own (see isRerunnableTestFunc).
+// A wrong name would run the wrong test and yield a confident, wrong
+// verdict, which is worse than no verdict (ADR-0033 §10).
+//
+// The _test.go suffix check (round 4) matters beyond the obvious: `go test`
+// only ever compiles *_test.go files into the test binary, so a Test-shaped
+// function resolved from any other .go file renders a `-run` pattern that
+// matches zero tests -- exit 0, a false VerdictTransient, the same failure
+// chain ADR-0033 §10 exists to prevent. This is reachable, not theoretical:
+// flaky.isTestFile's directory-based rule (any "tests/", "test/", "spec/",
+// "e2e/", "cypress/", "__tests__/" path segment) lets the static detector
+// scan an ordinary, non-_test.go Go file and hand this function exactly
+// that path.
 func EnclosingTest(path string, line int) (string, bool) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path comes from the diff being reviewed
 	if err != nil {
 		return "", false
 	}
 	if detectLang(path) != "go" {
+		return "", false
+	}
+	if !strings.HasSuffix(base(toSlash(path)), "_test.go") {
 		return "", false
 	}
 
