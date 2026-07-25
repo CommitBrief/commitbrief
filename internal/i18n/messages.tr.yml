@@ -261,3 +261,6 @@ flaky.time_dependency.suggestion: "Saati enjekte et (sabit bir zaman ya da sahte
 flaky.sandbox.flaky: "Sandbox yeniden çalıştırma kararsızlığı doğruladı: test, aynı koşullar altında %d yalıtılmış yeniden çalıştırmada hem geçti hem de başarısız oldu."
 flaky.sandbox.real_failure: "Sandbox yeniden çalıştırma kararsızlık değil gerçek bir başarısızlık gösteriyor: test, %d yalıtılmış yeniden çalıştırmanın hepsinde başarısız oldu — karantinaya almak yerine testi düzelt."
 flaky.sandbox.transient: "Sandbox yeniden çalıştırma kararsızlığı yeniden üretmedi: test, %d yalıtılmış yeniden çalıştırmanın tümünde geçti; bu yüzden ilk sinyal büyük olasılıkla tek seferlikti."
+flaky.sandbox.command_invalid: "Geçersiz review.sandbox_command: %s"
+flaky.sandbox.running: "Sandbox yeniden çalıştırma: `%s` her işaretlenen test için en fazla %d kez çalıştırılıyor."
+flaky.sandbox.no_test_name: "%s:%d için sandbox yeniden çalıştırma atlandı — kapsayan test adı çözülemedi."

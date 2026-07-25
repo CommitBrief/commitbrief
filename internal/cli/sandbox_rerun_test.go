@@ -4,6 +4,9 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -41,13 +44,16 @@ func sampleFlaky() []render.Finding {
 	}
 }
 
-// withExecutor temporarily binds the package rerun seam to exec for the test,
-// restoring the (nil) default on cleanup so other tests see the shipped no-op.
-func withExecutor(t *testing.T, exec flaky.Executor) {
+// withRunner temporarily binds the package rerun seam to a runner built around
+// exec, restoring the shipped default (an empty sandbox_command ⇒ no runner) on
+// cleanup so other tests still see the no-op.
+func withRunner(t *testing.T, needsTest bool, exec flaky.Executor) {
 	t.Helper()
-	prev := sandboxRerunExecutor
-	sandboxRerunExecutor = func(*appContext) flaky.Executor { return exec }
-	t.Cleanup(func() { sandboxRerunExecutor = prev })
+	prev := buildSandboxRunner
+	buildSandboxRunner = func(*appContext) (*sandboxRunner, error) {
+		return &sandboxRunner{exec: exec, needsTest: needsTest, display: "fake-runner"}, nil
+	}
+	t.Cleanup(func() { buildSandboxRunner = prev })
 }
 
 func TestApplySandboxRerun_DefaultOffIsNoOp(t *testing.T) {
@@ -56,10 +62,13 @@ func TestApplySandboxRerun_DefaultOffIsNoOp(t *testing.T) {
 	// be invoked (so existing behaviour is unchanged).
 	app := sandboxTestApp(t)
 	calls := 0
-	withExecutor(t, func(context.Context, flaky.Target) (bool, error) { calls++; return true, nil })
+	withRunner(t, false, func(context.Context, flaky.Target) (bool, error) { calls++; return true, nil })
 
 	in := sampleFlaky()
-	out := applySandboxRerun(bareCmd(), app, in)
+	out, err := applySandboxRerun(bareCmd(), app, in)
+	if err != nil {
+		t.Fatalf("applySandboxRerun errored: %v", err)
+	}
 
 	if calls != 0 {
 		t.Errorf("executor called %d times with sandbox-rerun off, want 0", calls)
@@ -76,13 +85,20 @@ func TestApplySandboxRerun_DefaultOffIsNoOp(t *testing.T) {
 
 func TestApplySandboxRerun_UnboundExecutorIsNoOp(t *testing.T) {
 	// Opted in (N>0) but no runner bound (the shipped default): still a no-op,
-	// findings untouched. This is the production state until a runner increment.
+	// findings untouched. This is the production state until a user configures
+	// review.sandbox_command.
 	app := sandboxTestApp(t)
 	app.Config.Review.SandboxRerun = 5 // opt in via config
-	// sandboxRerunExecutor is the shipped nil-returning default here.
+
+	prev := buildSandboxRunner
+	buildSandboxRunner = func(*appContext) (*sandboxRunner, error) { return nil, nil }
+	t.Cleanup(func() { buildSandboxRunner = prev })
 
 	in := sampleFlaky()
-	out := applySandboxRerun(bareCmd(), app, in)
+	out, err := applySandboxRerun(bareCmd(), app, in)
+	if err != nil {
+		t.Fatalf("applySandboxRerun errored: %v", err)
+	}
 	if len(out) != len(in) {
 		t.Fatalf("len(out) = %d, want %d", len(out), len(in))
 	}
@@ -98,9 +114,12 @@ func TestApplySandboxRerun_ConfigDrivesAnnotation(t *testing.T) {
 	// finding is reclassified transient (demoted to info, suggestion annotated).
 	app := sandboxTestApp(t)
 	app.Config.Review.SandboxRerun = 3
-	withExecutor(t, func(context.Context, flaky.Target) (bool, error) { return true, nil })
+	withRunner(t, false, func(context.Context, flaky.Target) (bool, error) { return true, nil })
 
-	out := applySandboxRerun(bareCmd(), app, sampleFlaky())
+	out, err := applySandboxRerun(bareCmd(), app, sampleFlaky())
+	if err != nil {
+		t.Fatalf("applySandboxRerun errored: %v", err)
+	}
 	for _, f := range out {
 		if f.Severity != render.SeverityInfo {
 			t.Errorf("all-pass rerun should demote to info, got %q for %s", f.Severity, f.File)
@@ -117,13 +136,16 @@ func TestApplySandboxRerun_MixedConfirmsFlaky(t *testing.T) {
 	app := sandboxTestApp(t)
 	app.Config.Review.SandboxRerun = 4
 	flip := false
-	withExecutor(t, func(context.Context, flaky.Target) (bool, error) {
+	withRunner(t, false, func(context.Context, flaky.Target) (bool, error) {
 		flip = !flip
 		return flip, nil
 	})
 
 	in := sampleFlaky()
-	out := applySandboxRerun(bareCmd(), app, in)
+	out, err := applySandboxRerun(bareCmd(), app, in)
+	if err != nil {
+		t.Fatalf("applySandboxRerun errored: %v", err)
+	}
 	if len(out) != len(in) {
 		t.Fatalf("len(out) = %d, want %d", len(out), len(in))
 	}
@@ -134,6 +156,76 @@ func TestApplySandboxRerun_MixedConfirmsFlaky(t *testing.T) {
 		if !strings.Contains(strings.ToLower(f.Suggestion), "confirmed flaky") {
 			t.Errorf("flaky verdict not annotated: %q", f.Suggestion)
 		}
+	}
+}
+
+func TestApplySandboxRerun_SkipsWhenTestNameUnresolved(t *testing.T) {
+	// needsTest with an unresolvable name must skip THAT finding only, never
+	// fall back to a command that would run the whole suite N times.
+	var seen []flaky.Target
+	withRunner(t, true, func(_ context.Context, tgt flaky.Target) (bool, error) {
+		seen = append(seen, tgt)
+		return true, nil
+	})
+
+	app := sandboxTestApp(t)
+	app.Config.Review.SandboxRerun = 5
+	app.RepoRoot = t.TempDir() // nothing on disk ⇒ EnclosingTest cannot resolve
+	in := []render.Finding{{File: "definitely-not-on-disk_test.go", Line: 3, Title: "sleep"}}
+
+	out, err := applySandboxRerun(bareCmd(), app, in)
+	if err != nil {
+		t.Fatalf("applySandboxRerun errored: %v", err)
+	}
+	if len(seen) != 0 {
+		t.Errorf("executor was called %d times; want 0", len(seen))
+	}
+	if out[0].Title != in[0].Title {
+		t.Errorf("finding was altered despite the skip: %+v", out[0])
+	}
+}
+
+func TestApplySandboxRerun_InvalidCommandAborts(t *testing.T) {
+	// A malformed template must abort the review before any provider call,
+	// not silently disable the feature.
+	prev := buildSandboxRunner
+	buildSandboxRunner = func(*appContext) (*sandboxRunner, error) {
+		return nil, errors.New("sandbox_command[0]: unclosed action")
+	}
+	t.Cleanup(func() { buildSandboxRunner = prev })
+
+	app := sandboxTestApp(t)
+	app.Config.Review.SandboxRerun = 5
+
+	if _, err := applySandboxRerun(bareCmd(), app, sampleFlaky()); err == nil {
+		t.Fatal("a malformed sandbox_command did not abort the review")
+	}
+}
+
+func TestApplySandboxRerun_ResolvesTestName(t *testing.T) {
+	// The resolved enclosing test name must reach the executor, since that is
+	// what {{.Test}} renders from.
+	dir := t.TempDir()
+	src := "package a\n\nimport \"testing\"\n\nfunc TestLogin(t *testing.T) {\n\ttime.Sleep(1)\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "a_test.go"), []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var seen []flaky.Target
+	withRunner(t, true, func(_ context.Context, tgt flaky.Target) (bool, error) {
+		seen = append(seen, tgt)
+		return true, nil
+	})
+
+	app := sandboxTestApp(t)
+	app.Config.Review.SandboxRerun = 1
+	app.RepoRoot = dir
+
+	if _, err := applySandboxRerun(bareCmd(), app, []render.Finding{{File: "a_test.go", Line: 6}}); err != nil {
+		t.Fatalf("applySandboxRerun errored: %v", err)
+	}
+	if len(seen) != 1 || seen[0].Test != "TestLogin" {
+		t.Fatalf("target = %+v; want Test=TestLogin", seen)
 	}
 }
 

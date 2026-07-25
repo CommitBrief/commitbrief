@@ -295,7 +295,11 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		// its finding is annotated (or demoted) by the empirical verdict.
 		// Default off and unbound executor ⇒ a transparent no-op, so the
 		// static-only behaviour is byte-identical.
-		flakyFindings = applySandboxRerun(cmd, app, flakyFindings)
+		flakyFindings, err = applySandboxRerun(cmd, app, flakyFindings)
+		if err != nil {
+			prog.Fail(err)
+			return err
+		}
 	}
 
 	model := app.Config.Providers[app.Config.Provider].Model
@@ -587,17 +591,6 @@ func mergeFlaky(llm, flakyFindings []render.Finding) []render.Finding {
 	return out
 }
 
-// sandboxRerunExecutor is the rerun seam (ADR-0022 §Update 2026-06-21). It
-// returns the Executor that re-runs a single test in isolation, or nil when no
-// runner is bound. The shipped CLI binds NO runner — actually invoking
-// `go test`/`pytest`/`jest` from a commit-stage review is a heavyweight,
-// language-specific concern deferred to a follow-up increment — so this
-// returns nil and sandbox-rerun is a transparent no-op even when opted in.
-// Keeping it a package var is the single override point: a future increment,
-// an embedder, or a test binds a real (or fake) runner here without touching
-// the orchestration in internal/flaky.
-var sandboxRerunExecutor = func(app *appContext) flaky.Executor { return nil }
-
 // sandboxRerunCount resolves the effective rerun count with precedence
 // --sandbox-rerun[=N] (when explicitly passed) > review.sandbox_rerun config >
 // 0 (off). A bare --sandbox-rerun carries pflag's NoOptDefVal
@@ -611,26 +604,44 @@ func sandboxRerunCount(cmd *cobra.Command, app *appContext) int {
 
 // applySandboxRerun re-runs each statically flagged flaky candidate in
 // isolation and folds the empirical verdict back into the finding (ADR-0022
-// §Update 2026-06-21). It is opt-in and degrades safely: with N <= 0, an
-// unbound executor, or no candidates it returns the input untouched, so the
-// default path is byte-identical to the static-only detector. The findings
-// slice is never shortened — a rerun refines presentation (confirm / demote a
-// transient / relabel a real failure), it never silently drops a static signal.
-func applySandboxRerun(cmd *cobra.Command, app *appContext, findings []render.Finding) []render.Finding {
+// §Update, ADR-0033). It is opt-in twice over — a positive rerun count AND a
+// configured review.sandbox_command — and degrades safely: with either missing
+// it returns the input untouched, so the default path is byte-identical to the
+// static-only detector.
+//
+// The findings slice is never shortened. A rerun refines presentation (confirm,
+// demote a transient, relabel a real failure); it never drops a static signal.
+func applySandboxRerun(cmd *cobra.Command, app *appContext, findings []render.Finding) ([]render.Finding, error) {
 	n := sandboxRerunCount(cmd, app)
 	if n <= 0 || len(findings) == 0 {
-		return findings
+		return findings, nil
 	}
-	exec := sandboxRerunExecutor(app)
-	if exec == nil {
-		return findings
+	runner, err := buildSandboxRunner(app)
+	if err != nil {
+		return nil, errors.New(app.Catalog.T("flaky.sandbox.command_invalid", err.Error()))
 	}
+	if runner == nil {
+		return findings, nil
+	}
+
+	// Never silent: the review is about to execute the user's code.
+	infof("%s", app.Catalog.T("flaky.sandbox.running", runner.display, n))
+
 	out := make([]render.Finding, len(findings))
 	for i, f := range findings {
-		res := flaky.Rerun(cmd.Context(), exec, flaky.Target{File: f.File, Line: f.Line}, n)
+		target := flaky.Target{File: f.File, Line: f.Line}
+		if name, ok := flaky.EnclosingTest(filepath.Join(app.RepoRoot, filepath.FromSlash(f.File)), f.Line); ok {
+			target.Test = name
+		}
+		if runner.needsTest && target.Test == "" {
+			infof("%s", app.Catalog.T("flaky.sandbox.no_test_name", f.File, f.Line))
+			out[i] = f
+			continue
+		}
+		res := flaky.Rerun(cmd.Context(), runner.exec, target, n)
 		out[i] = flaky.Annotate(app.Catalog, f, res)
 	}
-	return out
+	return out, nil
 }
 
 // emitPlainText streams a CLI-provider's already-formatted output
