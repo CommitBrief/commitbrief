@@ -16,9 +16,12 @@ import (
 
 // sandboxRerunTimeout bounds ONE rerun attempt. A hung test must cost one
 // attempt, not the whole review, and flaky.Rerun already treats a timed-out
-// attempt as unobserved rather than as a failure. Deliberately a constant: a
-// config knob for it is unjustified until someone asks (ADR-0033).
-const sandboxRerunTimeout = 2 * time.Minute
+// attempt as unobserved rather than as a failure. No config knob for it is
+// exposed — a fixed, generous bound is enough until a user asks for one
+// (ADR-0033 §5). A package var, not a const, purely so a test can shrink it
+// to exercise the timeout path without a real 2-minute wait; production code
+// never reassigns it.
+var sandboxRerunTimeout = 2 * time.Minute
 
 // sandboxRunner is the bound rerun capability for one review.
 type sandboxRunner struct {
@@ -77,9 +80,19 @@ func renderSandboxArgv(tmpls []*template.Template, t flaky.Target) ([]string, er
 // (engineering/standards/security.md).
 //
 // Exit 0 is a pass; a non-zero exit is a FAIL, not an error — that is the
-// signal the whole feature is built on. Only a process that could not run at
-// all (missing binary, spawn failure, timeout) is an error, which flaky.Rerun
-// tallies as unobserved.
+// signal the whole feature is built on. Only a process that could not be
+// OBSERVED at all (missing binary, spawn failure, the per-attempt context
+// expiring or being cancelled) is an error, which flaky.Rerun tallies as
+// unobserved.
+//
+// A killed-by-timeout process also surfaces from cmd.Run() as an
+// *exec.ExitError (the same shape as a genuine non-zero exit), so that error
+// type alone cannot distinguish "ran and failed" from "never finished
+// running". runCtx.Err() is checked first for exactly that reason: it is
+// non-nil both when this attempt's own 2-minute bound expired and when the
+// parent context was cancelled out from under it (e.g. the review itself
+// being interrupted) — either way the attempt was not observed, so it must
+// not be misreported as a deterministic failure.
 func newSandboxExecutor(repoRoot string, tmpls []*template.Template) flaky.Executor {
 	return func(ctx context.Context, t flaky.Target) (bool, error) {
 		argv, err := renderSandboxArgv(tmpls, t)
@@ -92,6 +105,9 @@ func newSandboxExecutor(repoRoot string, tmpls []*template.Template) flaky.Execu
 		cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...) //nolint:gosec // G204: argv is the user's own declared command (ADR-0033)
 		cmd.Dir = repoRoot
 		if runErr := cmd.Run(); runErr != nil {
+			if runCtx.Err() != nil {
+				return false, runCtx.Err() // timed out or cancelled: not observed
+			}
 			var ee *exec.ExitError
 			if errors.As(runErr, &ee) {
 				return false, nil // ran and failed: a real observation

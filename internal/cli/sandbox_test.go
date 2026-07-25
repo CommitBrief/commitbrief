@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/flaky"
 )
@@ -75,6 +76,34 @@ func TestRenderSandboxArgv_EmptyElementIsAnError(t *testing.T) {
 	}
 	if _, err := renderSandboxArgv(tmpls, flaky.Target{File: "a_test.go", Line: 1}); err == nil {
 		t.Fatal("renderSandboxArgv accepted an element that rendered empty")
+	}
+}
+
+func TestSandboxExecutor_TimeoutIsAnErrorNotAFail(t *testing.T) {
+	// A per-attempt timeout means the attempt was never observed — it must
+	// come back as an error, never as (false, nil). Getting this backwards
+	// makes a hung/slow test look like a deterministic failure: classify()
+	// would tally it as a Fail, and a campaign of nothing-but-timeouts would
+	// render as VerdictRealFailure ("fix it, don't quarantine it") instead of
+	// VerdictInconclusive. ADR-0033 §5 requires the former to be impossible.
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell-free sleep binary")
+	}
+	prev := sandboxRerunTimeout
+	sandboxRerunTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { sandboxRerunTimeout = prev })
+
+	tmpls, _, err := parseSandboxCommand([]string{"sleep", "5"})
+	if err != nil {
+		t.Fatalf("parseSandboxCommand errored: %v", err)
+	}
+	exec := newSandboxExecutor(t.TempDir(), tmpls)
+	passed, err := exec(context.Background(), flaky.Target{File: "a_test.go", Line: 1, Test: "TestX"})
+	if passed {
+		t.Error("passed = true; want false on a timed-out attempt")
+	}
+	if err == nil {
+		t.Fatal("err = nil; want a non-nil error — a timed-out attempt was never observed")
 	}
 }
 
