@@ -10,6 +10,20 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`commitbrief upgrade` — in-tool updates across every install method (ADR-0034).**
+  Detects whether the running binary came from Homebrew, Scoop, `go install`
+  or a GitHub Releases tarball. Package-managed installs are delegated to
+  their own manager (`brew upgrade` / `scoop update` / `go install …@latest`)
+  because overwriting a manager-owned binary desynchronizes its metadata;
+  only a manual install is replaced in place, after its SHA-256 is verified
+  against the release `checksums.txt`. An unwritable target aborts *before*
+  anything is downloaded and prints the exact command to run — CommitBrief
+  never invokes `sudo` itself. `--check` reports without installing and
+  always exits 0; `--json` implies `--check`.
+  The version check runs **only** when you invoke the command: there is no
+  automatic update check and no telemetry.
+
 ## [1.14.0] - 2026-07-25
 
 ### Added

@@ -104,6 +104,24 @@ Pre-built binaries for Linux, macOS, and Windows on amd64 and arm64 are
 attached to each tagged release at
 [github.com/CommitBrief/commitbrief/releases](https://github.com/CommitBrief/commitbrief/releases).
 
+### Upgrade
+
+```sh
+commitbrief upgrade          # check, confirm, install
+commitbrief upgrade --check  # report only; install nothing
+```
+
+`upgrade` detects how the binary was installed and does the right thing for
+it: Homebrew, Scoop and `go install` are handed to their own package
+manager, while a manually installed binary is downloaded from GitHub
+Releases, SHA-256 verified against the release checksums, and swapped in
+place. If the binary's directory is not writable, nothing is downloaded and
+the exact command you need is printed — CommitBrief never runs `sudo`
+itself. Only the binary is replaced; bundled man pages are not installed.
+
+This is the only network request CommitBrief makes on its own behalf, and
+only when you run this command. There is no automatic update check.
+
 ## Stability
 
 The v1.0.0 line is an **API freeze**. CLI flag surface, the JSON
@@ -222,6 +240,7 @@ commitbrief init [--force]                   # write COMMITBRIEF.md + OUTPUT.md 
 commitbrief compress [--level=balanced] [--dry-run]  # shrink COMMITBRIEF.md (preview first if you want)
 commitbrief doctor                           # health-check the pipeline
 commitbrief install-hook [--hook=...]        # install a git hook that runs commitbrief
+commitbrief upgrade [--check]                # check GitHub Releases and install a newer CommitBrief
 commitbrief dry-run                          # pipeline preview; no API call
 commitbrief list                             # command reference
 commitbrief mcp                              # run an MCP server over stdio (agent review gate; see "MCP server")
