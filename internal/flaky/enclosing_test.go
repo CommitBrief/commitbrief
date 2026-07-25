@@ -177,3 +177,120 @@ def helper_not_a_test():
 		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside test_something)", name)
 	}
 }
+
+// --- Fix round 2 regressions ------------------------------------------------
+//
+// Round 1's brace-depth tracker counted every literal '{'/'}' rune, including
+// ones inside string/rune literals and comments. A brace inside a fixture
+// string (JSON, format strings, raw literals -- ordinary in real test
+// bodies) opens or closes a phantom level and desyncs the tracker, which is
+// the same misattribution class round 1 fixed, reached through a different
+// door. This also subsumes round 1's deferred Minor #3: header-shaped text
+// inside a string literal must not be read as a real header either.
+
+func TestEnclosingTest_BraceInDoubleQuotedString(t *testing.T) {
+	// The adversarial reviewer's exact repro: a '{' inside a Go
+	// double-quoted string literal must not be counted as a real brace.
+	path := write(t, "session_test.go", `func TestStringBrace(t *testing.T) {
+	x := "{"
+}
+func helperAfterStringBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 5); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestStringBrace)", name)
+	}
+}
+
+func TestEnclosingTest_BraceInRawString(t *testing.T) {
+	// Same class, Go's other string form: a backtick raw-string literal has
+	// no escapes and can span lines, but a brace inside one is still not
+	// real code.
+	path := write(t, "session_test.go", `func TestRawStringBrace(t *testing.T) {
+	x := `+"`"+`{`+"`"+`
+}
+func helperAfterRawStringBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 5); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestRawStringBrace)", name)
+	}
+}
+
+func TestEnclosingTest_BraceInLineComment(t *testing.T) {
+	path := write(t, "session_test.go", `func TestLineCommentBrace(t *testing.T) {
+	// unmatched brace in a comment: {
+}
+func helperAfterLineCommentBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 5); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestLineCommentBrace)", name)
+	}
+}
+
+func TestEnclosingTest_BraceInBlockComment(t *testing.T) {
+	path := write(t, "session_test.go", `func TestBlockCommentBrace(t *testing.T) {
+	/* unmatched brace: { */
+}
+func helperAfterBlockCommentBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 5); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestBlockCommentBrace)", name)
+	}
+}
+
+func TestEnclosingTest_HeaderInsideStringLiteral(t *testing.T) {
+	// Round 1's deferred Minor #3: header-shaped text that only appears
+	// inside a string literal must not be read as a real header. This
+	// helper is not itself a test, and the fake "func TestFake(...) {"
+	// printed inside the log line must not make it look like one.
+	path := write(t, "session_test.go", `func helperWithFakeTestString() {
+	log.Println("func TestFake(t *testing.T) {")
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 3); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (no real test header here)", name)
+	}
+}
+
+func TestEnclosingTest_RealBraces(t *testing.T) {
+	// Positive control: a test whose body legitimately contains nested
+	// braces (an ordinary if-block) must still resolve correctly -- the
+	// string/comment fix must not simply break resolution everywhere.
+	path := write(t, "session_test.go", `func TestRealBraces(t *testing.T) {
+	if true {
+		doStuff()
+	}
+	time.Sleep(1)
+}
+`)
+	name, ok := EnclosingTest(path, 5)
+	if !ok || name != "TestRealBraces" {
+		t.Fatalf("EnclosingTest = %q, %v; want \"TestRealBraces\", true", name, ok)
+	}
+}
+
+func TestEnclosingTest_PythonDocstringDedentConfusion(t *testing.T) {
+	// Same root cause in the Python tracker: a triple-quoted docstring can
+	// contain a line at column 0 that looks like a dedent (or even a fake
+	// "def" header). Without stripping, the indentation tracker would pop
+	// the real enclosing test the moment it saw that line.
+	path := write(t, "test_payments.py", `def test_something():
+    """
+def fake_helper():
+    pass
+    """
+    time.sleep(1)
+`)
+	name, ok := EnclosingTest(path, 6)
+	if !ok || name != "test_something" {
+		t.Fatalf("EnclosingTest = %q, %v; want \"test_something\", true", name, ok)
+	}
+}
