@@ -4,6 +4,7 @@ package upgrade
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -44,6 +45,27 @@ func buildTarGz(t *testing.T, entries map[string]string) []byte {
 	return buf.Bytes()
 }
 
+// buildZip returns a zip archive holding one root-level entry per map key
+// — the shape goreleaser produces for the Windows asset.
+func buildZip(t *testing.T, entries map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range entries {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
@@ -77,7 +99,7 @@ func serveRelease(t *testing.T, tag string, archive []byte, sum string) (*Client
 
 func TestInstallManualReplacesBinary(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("archive fixture is tar.gz; the windows asset is a zip (covered by TestExtractZip)")
+		t.Skip("this fixture is a tar.gz; the Windows asset is a zip, covered by TestExtractZipWritesEntry")
 	}
 	dir := t.TempDir()
 	target := filepath.Join(dir, "commitbrief")
@@ -198,6 +220,87 @@ func TestPreflightWritableFailsOnReadOnlyDir(t *testing.T) {
 
 	if err := PreflightWritable(target); !errors.Is(err, ErrNotWritable) {
 		t.Fatalf("error = %v, want ErrNotWritable", err)
+	}
+}
+
+// TestInstallManualMissingChecksumEntry covers the case where
+// checksums.txt downloads fine but carries no line for our asset. That
+// must fail closed — an absent entry is not a passing verification.
+func TestInstallManualMissingChecksumEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("tar.gz fixture; the Windows extraction path is covered by TestExtractZipWritesEntry")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "commitbrief")
+	if err := os.WriteFile(target, []byte("OLD BINARY"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := buildTarGz(t, map[string]string{BinaryEntryName(runtime.GOOS): "NEW BINARY"})
+	assetName := AssetName("v1.15.0", runtime.GOOS, runtime.GOARCH)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/"+assetName, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	})
+	mux.HandleFunc("/"+ChecksumsFile, func(w http.ResponseWriter, r *http.Request) {
+		// A valid manifest that simply does not mention our asset.
+		_, _ = fmt.Fprintf(w, "%s  some_other_file.tar.gz\n", sha256Hex(archive))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	rel := &Release{
+		TagName: "v1.15.0",
+		Assets: []Asset{
+			{Name: assetName, BrowserDownloadURL: srv.URL + "/" + assetName},
+			{Name: ChecksumsFile, BrowserDownloadURL: srv.URL + "/" + ChecksumsFile},
+		},
+	}
+
+	err := InstallManual(context.Background(), ManualOptions{
+		Client: NewClient("v1.14.0"), Release: rel, Target: target,
+		GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+	})
+	if !errors.Is(err, ErrChecksumMismatch) {
+		t.Fatalf("error = %v, want ErrChecksumMismatch", err)
+	}
+	got, _ := os.ReadFile(target)
+	if string(got) != "OLD BINARY" {
+		t.Fatalf("target was modified despite the missing checksum entry: %q", got)
+	}
+}
+
+// TestExtractZipWritesEntry covers the Windows extraction path. Without
+// it, the only code a real Windows manual install exercises would ship
+// with no test at all.
+func TestExtractZipWritesEntry(t *testing.T) {
+	archive := buildZip(t, map[string]string{
+		"commitbrief.exe": "NEW BINARY",
+		"LICENSE":         "GPL",
+	})
+	var out bytes.Buffer
+	if err := extractZip(bytes.NewReader(archive), int64(len(archive)), "commitbrief.exe", &out); err != nil {
+		t.Fatalf("extractZip() error = %v", err)
+	}
+	if out.String() != "NEW BINARY" {
+		t.Fatalf("extracted content = %q, want NEW BINARY", out.String())
+	}
+}
+
+func TestExtractZipRejectsTraversal(t *testing.T) {
+	archive := buildZip(t, map[string]string{"../escape": "EVIL"})
+	var out bytes.Buffer
+	if err := extractZip(bytes.NewReader(archive), int64(len(archive)), "../escape", &out); err == nil {
+		t.Fatal("extractZip() error = nil, want a rejection")
+	}
+}
+
+func TestExtractZipEntryNotFound(t *testing.T) {
+	archive := buildZip(t, map[string]string{"LICENSE": "GPL"})
+	var out bytes.Buffer
+	if err := extractZip(bytes.NewReader(archive), int64(len(archive)), "commitbrief.exe", &out); err == nil {
+		t.Fatal("extractZip() error = nil, want entry-not-found")
 	}
 }
 
