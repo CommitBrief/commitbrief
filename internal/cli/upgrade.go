@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 
@@ -204,6 +205,7 @@ func runUpgrade(cmd *cobra.Command, checkOnly bool) error {
 				return err
 			}
 		}
+		verifyReplacement(cmd, cat, msg, exe, latest)
 	} else {
 		if err := upgrade.Run(cmd.Context(), argv, msg, cmd.ErrOrStderr()); err != nil {
 			if errors.Is(err, upgrade.ErrToolMissing) {
@@ -215,4 +217,35 @@ func runUpgrade(cmd *cobra.Command, checkOnly bool) error {
 
 	_, _ = fmt.Fprintln(msg, cat.T("upgrade.success", latest.String()))
 	return nil
+}
+
+// verifyReplacement re-runs the binary we just swapped and warns when it
+// does not report the expected version. The usual cause is another
+// commitbrief earlier on PATH shadowing this one: the swap genuinely
+// succeeded, but the command the user types is still the old binary, and
+// a silent success would leave them believing otherwise.
+//
+// Never fatal — the upgrade already happened, and a failure to re-exec
+// (a sandbox, a hardened mount) is not a reason to report failure.
+// Applies to the manual path only; a package manager may relocate its
+// binary, so `exe` is not necessarily the new file after delegation.
+func verifyReplacement(cmd *cobra.Command, cat catalog, msg io.Writer, exe string, latest upgrade.Version) {
+	out, err := exec.CommandContext(cmd.Context(), exe, "--version").Output()
+	if err != nil {
+		_, _ = fmt.Fprintln(msg, cat.T("upgrade.verify_failed", err))
+		return
+	}
+	reported := strings.TrimSpace(string(out))
+	if !reportsVersion(reported, latest) {
+		_, _ = fmt.Fprintln(msg, cat.T("upgrade.verify_mismatch", reported))
+	}
+}
+
+// reportsVersion checks whether --version output names the expected
+// release. The leading "v" is trimmed because goreleaser injects the tag
+// without it (`-X …version.Version={{.Version}}`), so a released binary
+// prints "commitbrief 1.15.0 (…)" while the tag reads "v1.15.0".
+// Comparing them verbatim would warn on every successful upgrade.
+func reportsVersion(output string, v upgrade.Version) bool {
+	return strings.Contains(output, strings.TrimPrefix(v.String(), "v"))
 }
