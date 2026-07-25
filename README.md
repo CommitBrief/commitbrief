@@ -678,6 +678,18 @@ thresholds:        # max findings allowed per severity (omit or ~ = unlimited)
 total: 20          # optional overall cap
 ```
 
+> **Sharing the policy with your team.** CommitBrief adds `.commitbrief/` to your
+> `.gitignore` the first time it writes a cache entry, which also ignores the
+> policy file. To version-control the gate, add a negation below that line:
+>
+> ```gitignore
+> .commitbrief/
+> !.commitbrief/policy.yml
+> ```
+>
+> The baseline (`.commitbrief/baseline.json`) is deliberately **not** shared — it
+> is per-developer, so it can never hide a finding from CI or a reviewer.
+
 Then gate a change — two modes:
 
 ```sh
