@@ -297,13 +297,47 @@ in isolation N times and classifying it by the observed pass/fail mix:
 - **all pass** → **transient / resolved** — the flake did not reproduce, so the
   finding is **demoted to `info`** and won't trip a commit-stage `--fail-on`.
 
-Enable it with `--sandbox-rerun[=N]` (bare flag uses N=5) or persistently with
-`review.sandbox_rerun: <N>` (0 = off, the default). The actual test runner is a
-**bound seam** (`func(ctx, testID) (passed bool, err error)`): CommitBrief ships
-the rerun orchestration — the N-rerun loop, the classification, and an early
-exit once a mixed result is proven — but binds no language-specific runner yet,
-so the flag/config is reserved and is a transparent no-op until a runner is
-wired. Default off, so existing behaviour is byte-identical.
+Confirmation requires a **double opt-in**: a positive `--sandbox-rerun[=N]` /
+`review.sandbox_rerun` (bare flag uses N=5) **and** a non-empty
+`review.sandbox_command` — either alone stays a no-op. `sandbox_command` is a
+**list of argv elements** (never a shell string), each rendered as a Go
+`text/template` over `{{.File}}` (repo-relative), `{{.Line}}`, and `{{.Test}}`
+(the enclosing test function name), then executed directly with
+`exec.CommandContext` — **no shell is invoked**:
+
+```yaml
+review:
+  sandbox_rerun: 5
+  sandbox_command: ["go", "test", "-count=1", "-run", "^{{.Test}}$", "./..."]
+```
+
+`config set review.sandbox_command` is rejected — hand-edit the config file
+directly (`config get` prints it read-only). Each rerun attempt is bounded by
+a 2-minute timeout (a hung test costs one attempt, not the whole review), and
+a stderr notice names the **configured command template** — the un-rendered
+argv, e.g. `-run ^{{.Test}}$` — once per review, before any per-test rendering
+happens; this is the review path's first code-execution stage, so it is never
+silent. The command runs against the **working tree**, not the staged
+snapshot a review may be scoped to. `commitbrief mcp` and `commitbrief guard`
+never run it, unconditionally, regardless of flag or config — an agent host
+must not execute repository code unattended (ADR-0033 §6); the static
+findings still return, unconfirmed.
+
+**Sandbox-rerun is not cached.** The flaky pre-pass (and any sandbox-rerun
+confirmation inside it) runs *before* the cache lookup, so its findings can
+merge into both a cache hit and a fresh call. That means a cache hit does
+**not** skip the rerun: re-running the same command against the same diff
+still executes the configured command again, even though the review body
+itself is served from cache and the footer reports `Saved`. Total cost scales
+with the number of flagged findings — worst case `findings × N × 2 minutes`,
+with no cap and no progress output while it runs.
+
+**Test-name resolution is Go-only.** `{{.Test}}` resolves via `go/parser`
+against `*_test.go` files; every other language resolves to no name, so that
+finding **skips the rerun** (with a stderr warning) and keeps its bare static
+signal. Python/JS/PHP/Java tests keep full static flaky detection — they just
+never get sandbox-rerun confirmation. See ADR-0033 for the full execution-boundary
+rationale.
 
 ### Signal control: baseline + inline suppression (ADR-0027)
 
@@ -655,6 +689,18 @@ thresholds:        # max findings allowed per severity (omit or ~ = unlimited)
 total: 20          # optional overall cap
 ```
 
+> **Sharing the policy with your team.** CommitBrief adds `.commitbrief/` to your
+> `.gitignore` the first time it writes a cache entry, which also ignores the
+> policy file. To version-control the gate, add a negation below that line:
+>
+> ```gitignore
+> .commitbrief/
+> !.commitbrief/policy.yml
+> ```
+>
+> The baseline (`.commitbrief/baseline.json`) is deliberately **not** shared — it
+> is per-developer, so it can never hide a finding from CI or a reviewer.
+
 Then gate a change — two modes:
 
 ```sh
@@ -738,6 +784,7 @@ commit:
 review:
   flaky: true                      # deterministic flaky-test detector pre-pass (ADR-0022); --no-flaky overrides per-run
   sandbox_rerun: 0                  # opt-in sandbox-rerun confirmation (ADR-0022): re-run a flagged test N times in isolation; 0 = off; --sandbox-rerun[=N] overrides per-run
+  sandbox_command: []               # the rerun executor (ADR-0033): argv list, e.g. ["go", "test", "-run", "^{{.Test}}$", "./..."]; requires sandbox_rerun > 0 too (double opt-in); hand-edit only, config set rejects it; Go-only test-name resolution
   baseline: true                   # apply the user-private signal-control baseline (ADR-0027); --no-baseline overrides per-run, --update-baseline rewrites it
   architecture: true               # architecture-aware review (ADR-0030): read architecture.json into the prompt; --no-architecture overrides per-run
   architecture_file: ""            # override the architecture.json discovery path (relative to repo root, or absolute); empty = auto-discover

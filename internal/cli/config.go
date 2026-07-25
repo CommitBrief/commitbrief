@@ -250,8 +250,10 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return cfg.Review.ArchitectureFile, nil
 		case "sandbox_rerun":
 			return strconv.Itoa(cfg.Review.SandboxRerun), nil
+		case "sandbox_command":
+			return strings.Join(cfg.Review.SandboxCommand, " "), nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command)", parts[1])
 		}
 
 	case "version":
@@ -469,8 +471,14 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 				return errors.New("config: review.sandbox_rerun cannot be negative; use 0 to disable")
 			}
 			cfg.Review.SandboxRerun = i
+		case "sandbox_command":
+			// A list of argv elements cannot be expressed through the flat
+			// `config set <key> <value>` form. Reject with guidance to edit
+			// the YAML directly, mirroring guard.secret_patterns and
+			// per-model pricing — the other non-scalar surfaces.
+			return errors.New("config: review.sandbox_command is a list of argv elements; edit the config file directly (commitbrief config show prints its path)")
 		default:
-			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun)", parts[1])
+			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command)", parts[1])
 		}
 		return nil
 

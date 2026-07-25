@@ -398,6 +398,31 @@ func TestConfigSetPreservesOtherFields(t *testing.T) {
 	}
 }
 
+func TestConfigGetSandboxCommandJoins(t *testing.T) {
+	// A list has no natural single-string form; get prints the argv joined by
+	// spaces so `config get` stays readable and scriptable.
+	e := newCLIEnv(t)
+	if err := e.run("config", "get", "review.sandbox_command"); err != nil {
+		t.Fatalf("config get review.sandbox_command: %v", err)
+	}
+	if got := strings.TrimSpace(e.out.String()); got != "" {
+		t.Errorf("default sandbox_command = %q, want empty", got)
+	}
+}
+
+func TestConfigSetSandboxCommandRejected(t *testing.T) {
+	// Same treatment as guard.secret_patterns and per-model pricing: a list of
+	// argv tokens has no sane single-string setter, so it is hand-edited.
+	e := newCLIEnv(t)
+	err := e.run("config", "set", "review.sandbox_command", "go test ./...")
+	if err == nil {
+		t.Fatal("config set review.sandbox_command succeeded; want rejection")
+	}
+	if !strings.Contains(err.Error(), "edit the config file directly") {
+		t.Errorf("error = %v; want it to point at the config file", err)
+	}
+}
+
 // ---------- helpers ----------
 
 func loadCfg(t *testing.T, home string) *config.Config {

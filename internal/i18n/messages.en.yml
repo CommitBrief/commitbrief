@@ -262,3 +262,6 @@ flaky.time_dependency.suggestion: "Inject the clock (pass a fixed time or a fake
 flaky.sandbox.flaky: "Sandbox rerun confirmed flaky: the test produced both a pass and a fail across %d isolated reruns under identical conditions."
 flaky.sandbox.real_failure: "Sandbox rerun shows a real failure, not flakiness: the test failed every one of %d isolated reruns — fix the test rather than quarantining it."
 flaky.sandbox.transient: "Sandbox rerun did not reproduce the flake: the test passed all %d isolated reruns, so the original signal was likely a one-off."
+flaky.sandbox.command_invalid: "Invalid review.sandbox_command: %s"
+flaky.sandbox.running: "Sandbox rerun: running `%s` up to %d times per flagged test."
+flaky.sandbox.no_test_name: "Sandbox rerun skipped for %s:%d — could not resolve the enclosing test name."

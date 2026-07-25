@@ -40,6 +40,7 @@ type globalFlags struct {
 	noCostCheck    bool
 	noFlaky        bool
 	sandboxRerun   int  // --sandbox-rerun[=N]; re-run a statically flagged flaky candidate N times in isolation to confirm/refute it (ADR-0022); 0 = off, bare flag = sandboxRerunDefault
+	noSandbox      bool // internal: agent-facing paths (mcp, guard) force sandbox rerun off (ADR-0033); never a registered flag
 	noArchitecture bool // --no-architecture; skip architecture-aware review even if architecture.json exists (ADR-0030)
 	updateBaseline bool // --update-baseline; absorb the current findings into .commitbrief/baseline.json instead of filtering (ADR-0027)
 	noBaseline     bool // --no-baseline; ignore the baseline for this run (ADR-0027)

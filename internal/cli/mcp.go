@@ -209,6 +209,12 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	// tool error, which is the correct, safe behavior.
 	global.json = true
 	global.quiet = true
+	// The host is an agent, not a person at a TTY. Executing repository code
+	// (sandbox rerun) requires a human in the loop, so it is forced off here
+	// regardless of --sandbox-rerun or review.sandbox_rerun. This is a
+	// deliberate, recorded deviation from ADR-0028's "same pipeline" promise
+	// (ADR-0033) — `guard` inherits it, since it drives this same seam.
+	global.noSandbox = true
 
 	scope := reviewScopeFlags{}
 	switch {

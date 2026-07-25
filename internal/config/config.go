@@ -52,12 +52,20 @@ type Config struct {
 // unchanged. It is effective only when a rerun Executor is bound (the seam is
 // caller-provided), and only the flaky pre-pass is affected. Precedence is
 // --sandbox-rerun[=N] > review.sandbox_rerun config > built-in (0 / off).
+//
+// SandboxCommand is the argv of the command that re-runs a single flagged
+// test in isolation (ADR-0033). Each element is a Go text/template over
+// {{.File}}, {{.Line}}, {{.Test}} and is passed to exec as an argv element
+// — never through a shell. Empty (the default) leaves sandbox rerun inert
+// even when --sandbox-rerun is set: running repository code takes two
+// deliberate opt-ins.
 type ReviewConfig struct {
-	Flaky            bool   `yaml:"flaky"`
-	Baseline         bool   `yaml:"baseline"`
-	Architecture     bool   `yaml:"architecture"`
-	ArchitectureFile string `yaml:"architecture_file"`
-	SandboxRerun     int    `yaml:"sandbox_rerun"`
+	Flaky            bool     `yaml:"flaky"`
+	Baseline         bool     `yaml:"baseline"`
+	Architecture     bool     `yaml:"architecture"`
+	ArchitectureFile string   `yaml:"architecture_file"`
+	SandboxRerun     int      `yaml:"sandbox_rerun"`
+	SandboxCommand   []string `yaml:"sandbox_command"`
 }
 
 // CommitConfig sets defaults for the `commit` command (ADR-0019) so a repo
