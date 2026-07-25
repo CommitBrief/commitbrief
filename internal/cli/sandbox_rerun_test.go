@@ -257,6 +257,24 @@ func TestSandboxRerunCount_ConfigWhenFlagAbsent(t *testing.T) {
 	}
 }
 
+func TestSandboxRerunCount_SuppressedForAgentPaths(t *testing.T) {
+	// mcp/guard reuse runReview; an agent host must not be able to execute
+	// repository code because a config file asked for it (ADR-0033).
+	saved := global
+	t.Cleanup(func() { global = saved })
+
+	app := sandboxTestApp(t)
+	app.Config.Review.SandboxRerun = 5
+	if got := sandboxRerunCount(bareCmd(), app); got != 5 {
+		t.Fatalf("baseline count = %d; want 5", got)
+	}
+
+	global.noSandbox = true
+	if got := sandboxRerunCount(bareCmd(), app); got != 0 {
+		t.Errorf("count with noSandbox = %d; want 0", got)
+	}
+}
+
 func TestConfigGetSet_SandboxRerun(t *testing.T) {
 	cfg := config.Default()
 	if err := configFieldSet(cfg, "review.sandbox_rerun", "5"); err != nil {

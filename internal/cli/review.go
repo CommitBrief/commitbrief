@@ -596,6 +596,11 @@ func mergeFlaky(llm, flakyFindings []render.Finding) []render.Finding {
 // 0 (off). A bare --sandbox-rerun carries pflag's NoOptDefVal
 // (sandboxRerunDefault) so it is already a positive N by the time we read it.
 func sandboxRerunCount(cmd *cobra.Command, app *appContext) int {
+	// Agent-facing reuse paths (mcp, guard) never execute repo code, whatever
+	// the flag or the config says (ADR-0033).
+	if global.noSandbox {
+		return 0
+	}
 	if cmd != nil && cmd.Flags().Changed("sandbox-rerun") {
 		return global.sandboxRerun
 	}
