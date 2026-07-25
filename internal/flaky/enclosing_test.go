@@ -36,26 +36,6 @@ func TestLogin(t *testing.T) {
 	}
 }
 
-func TestEnclosingTest_Python(t *testing.T) {
-	path := write(t, "test_api.py", `import time
-
-def test_fetches_user():
-    time.sleep(2)
-`)
-	name, ok := EnclosingTest(path, 4)
-	if !ok || name != "test_fetches_user" {
-		t.Fatalf("EnclosingTest = %q, %v; want \"test_fetches_user\", true", name, ok)
-	}
-}
-
-func TestEnclosingTest_JSBlock(t *testing.T) {
-	path := write(t, "api.spec.ts", "describe('api', () => {\n  it('fetches the user', async () => {\n    await sleep(2000)\n  })\n})\n")
-	name, ok := EnclosingTest(path, 3)
-	if !ok || name != "fetches the user" {
-		t.Fatalf("EnclosingTest = %q, %v; want \"fetches the user\", true", name, ok)
-	}
-}
-
 func TestEnclosingTest_NoTestAbove(t *testing.T) {
 	// A helper with no enclosing test must report not-found rather than
 	// guessing: a wrong name would run the wrong test and produce a
@@ -84,16 +64,15 @@ func TestEnclosingTest_LineOutOfRange(t *testing.T) {
 	}
 }
 
-// --- Fix round 1 regressions -----------------------------------------------
+// --- Fix round 1 (Unicode identifiers, boundary tracking) ------------------
 //
-// Both groups below pin down bugs adversarial review found in the original
-// implementation: (1) Go's regexp \w / [A-Za-z0-9_] classes are ASCII-only,
-// so a non-ASCII identifier (routine input -- the maintainer's own working
-// language is Turkish) was silently truncated, producing a wrong-but-valid
-// name; (2) the original upward regex scan had no notion of where a
-// function body ends, so a helper declared after a test's closing brace was
-// misattributed to that test. ADR-0033 §10 names a wrong name as the worst
-// outcome this helper can produce -- worse than reporting not-found.
+// Round 1 fixed two bugs in a hand-rolled regex+scope tracker: ASCII-only
+// identifier classes silently truncating non-ASCII names, and an upward scan
+// with no notion of where a function body ends. Both cases still apply and
+// still pass under the round-3 go/parser rewrite below -- a real Go lexer
+// handles Unicode identifiers and function boundaries exactly, by
+// construction, so these now demonstrate the property rather than pin a
+// specific patch.
 
 func TestEnclosingTest_UnicodeName_Go(t *testing.T) {
 	path := write(t, "session_test.go", `package auth
@@ -108,47 +87,9 @@ func TestGirişKontrolü(t *testing.T) {
 	}
 }
 
-func TestEnclosingTest_UnicodeName_Python(t *testing.T) {
-	path := write(t, "test_payments.py", `def test_ödeme_başarılı():
-    time.sleep(1)
-`)
-	name, ok := EnclosingTest(path, 2)
-	if !ok || name != "test_ödeme_başarılı" {
-		t.Fatalf("EnclosingTest = %q, %v; want \"test_ödeme_başarılı\", true", name, ok)
-	}
-}
-
-func TestEnclosingTest_UnicodeName_PHP(t *testing.T) {
-	path := write(t, "PaymentTest.php", `<?php
-class PaymentTest {
-    public function testÖdemeBaşarılı() {
-        sleep(1);
-    }
-}
-`)
-	name, ok := EnclosingTest(path, 4)
-	if !ok || name != "testÖdemeBaşarılı" {
-		t.Fatalf("EnclosingTest = %q, %v; want \"testÖdemeBaşarılı\", true", name, ok)
-	}
-}
-
-func TestEnclosingTest_UnicodeName_Java(t *testing.T) {
-	path := write(t, "PaymentTest.java", `class PaymentTest {
-    void testÖdemeBaşarılı() {
-        Thread.sleep(1000);
-    }
-}
-`)
-	name, ok := EnclosingTest(path, 3)
-	if !ok || name != "testÖdemeBaşarılı" {
-		t.Fatalf("EnclosingTest = %q, %v; want \"testÖdemeBaşarılı\", true", name, ok)
-	}
-}
-
 func TestEnclosingTest_HelperAfterClosedTest_Go(t *testing.T) {
 	// A helper declared after a test's closing brace must never be
-	// attributed to that test: a purely-upward regex scan with no notion of
-	// where a function body ends will do exactly that.
+	// attributed to that test.
 	path := write(t, "session_test.go", `package auth
 
 func TestOther(t *testing.T) {
@@ -164,9 +105,191 @@ func helperNotATest() {
 	}
 }
 
+// --- Fix round 2 (braces/headers inside strings and comments) --------------
+//
+// Round 2 fixed a hand-rolled brace-depth tracker counting braces inside
+// string/comment spans, which desynced it. All of these still apply and
+// still pass under the round-3 rewrite: a real Go lexer tokenizes a string
+// or comment as a single opaque unit, so a brace or header-shaped run of
+// text inside one is never mistaken for real code, by construction --
+// nothing to strip, nothing to get wrong.
+
+func TestEnclosingTest_BraceInDoubleQuotedString(t *testing.T) {
+	path := write(t, "session_test.go", `package auth
+
+func TestStringBrace(t *testing.T) {
+	x := "{"
+}
+func helperAfterStringBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 7); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestStringBrace)", name)
+	}
+}
+
+func TestEnclosingTest_BraceInRawString(t *testing.T) {
+	path := write(t, "session_test.go", `package auth
+
+func TestRawStringBrace(t *testing.T) {
+	x := `+"`"+`{`+"`"+`
+}
+func helperAfterRawStringBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 7); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestRawStringBrace)", name)
+	}
+}
+
+func TestEnclosingTest_BraceInLineComment(t *testing.T) {
+	path := write(t, "session_test.go", `package auth
+
+func TestLineCommentBrace(t *testing.T) {
+	// unmatched brace in a comment: {
+}
+func helperAfterLineCommentBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 7); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestLineCommentBrace)", name)
+	}
+}
+
+func TestEnclosingTest_BraceInBlockComment(t *testing.T) {
+	path := write(t, "session_test.go", `package auth
+
+func TestBlockCommentBrace(t *testing.T) {
+	/* unmatched brace: { */
+}
+func helperAfterBlockCommentBrace() {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 7); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestBlockCommentBrace)", name)
+	}
+}
+
+func TestEnclosingTest_HeaderInsideStringLiteral(t *testing.T) {
+	// Header-shaped text that only appears inside a string literal must not
+	// be read as a real header. This helper is not itself a test, and the
+	// fake "func TestFake(...) {" printed inside the log line must not make
+	// it look like one -- a real Go lexer never re-tokenizes string content
+	// as source.
+	path := write(t, "session_test.go", `package auth
+
+func helperWithFakeTestString() {
+	log.Println("func TestFake(t *testing.T) {")
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 5); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (no real test header here)", name)
+	}
+}
+
+func TestEnclosingTest_RealBraces(t *testing.T) {
+	// Positive control: a test whose body legitimately contains nested
+	// braces (an ordinary if-block) must still resolve correctly.
+	path := write(t, "session_test.go", `package auth
+
+func TestRealBraces(t *testing.T) {
+	if true {
+		doStuff()
+	}
+	time.Sleep(1)
+}
+`)
+	name, ok := EnclosingTest(path, 7)
+	if !ok || name != "TestRealBraces" {
+		t.Fatalf("EnclosingTest = %q, %v; want \"TestRealBraces\", true", name, ok)
+	}
+}
+
+// --- Fix round 3: rewrite on go/parser, Go-only -----------------------------
+//
+// A third lexical bug turned up in round 2's fix (JS keeps a template
+// literal open across an escaped backtick; an unpaired backtick then opens a
+// phantom string that swallows everything after it). Three rounds, three
+// distinct lexical edge cases in a hand-rolled multi-language scanner, each
+// fix correct and each followed by another -- with no evidence of
+// convergence. Round 3 replaces the whole scanner for Go with the real Go
+// compiler frontend (go/parser + go/ast): exact by construction, nothing
+// left to get wrong the way rounds 1-2 did. Every other language now
+// deliberately returns ("", false) -- non-Go files keep full static flaky
+// detection, they simply never get sandbox-rerun confirmation (ADR-0033
+// §10's designed fallback for an unresolved name).
+//
+// The cases below convert every former non-Go positive-resolution test to
+// assert not-found (same fixtures, new contract), and add coverage for the
+// judgement calls the rewrite makes explicit: which function-name shapes
+// count as a runnable test, and whether a receiver method resolves.
+
+func TestEnclosingTest_Python(t *testing.T) {
+	// Non-Go resolution is intentionally unsupported (round 3): only Go is
+	// parsed. This fixture used to resolve "test_fetches_user"; it now
+	// always returns not-found, regardless of content.
+	path := write(t, "test_api.py", `import time
+
+def test_fetches_user():
+    time.sleep(2)
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (non-Go resolution is unsupported)", name)
+	}
+}
+
+func TestEnclosingTest_JSBlock(t *testing.T) {
+	// Non-Go resolution is intentionally unsupported (round 3).
+	path := write(t, "api.spec.ts", "describe('api', () => {\n  it('fetches the user', async () => {\n    await sleep(2000)\n  })\n})\n")
+	if name, ok := EnclosingTest(path, 3); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (non-Go resolution is unsupported)", name)
+	}
+}
+
+func TestEnclosingTest_UnicodeName_Python(t *testing.T) {
+	// Non-Go resolution is intentionally unsupported (round 3).
+	path := write(t, "test_payments.py", `def test_ödeme_başarılı():
+    time.sleep(1)
+`)
+	if name, ok := EnclosingTest(path, 2); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (non-Go resolution is unsupported)", name)
+	}
+}
+
+func TestEnclosingTest_UnicodeName_PHP(t *testing.T) {
+	// Non-Go resolution is intentionally unsupported (round 3).
+	path := write(t, "PaymentTest.php", `<?php
+class PaymentTest {
+    public function testÖdemeBaşarılı() {
+        sleep(1);
+    }
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (non-Go resolution is unsupported)", name)
+	}
+}
+
+func TestEnclosingTest_UnicodeName_Java(t *testing.T) {
+	// Non-Go resolution is intentionally unsupported (round 3).
+	path := write(t, "PaymentTest.java", `class PaymentTest {
+    void testÖdemeBaşarılı() {
+        Thread.sleep(1000);
+    }
+}
+`)
+	if name, ok := EnclosingTest(path, 3); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (non-Go resolution is unsupported)", name)
+	}
+}
+
 func TestEnclosingTest_HelperAfterClosedTest_Python(t *testing.T) {
-	// Python's own dedent rule closes a def's scope the moment a later
-	// line's indentation drops back to (or below) the def's own indent.
+	// Non-Go resolution is intentionally unsupported (round 3).
 	path := write(t, "test_payments.py", `def test_something():
     pass
 
@@ -174,114 +297,12 @@ def helper_not_a_test():
     time.sleep(1)
 `)
 	if name, ok := EnclosingTest(path, 5); ok {
-		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside test_something)", name)
-	}
-}
-
-// --- Fix round 2 regressions ------------------------------------------------
-//
-// Round 1's brace-depth tracker counted every literal '{'/'}' rune, including
-// ones inside string/rune literals and comments. A brace inside a fixture
-// string (JSON, format strings, raw literals -- ordinary in real test
-// bodies) opens or closes a phantom level and desyncs the tracker, which is
-// the same misattribution class round 1 fixed, reached through a different
-// door. This also subsumes round 1's deferred Minor #3: header-shaped text
-// inside a string literal must not be read as a real header either.
-
-func TestEnclosingTest_BraceInDoubleQuotedString(t *testing.T) {
-	// The adversarial reviewer's exact repro: a '{' inside a Go
-	// double-quoted string literal must not be counted as a real brace.
-	path := write(t, "session_test.go", `func TestStringBrace(t *testing.T) {
-	x := "{"
-}
-func helperAfterStringBrace() {
-	time.Sleep(1)
-}
-`)
-	if name, ok := EnclosingTest(path, 5); ok {
-		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestStringBrace)", name)
-	}
-}
-
-func TestEnclosingTest_BraceInRawString(t *testing.T) {
-	// Same class, Go's other string form: a backtick raw-string literal has
-	// no escapes and can span lines, but a brace inside one is still not
-	// real code.
-	path := write(t, "session_test.go", `func TestRawStringBrace(t *testing.T) {
-	x := `+"`"+`{`+"`"+`
-}
-func helperAfterRawStringBrace() {
-	time.Sleep(1)
-}
-`)
-	if name, ok := EnclosingTest(path, 5); ok {
-		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestRawStringBrace)", name)
-	}
-}
-
-func TestEnclosingTest_BraceInLineComment(t *testing.T) {
-	path := write(t, "session_test.go", `func TestLineCommentBrace(t *testing.T) {
-	// unmatched brace in a comment: {
-}
-func helperAfterLineCommentBrace() {
-	time.Sleep(1)
-}
-`)
-	if name, ok := EnclosingTest(path, 5); ok {
-		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestLineCommentBrace)", name)
-	}
-}
-
-func TestEnclosingTest_BraceInBlockComment(t *testing.T) {
-	path := write(t, "session_test.go", `func TestBlockCommentBrace(t *testing.T) {
-	/* unmatched brace: { */
-}
-func helperAfterBlockCommentBrace() {
-	time.Sleep(1)
-}
-`)
-	if name, ok := EnclosingTest(path, 5); ok {
-		t.Fatalf("EnclosingTest = %q, true; want not found (helper is not inside TestBlockCommentBrace)", name)
-	}
-}
-
-func TestEnclosingTest_HeaderInsideStringLiteral(t *testing.T) {
-	// Round 1's deferred Minor #3: header-shaped text that only appears
-	// inside a string literal must not be read as a real header. This
-	// helper is not itself a test, and the fake "func TestFake(...) {"
-	// printed inside the log line must not make it look like one.
-	path := write(t, "session_test.go", `func helperWithFakeTestString() {
-	log.Println("func TestFake(t *testing.T) {")
-	time.Sleep(1)
-}
-`)
-	if name, ok := EnclosingTest(path, 3); ok {
-		t.Fatalf("EnclosingTest = %q, true; want not found (no real test header here)", name)
-	}
-}
-
-func TestEnclosingTest_RealBraces(t *testing.T) {
-	// Positive control: a test whose body legitimately contains nested
-	// braces (an ordinary if-block) must still resolve correctly -- the
-	// string/comment fix must not simply break resolution everywhere.
-	path := write(t, "session_test.go", `func TestRealBraces(t *testing.T) {
-	if true {
-		doStuff()
-	}
-	time.Sleep(1)
-}
-`)
-	name, ok := EnclosingTest(path, 5)
-	if !ok || name != "TestRealBraces" {
-		t.Fatalf("EnclosingTest = %q, %v; want \"TestRealBraces\", true", name, ok)
+		t.Fatalf("EnclosingTest = %q, true; want not found (non-Go resolution is unsupported)", name)
 	}
 }
 
 func TestEnclosingTest_PythonDocstringDedentConfusion(t *testing.T) {
-	// Same root cause in the Python tracker: a triple-quoted docstring can
-	// contain a line at column 0 that looks like a dedent (or even a fake
-	// "def" header). Without stripping, the indentation tracker would pop
-	// the real enclosing test the moment it saw that line.
+	// Non-Go resolution is intentionally unsupported (round 3).
 	path := write(t, "test_payments.py", `def test_something():
     """
 def fake_helper():
@@ -289,8 +310,135 @@ def fake_helper():
     """
     time.sleep(1)
 `)
-	name, ok := EnclosingTest(path, 6)
-	if !ok || name != "test_something" {
-		t.Fatalf("EnclosingTest = %q, %v; want \"test_something\", true", name, ok)
+	if name, ok := EnclosingTest(path, 6); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (non-Go resolution is unsupported)", name)
+	}
+}
+
+func TestEnclosingTest_UnparsableGo(t *testing.T) {
+	// A half-edited or otherwise invalid source file must degrade safely,
+	// never guess -- go/parser reports an error and EnclosingTest must not
+	// fall back to any partial/best-effort AST it might still return.
+	path := write(t, "broken_test.go", `package auth
+
+func TestBroken(t *testing.T) {
+	x := (
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (file does not parse)", name)
+	}
+}
+
+func TestEnclosingTest_ReceiverMethodNotRunnable(t *testing.T) {
+	// A testify-suite-style method is not directly invocable via
+	// `go test -run '^TestThing$'` -- only the outer TestMySuite(t
+	// *testing.T) function that calls suite.Run is. Resolving to the
+	// method's own name would produce a plausible-looking name `-run` can
+	// never match -- the same confident-wrong-verdict failure as any other
+	// wrong name (ADR-0033 §10). This was a latent bug in rounds 1-2 too
+	// (their Go pattern had an explicit optional-receiver group); the
+	// rewrite closes it by requiring fn.Recv == nil.
+	path := write(t, "suite_test.go", `package auth
+
+type MySuite struct {
+	suite.Suite
+}
+
+func (s *MySuite) TestThing() {
+	s.Equal(1, 1)
+}
+`)
+	if name, ok := EnclosingTest(path, 8); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (receiver method is not go-test-runnable)", name)
+	}
+}
+
+func TestEnclosingTest_LineBetweenFunctions(t *testing.T) {
+	// A line that falls between two top-level functions -- inside neither
+	// one's body -- must resolve to not-found, not to whichever function
+	// happens to be nearest.
+	path := write(t, "session_test.go", `package auth
+
+func TestFirst(t *testing.T) {
+	doSomething()
+}
+
+func TestSecond(t *testing.T) {
+	doSomethingElse()
+}
+`)
+	if name, ok := EnclosingTest(path, 6); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (line 6 is between the two functions)", name)
+	}
+}
+
+func TestEnclosingTest_FuzzRecognized(t *testing.T) {
+	// Fuzz targets are matched by `go test -run` (`go help testflag`: "run
+	// only those tests, examples, and fuzz tests...") and have the same
+	// run/observe/repeat shape sandbox-rerun exists for.
+	path := write(t, "codec_test.go", `package codec
+
+func FuzzDecode(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		Decode(data)
+	})
+}
+`)
+	name, ok := EnclosingTest(path, 5)
+	if !ok || name != "FuzzDecode" {
+		t.Fatalf("EnclosingTest = %q, %v; want \"FuzzDecode\", true", name, ok)
+	}
+}
+
+func TestEnclosingTest_BenchmarkNotRecognized(t *testing.T) {
+	// `go test -run` does not select benchmarks at all (`-bench` does);
+	// reporting a Benchmark* name would render a `-run` pattern that
+	// matches zero tests -- exit 0, a confident wrong "passed every rerun"
+	// verdict (ADR-0033 §10).
+	path := write(t, "codec_test.go", `package codec
+
+func BenchmarkDecode(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		Decode(nil)
+	}
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (Benchmark is not -run-selectable)", name)
+	}
+}
+
+func TestEnclosingTest_ExampleNotRecognized(t *testing.T) {
+	// Technically selectable via `-run`, but excluded: an Example's
+	// pass/fail is output comparison, not the run/observe/repeat shape
+	// sandbox-rerun confirms, and the static detector's rules are not
+	// realistically going to fire inside a doctest-style Example body.
+	path := write(t, "codec_test.go", `package codec
+
+func ExampleDecode() {
+	Decode(nil)
+	// Output:
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (Example is deliberately excluded)", name)
+	}
+}
+
+func TestEnclosingTest_LowercaseAfterPrefixNotRecognized(t *testing.T) {
+	// Replicates `go test`'s own naming rule: "Testfoo" is not a real test
+	// -- the go tool itself never registers it as one, since the rune right
+	// after "Test" is lowercase -- so `-run '^Testfoo$'` would match zero
+	// tests, the same phantom-target failure as any other wrong name. This
+	// was also a latent gap in rounds 1-2 (their regex accepted any
+	// identifier-shaped suffix).
+	path := write(t, "codec_test.go", `package codec
+
+func Testfoo(t *testing.T) {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (go test does not register Testfoo as a test)", name)
 	}
 }
