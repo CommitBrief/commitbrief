@@ -33,10 +33,15 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   surface that can arm code execution deserves the same friction as one that
   can disable secret scanning. Each attempt runs under its own 2-minute
   timeout, so one hung test costs one attempt, not the whole review, and a
-  stderr notice names the rendered command on every run — the review path has
-  never before executed code, so it is never silent about it. The command
-  runs against the **working tree**, not the staged snapshot a review may be
-  scoped to, because that's what the bound command actually executes against.
+  stderr notice names the configured command template — the un-rendered argv
+  — once per review, before any per-finding rendering happens; the review
+  path has never before executed code, so it is never silent about it. The
+  command runs against the **working tree**, not the staged snapshot a review
+  may be scoped to, because that's what the bound command actually executes
+  against. Sandbox-rerun is **not cached**: the flaky pre-pass runs before
+  the cache lookup, so a repeated review against the same diff still
+  re-executes the command even when the review body itself is served from
+  cache.
   `commitbrief mcp` and `commitbrief guard` never run the bound command,
   unconditionally and with no user-facing toggle, because both drive the
   review through the shared `runReviewForMCP` seam and an agent host must not

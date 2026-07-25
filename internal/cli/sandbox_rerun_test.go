@@ -275,6 +275,32 @@ func TestSandboxRerunCount_SuppressedForAgentPaths(t *testing.T) {
 	}
 }
 
+func TestApplySandboxRerun_RunningNoticeIgnoresQuiet(t *testing.T) {
+	// ADR-0033 §4: the review is about to execute repository code, so the
+	// stderr notice must survive --quiet -- it must not go through infof,
+	// which honours global.quiet for every other caller.
+	saved := global
+	t.Cleanup(func() { global = saved })
+	global.quiet = true
+
+	withRunner(t, false, func(context.Context, flaky.Target) (bool, error) { return true, nil })
+
+	app := sandboxTestApp(t)
+	app.Config.Review.SandboxRerun = 3
+
+	var errBuf strings.Builder
+	cmd := bareCmd()
+	cmd.SetErr(&errBuf)
+
+	if _, err := applySandboxRerun(cmd, app, sampleFlaky()); err != nil {
+		t.Fatalf("applySandboxRerun errored: %v", err)
+	}
+
+	if got := errBuf.String(); !strings.Contains(got, "fake-runner") {
+		t.Errorf("running notice missing under --quiet: stderr = %q", got)
+	}
+}
+
 func TestConfigGetSet_SandboxRerun(t *testing.T) {
 	cfg := config.Default()
 	if err := configFieldSet(cfg, "review.sandbox_rerun", "5"); err != nil {

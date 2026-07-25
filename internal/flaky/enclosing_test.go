@@ -499,3 +499,93 @@ func TestRealOne(t *testing.T) {
 		t.Fatalf("EnclosingTest = %q, %v; want \"TestRealOne\", true", name, ok)
 	}
 }
+
+// --- Fix round 5: the file must actually be COMPILED, not just named right --
+//
+// go/parser applies no build constraints -- it happily parses a
+// `//go:build integration` file, a GOOS-suffixed file that doesn't match the
+// host, or an underscore/dot-prefixed file the go tool ignores outright, and
+// each of those can still yield a real-looking Test-shaped name. `go test
+// -run '^NAME$'` against any of them matches zero tests: exit 0, a false
+// VerdictTransient, the exact failure chain ADR-0033 §10 exists to prevent.
+// Round 5 closes this with go/build.MatchFile (does this file actually get
+// compiled here, with these tags?) plus a separate testdata/ segment check,
+// since MatchFile does not cover testdata on its own (the go tool excludes it
+// by skipping the whole directory during package discovery, not per file).
+
+func TestEnclosingTest_BuildTagExcluded(t *testing.T) {
+	// A file gated behind a build tag nobody has set must not resolve, even
+	// though it parses fine and contains a real-looking test name.
+	path := write(t, "integration_test.go", `//go:build integration
+
+package auth
+
+func TestSlowLogin(t *testing.T) {
+	time.Sleep(2 * time.Second)
+}
+`)
+	if name, ok := EnclosingTest(path, 5); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (file is excluded by an unset build tag)", name)
+	}
+}
+
+func TestEnclosingTest_TestdataSegment(t *testing.T) {
+	// go/build.MatchFile alone reports true for a file under testdata/ (the
+	// go tool excludes the directory during package discovery, not this
+	// file individually), so the separate path-segment check must reject it.
+	path := write(t, "testdata/sample_test.go", `package testdata
+
+func TestFixture(t *testing.T) {
+	sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (file lives under testdata/)", name)
+	}
+}
+
+func TestEnclosingTest_GOOSSuffixedExcluded(t *testing.T) {
+	// A "_plan9_test.go" filename restricts the file to GOOS=plan9. The CI
+	// matrix (ubuntu/macos/windows) and every developer machine this ships
+	// on never satisfy that, so this must always resolve to not found.
+	path := write(t, "login_plan9_test.go", `package auth
+
+func TestPlan9Login(t *testing.T) {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (GOOS-suffixed file excluded on this host)", name)
+	}
+}
+
+func TestEnclosingTest_LeadingUnderscoreFileExcluded(t *testing.T) {
+	// The go tool ignores any file whose base name starts with "_" or "."
+	// outright; go/build.MatchFile replicates that.
+	path := write(t, "_login_test.go", `package auth
+
+func TestUnderscoreLogin(t *testing.T) {
+	time.Sleep(1)
+}
+`)
+	if name, ok := EnclosingTest(path, 4); ok {
+		t.Fatalf("EnclosingTest = %q, true; want not found (leading-underscore file is ignored by the go tool)", name)
+	}
+}
+
+func TestEnclosingTest_OrdinaryCompiledFileStillResolves(t *testing.T) {
+	// Positive control: an ordinary _test.go file with no build tag, no
+	// GOOS/GOARCH suffix, no testdata/ segment, and no ignored-name prefix
+	// must still resolve after round 5 -- the new guard must not be passing
+	// by rejecting everything.
+	path := write(t, "ordinary_test.go", `package auth
+
+func TestOrdinary(t *testing.T) {
+	time.Sleep(1)
+}
+`)
+	name, ok := EnclosingTest(path, 4)
+	if !ok || name != "TestOrdinary" {
+		t.Fatalf("EnclosingTest = %q, %v; want \"TestOrdinary\", true", name, ok)
+	}
+}

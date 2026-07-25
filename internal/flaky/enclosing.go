@@ -4,9 +4,11 @@ package flaky
 
 import (
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -55,6 +57,23 @@ import (
 // "e2e/", "cypress/", "__tests__/" path segment) lets the static detector
 // scan an ordinary, non-_test.go Go file and hand this function exactly
 // that path.
+//
+// Round 5: the suffix check validates the *file name*, not whether the
+// toolchain actually *compiles* the file. go/parser applies no build
+// constraints at all, so a `//go:build integration` file, a GOOS/GOARCH
+// filename suffix that doesn't match the host, or an underscore/dot-prefixed
+// file all still parse cleanly and can still yield a real-looking test name
+// -- and then, exactly like round 4's non-_test.go case, `-run '^NAME$'`
+// matches zero tests in the actual `go test` invocation: exit 0, a false
+// VerdictTransient, the same lie ADR-0033 §10 exists to prevent. Build-tagged
+// integration tests are exactly where hard-coded sleeps live, so this is a
+// likely input, not an exotic one. go/build's own build.Default.MatchFile
+// answers "would the toolchain actually compile this file" without
+// reimplementing any of that logic. It does NOT, however, know about
+// testdata/ -- the go tool excludes testdata by skipping the whole directory
+// during package discovery, not by rejecting individual files within it, so
+// MatchFile alone reports true for a file living under a testdata/ segment.
+// That gap is closed by a separate, explicit path check.
 func EnclosingTest(path string, line int) (string, bool) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path comes from the diff being reviewed
 	if err != nil {
@@ -64,6 +83,17 @@ func EnclosingTest(path string, line int) (string, bool) {
 		return "", false
 	}
 	if !strings.HasSuffix(base(toSlash(path)), "_test.go") {
+		return "", false
+	}
+	if hasTestdataSegment(toSlash(path)) {
+		return "", false
+	}
+	if match, err := build.Default.MatchFile(filepath.Dir(path), filepath.Base(path)); err != nil || !match {
+		// Not compiled into the test binary on this host with the current
+		// build tags -- a build-tag-excluded file, a GOOS/GOARCH filename
+		// suffix that doesn't match, or an underscore/dot-prefixed file the
+		// go tool ignores outright. Resolving a name from it would render a
+		// `-run` pattern matching zero tests (see the round-5 doc above).
 		return "", false
 	}
 
@@ -200,4 +230,19 @@ func isTestingParam(expr ast.Expr, letter string) bool {
 		return false
 	}
 	return pkg.Name == "testing" && sel.Sel.Name == letter
+}
+
+// hasTestdataSegment reports whether p (already slash-normalized) has a
+// "testdata" path segment. go/build.MatchFile does not reject these: the go
+// tool excludes testdata/ by skipping the whole directory during package
+// discovery, not by rejecting individual files within it, so MatchFile
+// happily reports true for e.g. "testdata/x_test.go". This check exists
+// specifically to close that gap.
+func hasTestdataSegment(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "testdata" {
+			return true
+		}
+	}
+	return false
 }

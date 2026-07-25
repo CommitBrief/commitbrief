@@ -592,9 +592,10 @@ func mergeFlaky(llm, flakyFindings []render.Finding) []render.Finding {
 }
 
 // sandboxRerunCount resolves the effective rerun count with precedence
-// --sandbox-rerun[=N] (when explicitly passed) > review.sandbox_rerun config >
-// 0 (off). A bare --sandbox-rerun carries pflag's NoOptDefVal
-// (sandboxRerunDefault) so it is already a positive N by the time we read it.
+// global.noSandbox (agent-facing mcp/guard paths, ADR-0033 §6) > --sandbox-rerun[=N]
+// (when explicitly passed) > review.sandbox_rerun config > 0 (off). A bare
+// --sandbox-rerun carries pflag's NoOptDefVal (sandboxRerunDefault) so it is
+// already a positive N by the time we read it.
 func sandboxRerunCount(cmd *cobra.Command, app *appContext) int {
 	// Agent-facing reuse paths (mcp, guard) never execute repo code, whatever
 	// the flag or the config says (ADR-0033).
@@ -629,8 +630,16 @@ func applySandboxRerun(cmd *cobra.Command, app *appContext, findings []render.Fi
 		return findings, nil
 	}
 
-	// Never silent: the review is about to execute the user's code.
-	infof("%s", app.Catalog.T("flaky.sandbox.running", runner.display, n))
+	// Never silent: the review is about to execute the user's code. Written
+	// straight to stderr rather than through infof, which honours --quiet
+	// (internal/cli/context.go:101-106) -- ADR-0033 §4 calls this notice
+	// non-negotiable, and a quiet flag must not be able to silence the one
+	// stage in the pipeline that actually runs repository code. This never
+	// fires on the mcp/guard paths: sandboxRerunCount returns 0 there via
+	// global.noSandbox (§6), so applySandboxRerun's n<=0 guard above already
+	// returned before reaching here -- nothing leaks into their captured
+	// stderr.
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("flaky.sandbox.running", runner.display, n))
 
 	out := make([]render.Finding, len(findings))
 	for i, f := range findings {
@@ -639,7 +648,10 @@ func applySandboxRerun(cmd *cobra.Command, app *appContext, findings []render.Fi
 			target.Test = name
 		}
 		if runner.needsTest && target.Test == "" {
-			infof("%s", app.Catalog.T("flaky.sandbox.no_test_name", f.File, f.Line))
+			// Same --quiet bypass as the running notice above: a resolution
+			// failure that silently degrades to the static-only finding must
+			// stay visible even under --quiet.
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("flaky.sandbox.no_test_name", f.File, f.Line))
 			out[i] = f
 			continue
 		}

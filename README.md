@@ -314,12 +314,23 @@ review:
 `config set review.sandbox_command` is rejected — hand-edit the config file
 directly (`config get` prints it read-only). Each rerun attempt is bounded by
 a 2-minute timeout (a hung test costs one attempt, not the whole review), and
-a stderr notice names the rendered command on every run — this is the review
-path's first code-execution stage, so it is never silent. The command runs
-against the **working tree**, not the staged snapshot a review may be scoped
-to. `commitbrief mcp` and `commitbrief guard` never run it, unconditionally,
-regardless of flag or config — an agent host must not execute repository code
-unattended (ADR-0033 §6); the static findings still return, unconfirmed.
+a stderr notice names the **configured command template** — the un-rendered
+argv, e.g. `-run ^{{.Test}}$` — once per review, before any per-test rendering
+happens; this is the review path's first code-execution stage, so it is never
+silent. The command runs against the **working tree**, not the staged
+snapshot a review may be scoped to. `commitbrief mcp` and `commitbrief guard`
+never run it, unconditionally, regardless of flag or config — an agent host
+must not execute repository code unattended (ADR-0033 §6); the static
+findings still return, unconfirmed.
+
+**Sandbox-rerun is not cached.** The flaky pre-pass (and any sandbox-rerun
+confirmation inside it) runs *before* the cache lookup, so its findings can
+merge into both a cache hit and a fresh call. That means a cache hit does
+**not** skip the rerun: re-running the same command against the same diff
+still executes the configured command again, even though the review body
+itself is served from cache and the footer reports `Saved`. Total cost scales
+with the number of flagged findings — worst case `findings × N × 2 minutes`,
+with no cap and no progress output while it runs.
 
 **Test-name resolution is Go-only.** `{{.Test}}` resolves via `go/parser`
 against `*_test.go` files; every other language resolves to no name, so that
