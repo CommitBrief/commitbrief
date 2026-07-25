@@ -87,6 +87,17 @@ func runUpgrade(cmd *cobra.Command, checkOnly bool) error {
 
 	current, ok := upgrade.ParseVersion(version.Version)
 	if !ok {
+		// --json promises a report object on every non-error run. A dev
+		// build must therefore still emit one: returning nil with empty
+		// stdout would hand a parsing script silence and exit 0, with no
+		// way to tell "no update" from "the command did nothing".
+		if global.json {
+			return writeUpgradeJSON(out, upgradeReport{
+				Current:         version.Version,
+				Method:          string(method),
+				UpdateAvailable: false,
+			})
+		}
 		if checkOnly {
 			_, _ = fmt.Fprintln(msg, cat.T("upgrade.dev_build", version.Version))
 			return nil
