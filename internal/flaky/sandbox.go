@@ -22,17 +22,28 @@ import (
 // stays pure, deterministic, and unit-testable with a fake — no process spawns
 // or real sleeps in tests.
 
+// Target identifies the single test a rerun campaign re-runs. It is a struct
+// rather than an opaque id because a caller-bound runner needs the parts
+// addressable: a configured command template renders {{.File}}, {{.Line}}, and
+// {{.Test}} into its argv. Test is the enclosing test function name and is ""
+// when it could not be resolved — a runner that needs it must check.
+type Target struct {
+	File string // repo-relative, slash-normalized
+	Line int
+	Test string
+}
+
 // Executor runs a single, already-isolated test once and reports whether it
 // passed. The error channel is reserved for harness failures that are NOT a
 // test result — the runner could not be launched, the context was cancelled,
 // the test binary did not compile. A test that runs and fails its assertions
 // is `passed == false, err == nil`; only an inability to OBSERVE a result is
-// an error. testID is opaque to the orchestrator: it is whatever handle the
-// caller's runner understands (a fully-qualified test name, a node id, …).
+// an error. t is opaque to the orchestrator: it is whatever handle the
+// caller's runner understands.
 //
-// Implementations must be safe to call repeatedly for the same testID — each
+// Implementations must be safe to call repeatedly for the same Target — each
 // call is one independent rerun.
-type Executor func(ctx context.Context, testID string) (passed bool, err error)
+type Executor func(ctx context.Context, t Target) (passed bool, err error)
 
 // Verdict is the empirical classification produced by re-running a flagged
 // test in isolation. It is intentionally a small closed vocabulary so the
@@ -94,7 +105,7 @@ type RerunResult struct {
 // runs <= 0 yields an Inconclusive result with no calls to exec. A nil exec is
 // treated the same way (defensive: the seam is unbound), so the orchestrator
 // is safe to call even when the caller never bound a runner.
-func Rerun(ctx context.Context, exec Executor, testID string, runs int) RerunResult {
+func Rerun(ctx context.Context, exec Executor, t Target, runs int) RerunResult {
 	res := RerunResult{Verdict: VerdictInconclusive}
 	if exec == nil || runs <= 0 {
 		return res
@@ -106,7 +117,7 @@ func Rerun(ctx context.Context, exec Executor, testID string, runs int) RerunRes
 		if ctx != nil && ctx.Err() != nil {
 			break
 		}
-		passed, err := exec(ctx, testID)
+		passed, err := exec(ctx, t)
 		res.Runs++
 		switch {
 		case err != nil:

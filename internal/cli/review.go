@@ -609,15 +609,6 @@ func sandboxRerunCount(cmd *cobra.Command, app *appContext) int {
 	return app.Config.Review.SandboxRerun
 }
 
-// sandboxTestID maps a flaky finding to the opaque handle the bound Executor
-// understands. File:line is stable and language-agnostic; the runner the
-// caller binds is responsible for resolving it to a concrete test invocation
-// (e.g. the enclosing `go test -run` name). Kept here so the mapping is one
-// place if it ever needs to grow.
-func sandboxTestID(f render.Finding) string {
-	return f.File + ":" + strconv.Itoa(f.Line)
-}
-
 // applySandboxRerun re-runs each statically flagged flaky candidate in
 // isolation and folds the empirical verdict back into the finding (ADR-0022
 // §Update 2026-06-21). It is opt-in and degrades safely: with N <= 0, an
@@ -636,7 +627,7 @@ func applySandboxRerun(cmd *cobra.Command, app *appContext, findings []render.Fi
 	}
 	out := make([]render.Finding, len(findings))
 	for i, f := range findings {
-		res := flaky.Rerun(cmd.Context(), exec, sandboxTestID(f), n)
+		res := flaky.Rerun(cmd.Context(), exec, flaky.Target{File: f.File, Line: f.Line}, n)
 		out[i] = flaky.Annotate(app.Catalog, f, res)
 	}
 	return out

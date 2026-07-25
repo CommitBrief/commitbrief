@@ -56,7 +56,7 @@ func TestApplySandboxRerun_DefaultOffIsNoOp(t *testing.T) {
 	// be invoked (so existing behaviour is unchanged).
 	app := sandboxTestApp(t)
 	calls := 0
-	withExecutor(t, func(context.Context, string) (bool, error) { calls++; return true, nil })
+	withExecutor(t, func(context.Context, flaky.Target) (bool, error) { calls++; return true, nil })
 
 	in := sampleFlaky()
 	out := applySandboxRerun(bareCmd(), app, in)
@@ -98,7 +98,7 @@ func TestApplySandboxRerun_ConfigDrivesAnnotation(t *testing.T) {
 	// finding is reclassified transient (demoted to info, suggestion annotated).
 	app := sandboxTestApp(t)
 	app.Config.Review.SandboxRerun = 3
-	withExecutor(t, func(context.Context, string) (bool, error) { return true, nil })
+	withExecutor(t, func(context.Context, flaky.Target) (bool, error) { return true, nil })
 
 	out := applySandboxRerun(bareCmd(), app, sampleFlaky())
 	for _, f := range out {
@@ -117,7 +117,7 @@ func TestApplySandboxRerun_MixedConfirmsFlaky(t *testing.T) {
 	app := sandboxTestApp(t)
 	app.Config.Review.SandboxRerun = 4
 	flip := false
-	withExecutor(t, func(context.Context, string) (bool, error) {
+	withExecutor(t, func(context.Context, flaky.Target) (bool, error) {
 		flip = !flip
 		return flip, nil
 	})

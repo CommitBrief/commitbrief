@@ -21,7 +21,7 @@ func scriptedExecutor(t *testing.T, calls *int, script ...struct {
 	err    error
 }) Executor {
 	t.Helper()
-	return func(_ context.Context, _ string) (bool, error) {
+	return func(_ context.Context, _ Target) (bool, error) {
 		i := *calls
 		*calls++
 		if i >= len(script) {
@@ -45,7 +45,7 @@ func TestRerun_MixedIsFlaky(t *testing.T) {
 		step{passed: false},
 		step{passed: true}, // must NOT be reached (early exit)
 	)
-	res := Rerun(context.Background(), exec, "pkg.TestX", 5)
+	res := Rerun(context.Background(), exec, Target{File: "a_test.go", Line: 1}, 5)
 	if res.Verdict != VerdictFlaky {
 		t.Fatalf("verdict = %q, want %q", res.Verdict, VerdictFlaky)
 	}
@@ -66,7 +66,7 @@ func TestRerun_AllFailIsRealFailure(t *testing.T) {
 	exec := scriptedExecutor(t, &calls,
 		step{passed: false}, step{passed: false}, step{passed: false},
 	)
-	res := Rerun(context.Background(), exec, "pkg.TestX", 3)
+	res := Rerun(context.Background(), exec, Target{File: "a_test.go", Line: 1}, 3)
 	if res.Verdict != VerdictRealFailure {
 		t.Fatalf("verdict = %q, want %q", res.Verdict, VerdictRealFailure)
 	}
@@ -84,7 +84,7 @@ func TestRerun_AllPassIsTransient(t *testing.T) {
 	exec := scriptedExecutor(t, &calls,
 		step{passed: true}, step{passed: true}, step{passed: true}, step{passed: true},
 	)
-	res := Rerun(context.Background(), exec, "pkg.TestX", 4)
+	res := Rerun(context.Background(), exec, Target{File: "a_test.go", Line: 1}, 4)
 	if res.Verdict != VerdictTransient {
 		t.Fatalf("verdict = %q, want %q", res.Verdict, VerdictTransient)
 	}
@@ -98,8 +98,8 @@ func TestRerun_NRespected(t *testing.T) {
 	// times — the orchestrator honours the requested rerun count.
 	for _, n := range []int{1, 3, 7} {
 		calls := 0
-		exec := func(_ context.Context, _ string) (bool, error) { calls++; return true, nil }
-		res := Rerun(context.Background(), exec, "pkg.TestX", n)
+		exec := func(_ context.Context, _ Target) (bool, error) { calls++; return true, nil }
+		res := Rerun(context.Background(), exec, Target{File: "a_test.go", Line: 1}, n)
 		if calls != n {
 			t.Errorf("N=%d: exec called %d times, want %d", n, calls, n)
 		}
@@ -115,8 +115,8 @@ func TestRerun_NRespected(t *testing.T) {
 func TestRerun_ZeroOrNegativeIsInconclusiveNoCalls(t *testing.T) {
 	for _, n := range []int{0, -1} {
 		calls := 0
-		exec := func(_ context.Context, _ string) (bool, error) { calls++; return true, nil }
-		res := Rerun(context.Background(), exec, "pkg.TestX", n)
+		exec := func(_ context.Context, _ Target) (bool, error) { calls++; return true, nil }
+		res := Rerun(context.Background(), exec, Target{File: "a_test.go", Line: 1}, n)
 		if calls != 0 {
 			t.Errorf("N=%d: exec called %d times, want 0", n, calls)
 		}
@@ -131,7 +131,7 @@ func TestRerun_ZeroOrNegativeIsInconclusiveNoCalls(t *testing.T) {
 
 func TestRerun_NilExecutorIsInconclusive(t *testing.T) {
 	// An unbound seam must be safe to call and yield no classification.
-	res := Rerun(context.Background(), nil, "pkg.TestX", 5)
+	res := Rerun(context.Background(), nil, Target{File: "a_test.go", Line: 1}, 5)
 	if res.Verdict != VerdictInconclusive {
 		t.Fatalf("verdict = %q, want inconclusive for a nil executor", res.Verdict)
 	}
@@ -150,7 +150,7 @@ func TestRerun_ExecutorErrorHandled(t *testing.T) {
 		step{err: errors.New("compile error")},
 		step{err: errors.New("timeout")},
 	)
-	res := Rerun(context.Background(), exec, "pkg.TestX", 3)
+	res := Rerun(context.Background(), exec, Target{File: "a_test.go", Line: 1}, 3)
 	if res.Verdict != VerdictInconclusive {
 		t.Fatalf("verdict = %q, want inconclusive when every attempt errors", res.Verdict)
 	}
@@ -173,7 +173,7 @@ func TestRerun_ErrorsDoNotMaskAFlake(t *testing.T) {
 		step{passed: false},
 		step{passed: true}, // must NOT be reached (flaky is conclusive at call 3)
 	)
-	res := Rerun(context.Background(), exec, "pkg.TestX", 6)
+	res := Rerun(context.Background(), exec, Target{File: "a_test.go", Line: 1}, 6)
 	if res.Verdict != VerdictFlaky {
 		t.Fatalf("verdict = %q, want flaky", res.Verdict)
 	}
@@ -191,8 +191,8 @@ func TestRerun_CancelledContextStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	calls := 0
-	exec := func(_ context.Context, _ string) (bool, error) { calls++; return true, nil }
-	res := Rerun(ctx, exec, "pkg.TestX", 5)
+	exec := func(_ context.Context, _ Target) (bool, error) { calls++; return true, nil }
+	res := Rerun(ctx, exec, Target{File: "a_test.go", Line: 1}, 5)
 	if calls != 0 {
 		t.Errorf("exec called %d times after cancel, want 0", calls)
 	}
@@ -262,5 +262,23 @@ func TestAnnotate_EmptySuggestionGetsVerdictAlone(t *testing.T) {
 	got := Annotate(cat, f, RerunResult{Verdict: VerdictFlaky, Runs: 2})
 	if got.Suggestion == "" || strings.HasPrefix(got.Suggestion, " ") {
 		t.Errorf("verdict should become the suggestion with no leading space, got %q", got.Suggestion)
+	}
+}
+
+func TestRerun_PassesTargetToExecutor(t *testing.T) {
+	// The executor receives the whole target, not a formatted string: a
+	// configured command template addresses the test by name, and
+	// reconstructing structure from "file:line" would be the wrong direction.
+	var got Target
+	exec := func(_ context.Context, tgt Target) (bool, error) {
+		got = tgt
+		return true, nil
+	}
+	want := Target{File: "internal/auth/session_test.go", Line: 42, Test: "TestLogin"}
+
+	Rerun(context.Background(), exec, want, 1)
+
+	if got != want {
+		t.Fatalf("target = %+v, want %+v", got, want)
 	}
 }
