@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -114,6 +115,11 @@ func runUpgrade(cmd *cobra.Command, checkOnly bool) error {
 			return errors.New(cat.T("upgrade.err_rate_limited"))
 		case errors.Is(err, upgrade.ErrNoRelease):
 			return errors.New(cat.T("upgrade.err_no_release"))
+		case errors.Is(err, upgrade.ErrBadResponse):
+			// The server was reached and answered; the payload just
+			// didn't parse. That is distinct from a network failure and
+			// must not be reported as one.
+			return errors.New(cat.T("upgrade.err_bad_response", err))
 		default:
 			return errors.New(cat.T("upgrade.err_network", err))
 		}
@@ -160,6 +166,20 @@ func runUpgrade(cmd *cobra.Command, checkOnly bool) error {
 	}
 
 	if checkOnly {
+		// Surface the same permission gate a real run would hit, so a
+		// root-owned or read-only manual install is reported honestly
+		// instead of promising an install that would actually be
+		// refused. Never reached when --json implied checkOnly: that
+		// path already returned above, and --json prints only the
+		// report object. A warning only — --check always exits 0.
+		if method == upgrade.MethodManual {
+			if err := upgrade.PreflightWritable(exe); err != nil {
+				_, _ = fmt.Fprintln(msg, cat.T("upgrade.err_not_writable", exe))
+				_, _ = fmt.Fprintln(msg, cat.T("upgrade.hint_manual"))
+				_, _ = fmt.Fprintf(msg, "  sudo %s upgrade\n", exe)
+				_, _ = fmt.Fprintf(msg, "  %s\n", upgrade.ReleasesPage)
+			}
+		}
 		return nil
 	}
 
@@ -219,26 +239,55 @@ func runUpgrade(cmd *cobra.Command, checkOnly bool) error {
 	return nil
 }
 
-// verifyReplacement re-runs the binary we just swapped and warns when it
-// does not report the expected version. The usual cause is another
-// commitbrief earlier on PATH shadowing this one: the swap genuinely
-// succeeded, but the command the user types is still the old binary, and
-// a silent success would leave them believing otherwise.
+// verifyReplacement re-runs the binary we just swapped and checks two
+// independent things, each with its own warning: whether it reports the
+// expected version, and whether some other "commitbrief" resolves
+// earlier on PATH than the file that was just upgraded. Neither implies
+// the other — a version mismatch after execing the resolved `exe`
+// directly cannot be explained by PATH shadowing, since exec bypasses
+// PATH entirely; the shadow check exists to catch the separate, real
+// problem that the command the user types next may still resolve to
+// the old binary even though this exact file was upgraded correctly.
 //
-// Never fatal — the upgrade already happened, and a failure to re-exec
-// (a sandbox, a hardened mount) is not a reason to report failure.
-// Applies to the manual path only; a package manager may relocate its
-// binary, so `exe` is not necessarily the new file after delegation.
+// Never fatal — the upgrade already happened, and neither a failure to
+// re-exec (a sandbox, a hardened mount) nor a shadowing PATH entry is a
+// reason to report failure. Applies to the manual path only; a package
+// manager may relocate its binary, so `exe` is not necessarily the new
+// file after delegation.
 func verifyReplacement(cmd *cobra.Command, cat catalog, msg io.Writer, exe string, latest upgrade.Version) {
 	out, err := exec.CommandContext(cmd.Context(), exe, "--version").Output()
 	if err != nil {
 		_, _ = fmt.Fprintln(msg, cat.T("upgrade.verify_failed", err))
-		return
+	} else if reported := strings.TrimSpace(string(out)); !reportsVersion(reported, latest) {
+		_, _ = fmt.Fprintln(msg, cat.T("upgrade.verify_mismatch", reported, latest.String()))
 	}
-	reported := strings.TrimSpace(string(out))
-	if !reportsVersion(reported, latest) {
-		_, _ = fmt.Fprintln(msg, cat.T("upgrade.verify_mismatch", reported))
+
+	if shadow, ok := shadowingPath(exe); ok {
+		_, _ = fmt.Fprintln(msg, cat.T("upgrade.verify_shadowed", exe, shadow))
 	}
+}
+
+// shadowingPath reports whatever "commitbrief" the user's shell would
+// actually resolve on PATH, if it differs from exe (the binary just
+// upgraded). ok is false when PATH has no commitbrief, or it resolves
+// to exe itself — neither is worth reporting, and a LookPath failure is
+// not an error in its own right, just the common case of a manual
+// install that was never put on PATH.
+func shadowingPath(exe string) (shadow string, ok bool) {
+	found, err := exec.LookPath("commitbrief")
+	if err != nil {
+		return "", false
+	}
+	resolved, err := filepath.EvalSymlinks(found)
+	if err != nil {
+		// A broken or unreadable link is not fatal to the check —
+		// compare what LookPath found, unresolved.
+		resolved = found
+	}
+	if resolved == exe {
+		return "", false
+	}
+	return resolved, true
 }
 
 // reportsVersion checks whether --version output names the expected

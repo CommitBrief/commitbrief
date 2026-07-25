@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func newTestClient(t *testing.T, h http.Handler) (*Client, *httptest.Server) {
@@ -76,13 +77,16 @@ func TestLatestNoRelease(t *testing.T) {
 	}
 }
 
+// TestLatestMalformedJSON pins that a decode failure is reported as
+// ErrBadResponse — the server was reached and answered, so this must
+// not collapse into the same message as a network failure.
 func TestLatestMalformedJSON(t *testing.T) {
 	c, _ := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("<html>not json</html>"))
 	}))
 	_, err := c.Latest(context.Background())
-	if err == nil {
-		t.Fatal("Latest() error = nil, want a parse error")
+	if !errors.Is(err, ErrBadResponse) {
+		t.Fatalf("error = %v, want ErrBadResponse", err)
 	}
 	if errors.Is(err, ErrRateLimited) || errors.Is(err, ErrNoRelease) {
 		t.Fatalf("error = %v, want a plain parse error", err)
@@ -118,5 +122,33 @@ func TestDownloadRejectsNon200(t *testing.T) {
 	var buf bytes.Buffer
 	if err := c.Download(context.Background(), srv.URL, &buf); err == nil {
 		t.Fatal("Download() error = nil, want a status error")
+	}
+}
+
+// TestDownloadSurvivesSlowBody pins that Download has no whole-request
+// deadline: headers arrive immediately, then the body trickles in after
+// a delay that would have tripped the old 30s http.Client.Timeout (which
+// covers the entire round trip, body included) had it still been set on
+// the client Download uses. The client's ResponseHeaderTimeout is set
+// low deliberately — proving it is irrelevant here, since headers are
+// already flushed before the delay — while asserting nothing else in
+// Download imposes a competing deadline on the slow body.
+func TestDownloadSurvivesSlowBody(t *testing.T) {
+	c, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(100 * time.Millisecond)
+		_, _ = w.Write([]byte("payload"))
+	}))
+	c.Assets = &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 20 * time.Millisecond}}
+
+	var buf bytes.Buffer
+	if err := c.Download(context.Background(), srv.URL, &buf); err != nil {
+		t.Fatalf("Download() error = %v, want nil — a slow body must not trip a whole-request deadline", err)
+	}
+	if buf.String() != "payload" {
+		t.Fatalf("body = %q, want %q", buf.String(), "payload")
 	}
 }

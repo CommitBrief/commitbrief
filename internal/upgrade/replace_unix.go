@@ -15,5 +15,7 @@ func replaceBinary(tmp, target string) error {
 	return os.Rename(tmp, target)
 }
 
-// CleanupStale is a no-op on Unix — the rename leaves nothing behind.
-func CleanupStale(target string) {}
+// cleanupOld is a no-op on Unix — the rename leaves nothing
+// platform-specific behind. Temp-file sweeping is shared across
+// platforms; see CleanupStale in cleanup.go.
+func cleanupOld(target string) {}

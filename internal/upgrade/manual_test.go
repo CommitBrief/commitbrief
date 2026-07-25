@@ -103,7 +103,11 @@ func TestInstallManualReplacesBinary(t *testing.T) {
 	}
 	dir := t.TempDir()
 	target := filepath.Join(dir, "commitbrief")
-	if err := os.WriteFile(target, []byte("OLD BINARY"), 0o755); err != nil {
+	// A non-default mode: manual.go falls back to a hardcoded 0755 when
+	// it cannot stat the existing target, so asserting 0755 here would
+	// pass even if the actual preservation logic were deleted. 0700
+	// makes the assertion mean something.
+	if err := os.WriteFile(target, []byte("OLD BINARY"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -132,8 +136,8 @@ func TestInstallManualReplacesBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o755 {
-		t.Fatalf("mode = %v, want 0755 preserved from the old binary", info.Mode().Perm())
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("mode = %v, want 0700 preserved from the old binary", info.Mode().Perm())
 	}
 	// No .commitbrief-* scratch files may survive a successful run.
 	leftovers, _ := filepath.Glob(filepath.Join(dir, ".commitbrief-*"))

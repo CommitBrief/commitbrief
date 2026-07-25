@@ -133,7 +133,6 @@ func normalizePath(p, goos string) string {
 		// Marker comparisons are lowercase; on case-sensitive systems
 		// only the fixed markers are folded, never the user's path.
 		p = strings.Replace(p, "/Cellar/", "/cellar/", 1)
-		p = strings.Replace(p, "/scoop/", "/scoop/", 1)
 	}
 	return p
 }

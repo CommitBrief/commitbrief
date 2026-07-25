@@ -47,9 +47,10 @@ func replaceBinary(tmp, target string) error {
 	return nil
 }
 
-// CleanupStale removes the moved-aside binary a previous upgrade could
+// cleanupOld removes the moved-aside binary a previous upgrade could
 // not delete because it was still executing. Best effort by design: a
-// failure here is never worth interrupting an upgrade over.
-func CleanupStale(target string) {
+// failure here is never worth interrupting an upgrade over. Temp-file
+// sweeping is shared across platforms; see CleanupStale in cleanup.go.
+func cleanupOld(target string) {
 	_ = os.Remove(target + ".old")
 }

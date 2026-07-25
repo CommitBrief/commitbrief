@@ -32,6 +32,11 @@ var (
 	ErrRateLimited = errors.New("github api rate limit exceeded")
 	// ErrNoRelease means the repository has no published release.
 	ErrNoRelease = errors.New("no published release found")
+	// ErrBadResponse means the GitHub API answered — the server was
+	// reached, and returned a 200 — but the body did not decode as the
+	// expected JSON shape. Distinct from a network failure: the request
+	// itself succeeded, only the payload was unusable.
+	ErrBadResponse = errors.New("could not parse the github release response")
 )
 
 // Asset is one file attached to a release.
@@ -61,15 +66,28 @@ func (r *Release) AssetByName(name string) (Asset, bool) {
 // can point it at an httptest server — no test ever reaches github.com.
 type Client struct {
 	HTTP      *http.Client
+	Assets    *http.Client // used by Download; falls back to HTTP when nil
 	APIURL    string
 	UserAgent string
 }
 
 // NewClient returns a client that identifies itself with the running
-// CommitBrief version and gives up after 30 seconds.
+// CommitBrief version. HTTP (the API client) gives up after 10 seconds —
+// a release-metadata response is a few KB and fast.
+//
+// Assets (used by Download) deliberately has no whole-request Timeout.
+// http.Client.Timeout covers the entire round trip, including reading
+// the response body, and a release archive can be several megabytes —
+// a fixed deadline there fails a slow or throttled connection outright,
+// permanently, no matter how much of the file already arrived. Instead
+// it is bounded by ResponseHeaderTimeout (a stalled server still gives
+// up after 30s) and by the context passed to Download for cancellation.
 func NewClient(version string) *Client {
 	return &Client{
-		HTTP:      &http.Client{Timeout: 30 * time.Second},
+		HTTP: &http.Client{Timeout: 10 * time.Second},
+		Assets: &http.Client{
+			Transport: &http.Transport{ResponseHeaderTimeout: 30 * time.Second},
+		},
 		APIURL:    DefaultAPIURL,
 		UserAgent: "commitbrief/" + version,
 	}
@@ -103,7 +121,7 @@ func (c *Client) Latest(ctx context.Context) (*Release, error) {
 	// The raw body is deliberately not echoed on a parse failure: an
 	// error page can be arbitrarily long and is never actionable.
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxDownloadBytes)).Decode(&rel); err != nil {
-		return nil, fmt.Errorf("github api: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrBadResponse, err)
 	}
 	if rel.TagName == "" {
 		return nil, ErrNoRelease
@@ -112,7 +130,9 @@ func (c *Client) Latest(ctx context.Context) (*Release, error) {
 }
 
 // Download streams url into w. Redirects are followed (GitHub sends
-// release downloads to objects.githubusercontent.com).
+// release downloads to objects.githubusercontent.com). Uses c.Assets —
+// the client with no whole-request timeout — falling back to c.HTTP so
+// a hand-constructed Client (as in tests) still works.
 func (c *Client) Download(ctx context.Context, url string, w io.Writer) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -120,7 +140,11 @@ func (c *Client) Download(ctx context.Context, url string, w io.Writer) error {
 	}
 	req.Header.Set("User-Agent", c.UserAgent)
 
-	resp, err := c.HTTP.Do(req)
+	client := c.Assets
+	if client == nil {
+		client = c.HTTP
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

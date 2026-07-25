@@ -3,6 +3,9 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -86,6 +89,50 @@ func TestReportsVersion(t *testing.T) {
 			t.Fatalf("reportsVersion(%q) = %v, want %v", c.output, got, c.want)
 		}
 	}
+}
+
+// TestShadowingPath pins the three outcomes verifyReplacement's shadow
+// warning depends on: nothing on PATH, PATH resolving to a different
+// binary than the one just upgraded, and PATH resolving to that same
+// binary (the common, unremarkable case — no warning).
+func TestShadowingPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PATH/executable-bit resolution differs on windows")
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "commitbrief")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho ok\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("nothing on PATH", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		if _, ok := shadowingPath("/wherever/commitbrief"); ok {
+			t.Fatal("shadowingPath() ok = true, want false when PATH has no commitbrief")
+		}
+	})
+
+	t.Run("resolves to a different binary", func(t *testing.T) {
+		t.Setenv("PATH", dir)
+		shadow, ok := shadowingPath("/somewhere/else/commitbrief")
+		if !ok {
+			t.Fatal("shadowingPath() ok = false, want true")
+		}
+		if shadow != resolved {
+			t.Fatalf("shadowingPath() = %q, want %q", shadow, resolved)
+		}
+	})
+
+	t.Run("resolves to the same binary", func(t *testing.T) {
+		t.Setenv("PATH", dir)
+		if _, ok := shadowingPath(resolved); ok {
+			t.Fatal("shadowingPath() ok = true, want false when PATH resolves to exe itself")
+		}
+	})
 }
 
 // TestUpgradeReportJSONDevBuild pins the shape emitted for a build whose
