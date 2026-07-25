@@ -10,6 +10,55 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`review.sandbox_command` binds the sandbox-rerun executor (ADR-0033).**
+  `--sandbox-rerun[=N]` / `review.sandbox_rerun` shipped in v1.12.0 as a
+  documented no-op — the rerun orchestration existed, but no runner was bound.
+  A new `review.sandbox_command` config key closes that gap: a **list of argv
+  elements**, never a shell string, each rendered as a Go `text/template` over
+  `{{.File}}` (repo-relative), `{{.Line}}`, and `{{.Test}}` (the enclosing test
+  function name), then handed directly to `exec.CommandContext` — no shell is
+  invoked, so the argv-not-shell rule holds and there is no quoting/injection
+  surface.
+  ```yaml
+  review:
+    sandbox_rerun: 5
+    sandbox_command: ["go", "test", "-count=1", "-run", "^{{.Test}}$", "./..."]
+  ```
+  Binding requires a **double opt-in** — a positive `--sandbox-rerun`/
+  `review.sandbox_rerun` **and** a non-empty `review.sandbox_command`; either
+  alone stays inert, so the default path is byte-identical to today's static
+  detector. `config set review.sandbox_command` is rejected (hand-edit only,
+  matching the existing treatment of `guard.secret_patterns`) — a config
+  surface that can arm code execution deserves the same friction as one that
+  can disable secret scanning. Each attempt runs under its own 2-minute
+  timeout, so one hung test costs one attempt, not the whole review, and a
+  stderr notice names the rendered command on every run — the review path has
+  never before executed code, so it is never silent about it. The command
+  runs against the **working tree**, not the staged snapshot a review may be
+  scoped to, because that's what the bound command actually executes against.
+  `commitbrief mcp` and `commitbrief guard` never run the bound command,
+  unconditionally and with no user-facing toggle, because both drive the
+  review through the shared `runReviewForMCP` seam and an agent host must not
+  execute repository code unattended — their flaky findings stay at the
+  static-only confidence level even when a runner is configured. See
+  ADR-0033 and the 2026-07-25 `§Update` on ADR-0022.
+
+### Changed
+- **`flaky.Executor` widens to a `Target` struct (ADR-0033 §9, internal).**
+  The rerun seam took an opaque `testID string`; it now takes
+  `Target{File, Line, Test}` so a bound command's template can address the
+  test by name instead of re-parsing a `"file:line"` string. The seam had no
+  shipped consumer before this release, so the change is free. Test-name
+  resolution (`flaky.EnclosingTest`) is **Go-only**: it parses `*_test.go`
+  files with `go/parser`/`go/ast` and returns no name for every other
+  language, after three fix rounds of a hand-rolled multi-language scanner
+  kept producing confident wrong names — a worse outcome than not confirming
+  at all. A finding whose test name can't be resolved skips the rerun (with a
+  stderr warning) and keeps its bare static finding; Python/JS/PHP/Java tests
+  keep full static flaky detection, they just never get sandbox-rerun
+  confirmation.
+
 ## [1.13.0] - 2026-07-04
 
 ### Changed
