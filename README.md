@@ -234,6 +234,19 @@ commitbrief --committer carol --merges             # committer identity; keep me
 commitbrief --author alice --start-date 2026-06-01 --dir internal   # all combinable
 commitbrief diff main..develop --author alice      # bound the walk to a range
 
+# Audit for committed credentials — deterministic, no provider call
+commitbrief leaks                            # tracked files + last 200 commits
+commitbrief leaks --no-history               # working tree only, fast
+commitbrief leaks main..HEAD --no-worktree   # exactly that range
+commitbrief leaks --author alice --start-date 2026-01-01
+commitbrief leaks --json | commitbrief guard --from-json -   # gate CI on it
+
+# See the commit graph — and exactly what a filter selects
+commitbrief map                              # the DAG, newest first
+commitbrief map --author alice               # matches highlighted, rest dimmed
+commitbrief map --branches                   # ahead/behind the base branch
+commitbrief map main..develop --max-commits 50
+
 # Plain-language change digest (read-only; no findings)
 commitbrief summary                          # what's staged, grouped by area
 commitbrief summary main...develop           # a range; uses the commit messages in it
@@ -918,7 +931,37 @@ matching rules (exact path or gitignore-style glob), and exclusion is applied
 last, so it always wins.
 
 `commitbrief dry-run` reports how many commits matched and how many files each
-layer removed.
+layer removed. `commitbrief map` shows *which* commits a filter selects — matches
+highlighted, everything else dimmed as context — which is the fastest way to check a
+filter before paying for a review.
+
+## Finding committed credentials
+
+The pre-send secret scanner is a gate: it sees the one diff about to be sent. It
+cannot tell you whether a key is sitting in your tree right now, or whether one was
+committed and later removed — and a removed key is still in the history, still
+reachable in every clone.
+
+`commitbrief leaks` answers both, with the same pattern set and no provider call:
+
+```sh
+commitbrief leaks                      # tracked files + the last 200 commits
+commitbrief leaks --patterns           # what it looks for (built-ins + yours)
+commitbrief leaks --fail-on none       # report without failing the build
+```
+
+It exits 1 on any hit, so it gates CI out of the box, and `--json` emits schema v1 —
+so `commitbrief leaks --json | commitbrief guard --from-json -` enforces a
+`.commitbrief/policy.yml` budget with no extra plumbing.
+
+Findings report a **file, a line and the pattern names** — never the matched text. The
+scanner reads whole files, so its own report must not become a second copy of the
+secret.
+
+Two limits worth knowing: it honors the ignore layers above, so a key inside
+`vendor/**` is not reported; and it is regex-only, so a high-entropy blob with no
+recognizable prefix is invisible. It is a targeted check, not a general-purpose
+secret scanner.
 
 ## Building from source
 

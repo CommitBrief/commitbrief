@@ -10,7 +10,43 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-07-26
+
 ### Added
+- **`commitbrief leaks` — audit the working tree and git history for committed
+  credentials (ADR-0036).** The pre-send secret scanner is a gate: it only ever sees
+  the one diff about to be sent, so it cannot answer "is there a key in my tree right
+  now?" or "did anyone ever commit one?" — and a key that was committed and later
+  removed is still in the history, still reachable in every clone and fork. `leaks`
+  answers both with the same eight built-in patterns plus your
+  `guard.secret_patterns`, deterministically: no provider call, no cache, no cost.
+  Both halves run by default (`--no-worktree` / `--no-history` switch either off).
+  The working-tree half reads every **tracked** file whole — untracked, gitignored
+  files like `.env` are deliberately out of scope, since that is where a secret is
+  supposed to live and it cannot leak through git. The history half scans the **added
+  lines** of the commits ADR-0035's filters select, attributing each hit to its
+  commit, author and date, because that is what decides whether a key still needs
+  rotating. Bounded by `--max-commits` (default 200), and truncation is always
+  reported.
+  Exits 1 on any hit so it gates CI out of the box; `--fail-on none` reports without
+  failing. `--json` emits the existing schema v1 with `meta.provider: "builtin"`, so
+  `commitbrief leaks --json | commitbrief guard --from-json -` enforces a
+  `.commitbrief/policy.yml` budget with no new plumbing.
+  Findings carry a file, a line and the pattern names — **never the matched text**.
+  Two limits are documented rather than hidden: it honors the ignore layers, so a key
+  inside `vendor/**` is not reported, and it is regex-only, so a high-entropy blob
+  with no recognizable prefix is invisible.
+- **`commitbrief map` — the commit graph, and what your filter actually selected
+  (ADR-0037).** The commit filters can pick a non-contiguous set from anywhere in the
+  history, and the only feedback was a count ("12 commits matched") — so a wrong
+  filter silently reviewed the wrong code. `map` draws the DAG with matching commits
+  highlighted and the rest dimmed as context, which makes a filter checkable before
+  you pay for a review. `--branches` switches to a branch topology summary: where each
+  branch sits relative to the base and how far ahead/behind. Deterministic, always
+  exits 0 — a viewer, not a gate. Rows clip to the terminal rather than wrapping, and
+  colour plus box-drawing fall back together, so a pipe or `--color=never` yields
+  plain ASCII. No new dependencies: lane assignment is a pure function in a new
+  `internal/graph` package.
 - **Commit-level filters: `--author`, `--committer`, `--start-date`,
   `--end-date`, `--text` (ADR-0035).** Review a *set of commits* rather than a
   single diff. `git diff` has no author/date/message options — those are
@@ -61,6 +97,15 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   always exits 0; `--json` implies `--check`.
   The version check runs **only** when you invoke the command: there is no
   automatic update check and no telemetry.
+
+### Changed
+- `commitbrief list`'s built-in command reference was several releases stale — it
+  never listed `commit`, `guard`, `mcp`, `remote pr`, `doctor`, `providers`, `config`,
+  `install-hook` or `upgrade`. Rewritten to cover the whole surface, including the
+  path and commit filters.
+- `--max-commits` and `--merges` are usage errors on a review when no commit filter is
+  set (nothing to modify), but ordinary bounds on `leaks` and `map`, which always walk
+  history.
 
 ### Fixed
 - `commitbrief remote pr` now applies `--file` / `--dir` on the **posting**
@@ -2032,7 +2077,9 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/CommitBrief/commitbrief/compare/v1.14.0...v1.15.0
+[1.14.0]: https://github.com/CommitBrief/commitbrief/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/CommitBrief/commitbrief/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/CommitBrief/commitbrief/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/CommitBrief/commitbrief/compare/v1.10.0...v1.11.0

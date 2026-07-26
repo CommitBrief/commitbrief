@@ -5,13 +5,10 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/term"
 )
 
 // Progress is the staged-spinner driving the review pipeline's
@@ -94,13 +91,9 @@ func NewProgress(w io.Writer, mode ColorMode, quiet bool) *Progress {
 		p.stop = make(chan struct{})
 		p.done = make(chan struct{})
 		// Capture terminal width so redraw can clip lines and never wrap.
-		// Animated mode implies a TTY writer, so GetSize normally succeeds;
+		// Animated mode implies a TTY writer, so the query normally succeeds;
 		// a failure leaves width 0 (clipping disabled — best-effort).
-		if f, ok := w.(*os.File); ok {
-			if cols, _, err := term.GetSize(int(f.Fd())); err == nil {
-				p.width = cols
-			}
-		}
+		p.width = TerminalWidth(w)
 	default:
 		p.mode = progressPlain
 	}
@@ -515,24 +508,9 @@ const (
 	stageInfoLeader = " "                              // bare space (no glyph for info lines)
 )
 
-// clip truncates s to at most max display columns (rune count, a good
-// enough proxy here), appending "…" when it cuts. max <= 0 means "no
-// limit" (terminal width unknown). Keeping rendered lines within the
-// terminal width is what prevents wrapping, which would otherwise desync
-// the cursor-up redraw and flood the screen.
-func clip(s string, max int) string {
-	if max <= 0 {
-		return s
-	}
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	if max == 1 {
-		return "…"
-	}
-	return string(r[:max-1]) + "…"
-}
+// clip is the package-internal spelling of Clip (see width.go), kept so the
+// redraw hot path reads the same as it always did.
+func clip(s string, max int) string { return Clip(s, max) }
 
 func animatedDotColor(frame int) string {
 	return breathingColors[frame%len(breathingColors)] + "⏺\033[0m"
