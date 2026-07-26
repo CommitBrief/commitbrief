@@ -83,3 +83,62 @@ func TestDetectWindowsIsCaseInsensitive(t *testing.T) {
 		t.Fatalf("Detect() = %q, want %q", got, MethodScoop)
 	}
 }
+
+// TestSamePath pins the comparison internal/cli's shadowingPath relies
+// on: exact-byte on any non-Windows GOOS (unchanged from a plain ==),
+// but case- and separator-insensitive on Windows, since neither
+// os.Executable nor exec.LookPath is guaranteed to return byte-identical
+// casing/separators for the same file, and EvalSymlinks normalizes
+// neither. goos is passed explicitly so this runs the Windows rules on
+// any host, the same way TestDetect exercises them.
+func TestSamePath(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b string
+		goos string
+		want bool
+	}{
+		{
+			name: "windows case difference is the same path",
+			a:    `C:\Users\ada\bin\commitbrief.exe`,
+			b:    `C:\USERS\ada\BIN\CommitBrief.EXE`,
+			goos: "windows",
+			want: true,
+		},
+		{
+			name: "windows separator difference is the same path",
+			a:    `C:\Users\ada\bin\commitbrief.exe`,
+			b:    `C:/Users/ada/bin/commitbrief.exe`,
+			goos: "windows",
+			want: true,
+		},
+		{
+			name: "windows genuinely different paths do not match",
+			a:    `C:\Users\ada\bin\commitbrief.exe`,
+			b:    `C:\Program Files\CommitBrief\commitbrief.exe`,
+			goos: "windows",
+			want: false,
+		},
+		{
+			name: "unix comparison stays case-sensitive",
+			a:    "/usr/local/bin/commitbrief",
+			b:    "/usr/local/bin/CommitBrief",
+			goos: "linux",
+			want: false,
+		},
+		{
+			name: "unix identical paths match",
+			a:    "/usr/local/bin/commitbrief",
+			b:    "/usr/local/bin/commitbrief",
+			goos: "darwin",
+			want: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := SamePath(c.a, c.b, c.goos); got != c.want {
+				t.Fatalf("SamePath(%q, %q, %q) = %v, want %v", c.a, c.b, c.goos, got, c.want)
+			}
+		})
+	}
+}

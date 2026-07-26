@@ -82,12 +82,26 @@ type Client struct {
 // permanently, no matter how much of the file already arrived. Instead
 // it is bounded by ResponseHeaderTimeout (a stalled server still gives
 // up after 30s) and by the context passed to Download for cancellation.
+//
+// Assets' Transport is a *clone of http.DefaultTransport*, not a bare
+// &http.Transport{} — a zero-valued Transport is a materially different,
+// worse thing than "DefaultTransport with one field changed". A bare
+// Transport has Proxy == nil, so it silently ignores HTTPS_PROXY/
+// HTTP_PROXY on a proxied network — while Latest's client (nil
+// Transport ⇒ http.DefaultTransport) still honors it, so a user behind
+// a corporate proxy would see `upgrade` correctly detect an update and
+// then fail to download it. A bare Transport also has no DialContext
+// and TLSHandshakeTimeout == 0; since ResponseHeaderTimeout only starts
+// counting after connect + TLS finish, a blackholed endpoint would fall
+// back to the OS TCP timeout (commonly 75s+) with an unbounded TLS
+// handshake on top of that — nothing else in this codebase bounds it,
+// since the context passed in has no deadline of its own.
 func NewClient(version string) *Client {
+	assetsTransport := http.DefaultTransport.(*http.Transport).Clone()
+	assetsTransport.ResponseHeaderTimeout = 30 * time.Second
 	return &Client{
-		HTTP: &http.Client{Timeout: 10 * time.Second},
-		Assets: &http.Client{
-			Transport: &http.Transport{ResponseHeaderTimeout: 30 * time.Second},
-		},
+		HTTP:      &http.Client{Timeout: 10 * time.Second},
+		Assets:    &http.Client{Transport: assetsTransport},
 		APIURL:    DefaultAPIURL,
 		UserAgent: "commitbrief/" + version,
 	}

@@ -125,14 +125,62 @@ func TestDownloadRejectsNon200(t *testing.T) {
 	}
 }
 
-// TestDownloadSurvivesSlowBody pins that Download has no whole-request
-// deadline: headers arrive immediately, then the body trickles in after
-// a delay that would have tripped the old 30s http.Client.Timeout (which
-// covers the entire round trip, body included) had it still been set on
-// the client Download uses. The client's ResponseHeaderTimeout is set
-// low deliberately — proving it is irrelevant here, since headers are
-// already flushed before the delay — while asserting nothing else in
-// Download imposes a competing deadline on the slow body.
+// TestNewClientTransportConfiguration pins the exact fields NewClient
+// produces for Assets (the client Download uses) versus HTTP (the API
+// client) — a structural check, not a timing-based one, because a
+// timing-based test cannot reliably distinguish "no whole-request
+// deadline" from "a deadline long enough not to fire in this test run"
+// without either being slow or being flaky. A previous version of this
+// test used a hand-built client with a short delay and passed
+// regardless of what NewClient actually configured (proven by setting
+// Assets.Timeout to 1ms and re-running: still green) — this test reads
+// the fields straight off NewClient's return value instead, so it fails
+// immediately if either regresses:
+//   - HTTP keeps a whole-request Timeout (release metadata is small).
+//   - Assets has Timeout == 0 (no whole-request deadline on a
+//     multi-megabyte download).
+//   - Assets' Transport is asserted as *http.Transport with a non-nil
+//     Proxy (so HTTPS_PROXY/HTTP_PROXY isn't silently dropped for
+//     downloads only) and a non-zero TLSHandshakeTimeout (so a stalled
+//     handshake — which ResponseHeaderTimeout does not bound, since it
+//     only starts counting after connect+TLS finish — cannot hang
+//     forever), confirming Assets was built from a clone of
+//     http.DefaultTransport rather than a bare &http.Transport{}.
+//   - Assets' Transport.ResponseHeaderTimeout is exactly 30s.
+func TestNewClientTransportConfiguration(t *testing.T) {
+	c := NewClient("v1.14.0")
+
+	if c.HTTP.Timeout != 10*time.Second {
+		t.Fatalf("HTTP.Timeout = %v, want 10s", c.HTTP.Timeout)
+	}
+
+	if c.Assets.Timeout != 0 {
+		t.Fatalf("Assets.Timeout = %v, want 0 (no whole-request deadline)", c.Assets.Timeout)
+	}
+	tr, ok := c.Assets.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Assets.Transport = %T, want *http.Transport", c.Assets.Transport)
+	}
+	if tr.Proxy == nil {
+		t.Fatal("Assets.Transport.Proxy is nil — HTTPS_PROXY/HTTP_PROXY would be ignored for asset downloads")
+	}
+	if tr.TLSHandshakeTimeout == 0 {
+		t.Fatal("Assets.Transport.TLSHandshakeTimeout is 0 — a stalled TLS handshake would never time out")
+	}
+	if tr.ResponseHeaderTimeout != 30*time.Second {
+		t.Fatalf("Assets.Transport.ResponseHeaderTimeout = %v, want 30s", tr.ResponseHeaderTimeout)
+	}
+}
+
+// TestDownloadSurvivesSlowBody exercises Download against the actual
+// client NewClient produces (not a test-only override): headers arrive
+// immediately, then the body trickles in after a short delay. This
+// alone cannot prove there is no whole-request deadline — that boundary
+// is pinned structurally, at the field level, by
+// TestNewClientTransportConfiguration above — but it does catch a
+// regression that reintroduces a deadline through some other path (a
+// context timeout, a per-request deadline) without necessarily changing
+// the Assets.Timeout field that test inspects.
 func TestDownloadSurvivesSlowBody(t *testing.T) {
 	c, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -142,11 +190,10 @@ func TestDownloadSurvivesSlowBody(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		_, _ = w.Write([]byte("payload"))
 	}))
-	c.Assets = &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 20 * time.Millisecond}}
 
 	var buf bytes.Buffer
 	if err := c.Download(context.Background(), srv.URL, &buf); err != nil {
-		t.Fatalf("Download() error = %v, want nil — a slow body must not trip a whole-request deadline", err)
+		t.Fatalf("Download() error = %v, want nil", err)
 	}
 	if buf.String() != "payload" {
 		t.Fatalf("body = %q, want %q", buf.String(), "payload")

@@ -116,6 +116,23 @@ func goBinDirs(env Env) []string {
 	return dirs
 }
 
+// SamePath reports whether a and b name the same filesystem location,
+// under the platform rules normalizePath already applies for the
+// marker comparisons above: case-insensitive and separator-normalized
+// on Windows (whose filesystem is not case-sensitive), exact bytes
+// everywhere else. goos is a parameter rather than read from runtime
+// for the same reason Env.GOOS is: it lets a non-Windows host exercise
+// the Windows comparison rules in a test.
+//
+// Exported for internal/cli's shadowingPath, which compares a
+// PATH-resolved binary against the one just upgraded. Without this, it
+// would warn about a shadowing commitbrief on Windows purely from a
+// letter-case or `\`-vs-`/` difference that filepath.EvalSymlinks does
+// not normalize away — a false positive, not a real shadow.
+func SamePath(a, b, goos string) bool {
+	return normalizePath(a, goos) == normalizePath(b, goos)
+}
+
 // normalizePath lowercases on Windows (its paths are case-insensitive)
 // and converts separators to forward slashes so the marker checks above
 // can be written once instead of per-OS.

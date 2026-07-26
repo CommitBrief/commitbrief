@@ -273,6 +273,12 @@ func verifyReplacement(cmd *cobra.Command, cat catalog, msg io.Writer, exe strin
 // to exe itself — neither is worth reporting, and a LookPath failure is
 // not an error in its own right, just the common case of a manual
 // install that was never put on PATH.
+//
+// Compares with upgrade.SamePath rather than == : on Windows, exe (from
+// os.Executable + EvalSymlinks) and the PATH lookup can differ in
+// letter case or `\`-vs-`/` without naming a different file — EvalSymlinks
+// normalizes neither — and a plain == would warn about a shadow that
+// does not exist.
 func shadowingPath(exe string) (shadow string, ok bool) {
 	found, err := exec.LookPath("commitbrief")
 	if err != nil {
@@ -284,7 +290,7 @@ func shadowingPath(exe string) (shadow string, ok bool) {
 		// compare what LookPath found, unresolved.
 		resolved = found
 	}
-	if resolved == exe {
+	if upgrade.SamePath(resolved, exe, runtime.GOOS) {
 		return "", false
 	}
 	return resolved, true
