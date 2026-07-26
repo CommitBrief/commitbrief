@@ -219,6 +219,20 @@ commitbrief --unstaged --dir database/seeder --dir app/Models
 commitbrief diff HEAD~3 HEAD --dir docs
 commitbrief --staged --file '*.go'                 # gitignore-style glob (any depth)
 commitbrief --staged --file 'internal/**/*.ts'     # anchored recursive glob
+commitbrief --staged --exclude-file '*_test.go'    # denylist; wins over the includes
+commitbrief --staged --dir internal --exclude-dir internal/cli
+
+# Select the commits themselves — author, date window, message or branch name.
+# Any of these walks history instead of reading the index, so they replace
+# --staged/--unstaged rather than combining with them.
+commitbrief --author alice --author bob            # either person's commits
+commitbrief --author alice@example.com             # name or email, case-insensitive
+commitbrief --start-date 2026-01-01                # on or after (inclusive)
+commitbrief --end-date 2026-03-31                  # on or before (inclusive)
+commitbrief --text payment                         # commit message OR branch name
+commitbrief --committer carol --merges             # committer identity; keep merges
+commitbrief --author alice --start-date 2026-06-01 --dir internal   # all combinable
+commitbrief diff main..develop --author alice      # bound the walk to a range
 
 # Plain-language change digest (read-only; no findings)
 commitbrief summary                          # what's staged, grouped by area
@@ -851,7 +865,44 @@ Review content lives in two files:
 
 ## Filtering
 
-Three layers, applied in order. Later layers win, so a `!pattern` in
+Two independent axes: **which commits** are reviewed, and **which files**
+within them.
+
+### Commit filters (ADR-0035)
+
+`--author`, `--committer`, `--start-date`, `--end-date` and `--text` select a
+set of commits. Setting any of them switches the scope from "the index" to a
+history walk, so they cannot be combined with `--staged` / `--unstaged` — those
+have no commits yet. `commitbrief commit` and `commitbrief remote pr` reject
+them outright (the first describes the index; the second reads its diff from
+`gh`, not local git).
+
+| Flag | Matches |
+|---|---|
+| `--author` | author name **or** email, case-insensitive substring; repeatable, OR'd |
+| `--committer` | committer name or email; repeatable, OR'd |
+| `--start-date YYYY-MM-DD` | author date on or after this day (inclusive) |
+| `--end-date YYYY-MM-DD` | author date on or before this day (**inclusive** — unlike git's bare `--until`) |
+| `--text` | the commit message, **plus** commits unique to a branch whose name contains the text |
+| `--max-commits N` | cap the selection (default 200); truncation is always reported |
+| `--merges` | keep merge commits, which are excluded by default |
+
+Different kinds are AND'd, multiple values of one kind are OR'd:
+`--author alice --author bob --start-date 2026-06-01` means "(Alice or Bob)
+**and** since June".
+
+The revision range walked is `HEAD` by default, or the range you give a
+subcommand: `commitbrief diff main..develop --author alice`. The resulting
+diff is the **concatenation of the matching commits' patches**, not a
+cumulative range diff — so a file changed in three of them appears three
+times, and no unmatched commit's work leaks in.
+
+Branch-name matching is best-effort by nature: a squash- or rebase-merged
+branch no longer owns its commits, so nothing will be found for it.
+
+### File filters
+
+Three ignore layers, applied in order. Later layers win, so a `!pattern` in
 `.commitbriefignore` can revert a built-in exclusion:
 
 1. **Built-in defaults** — binaries, lock files, `vendor/**`,
@@ -861,7 +912,13 @@ Three layers, applied in order. Later layers win, so a `!pattern` in
 3. **`COMMITBRIEF.md` semantic filter** — natural-language rules the LLM
    applies to whatever survives the first two layers.
 
-`commitbrief dry-run --staged` reports how many files each layer removed.
+On top of those, `--file` / `--dir` narrow to a path allowlist and
+`--exclude-file` / `--exclude-dir` remove from it. All four share the same
+matching rules (exact path or gitignore-style glob), and exclusion is applied
+last, so it always wins.
+
+`commitbrief dry-run` reports how many commits matched and how many files each
+layer removed.
 
 ## Building from source
 

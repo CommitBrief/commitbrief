@@ -61,6 +61,14 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		return err
 	}
 
+	// Commit-level filters (ADR-0035). Resolved before anything else that
+	// costs time so a malformed date or an impossible scope combination
+	// fails on the spot rather than after the rules/architecture load.
+	commitFilter, err := buildCommitFilter(app.Catalog, scope, diffArgs)
+	if err != nil {
+		return err
+	}
+
 	// --suggest-commit (ADR-0015) is staged-only and conflicts with the
 	// structured / file-output flags. Validate up front so a misuse fails
 	// before any provider call.
@@ -114,7 +122,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	defer prog.Close()
 
 	prog.Start(app.Catalog.T("progress.searching"))
-	rawDiff, err := fetchDiff(app.Repo, scope, diffArgs)
+	rawDiff, selection, err := fetchDiff(ctx, app.Repo, scope, diffArgs, commitFilter)
 	if err != nil {
 		prog.Fail(err)
 		return err
@@ -126,12 +134,13 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	}
 	matcher := buildMatcher(app.RepoRoot)
 	parsed = diff.Filter(parsed, matcher)
-	parsed, err = diff.KeepPaths(parsed, global.files, global.dirs)
+	parsed, err = keepAndDropPaths(parsed)
 	if err != nil {
 		err = errors.New(app.Catalog.T("filter.glob.invalid", err.Error()))
 		prog.Fail(err)
 		return err
 	}
+	reportSelection(cmd, app, prog, selection, commitFilter)
 	if parsed.Empty() {
 		prog.Finish()
 		prog.Close()
@@ -337,17 +346,18 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			// what would have been spent — surfaced as "Saved" by the
 			// verbose footer (see render/verbose.go).
 			meta := render.Meta{
-				Provider:     prov.Name(),
-				Model:        model,
-				Lang:         app.Lang.Code,
-				Cached:       true,
-				Timestamp:    entry.CreatedAt,
-				Usage:        usage,
-				Cost:         resolvePricing(app.Config, prov, model).Cost(usage),
-				Files:        parsed.FileCount(),
-				LinesAdded:   parsed.AddedLines(),
-				LinesRemoved: parsed.DeletedLines(),
-				RulesLoaded:  loaded.Source != rules.SourceDefault,
+				Provider:        prov.Name(),
+				Model:           model,
+				Lang:            app.Lang.Code,
+				Cached:          true,
+				Timestamp:       entry.CreatedAt,
+				Usage:           usage,
+				Cost:            resolvePricing(app.Config, prov, model).Cost(usage),
+				Files:           parsed.FileCount(),
+				LinesAdded:      parsed.AddedLines(),
+				LinesRemoved:    parsed.DeletedLines(),
+				RulesLoaded:     loaded.Source != rules.SourceDefault,
+				FilteredCommits: len(selection.Commits),
 			}
 			// Parse Findings unless the entry was written in markdown-fallback
 			// or plain-text mode — in those cases the cached Content is
@@ -520,6 +530,8 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		Suppressed:    suppressed,
 		Retries:       retries,
 		DegradeReason: degrade,
+
+		FilteredCommits: len(selection.Commits),
 	}
 
 	if !global.noCache && cacheStore != nil {
@@ -964,14 +976,58 @@ func degradeReason(err error) string {
 	}
 }
 
-func fetchDiff(repo *git.DispatchRepo, scope reviewScopeFlags, diffArgs []string) (git.Diff, error) {
-	if len(diffArgs) > 0 {
-		return repo.Diff(diffArgs)
+// fetchDiff is the single diff-acquisition seam every command funnels
+// through. An active commit filter (ADR-0035) replaces the `git diff` call
+// with a commit walk plus per-commit patch concatenation; everything else is
+// the original three-way scope choice, untouched.
+//
+// The returned Selection is empty for the non-filtered paths — those scopes
+// have no commit set to report on.
+func fetchDiff(ctx context.Context, repo *git.DispatchRepo, scope reviewScopeFlags, diffArgs []string, cf git.CommitFilter) (git.Diff, git.Selection, error) {
+	if cf.Active() {
+		return git.FilteredDiff(ctx, repo.Root(), cf)
 	}
-	if scope.unstaged {
-		return repo.UnstagedDiff()
+	var (
+		d   git.Diff
+		err error
+	)
+	switch {
+	case len(diffArgs) > 0:
+		d, err = repo.Diff(diffArgs)
+	case scope.unstaged:
+		d, err = repo.UnstagedDiff()
+	default:
+		d, err = repo.StagedDiff()
 	}
-	return repo.StagedDiff()
+	return d, git.Selection{}, err
+}
+
+// reportSelection emits the "which commits did this actually cover?" lines for
+// a commit-filtered run. Silence would be the dangerous option here: a
+// truncated walk means the review looked at a subset, and the user has to know.
+func reportSelection(cmd *cobra.Command, app *appContext, prog *ui.Progress, sel git.Selection, cf git.CommitFilter) {
+	if !cf.Active() {
+		return
+	}
+	prog.Info(app.Catalog.T("filter.commit.selected", len(sel.Commits), sel.Walked))
+	if !sel.Truncated && !sel.WalkTruncated {
+		return
+	}
+	// Truncation goes out unconditionally — not through the quiet-gated
+	// info channel — because --quiet must never hide the fact that the
+	// review covered only a subset of the matching history.
+	prog.Pause()
+	if sel.Truncated {
+		limit := cf.MaxCommits
+		if limit <= 0 {
+			limit = git.DefaultMaxCommits
+		}
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("filter.commit.truncated", limit))
+	}
+	if sel.WalkTruncated {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("filter.commit.walk_truncated"))
+	}
+	prog.Resume()
 }
 
 // resolveArchContext discovers and renders the architecture-constraints block

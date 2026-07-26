@@ -74,11 +74,16 @@ func runSummary(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) e
 		return errors.New(app.Catalog.T("summary.flag_conflict_review"))
 	}
 
+	commitFilter, err := buildCommitFilter(app.Catalog, scope, diffArgs)
+	if err != nil {
+		return err
+	}
+
 	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
 	defer prog.Close()
 
 	prog.Start(app.Catalog.T("progress.searching"))
-	rawDiff, err := fetchDiff(app.Repo, scope, diffArgs)
+	rawDiff, selection, err := fetchDiff(ctx, app.Repo, scope, diffArgs, commitFilter)
 	if err != nil {
 		prog.Fail(err)
 		return err
@@ -89,12 +94,13 @@ func runSummary(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) e
 		return err
 	}
 	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
-	parsed, err = diff.KeepPaths(parsed, global.files, global.dirs)
+	parsed, err = keepAndDropPaths(parsed)
 	if err != nil {
 		err = errors.New(app.Catalog.T("filter.glob.invalid", err.Error()))
 		prog.Fail(err)
 		return err
 	}
+	reportSelection(cmd, app, prog, selection, commitFilter)
 	if parsed.Empty() {
 		prog.Finish()
 		prog.Close()
@@ -111,9 +117,18 @@ func runSummary(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) e
 	// never walk all of history. Best-effort: a git error here is swallowed
 	// and the summary proceeds without attribution.
 	var manifest string
-	if logArgs, ok := deriveLogRange(diffArgs); ok {
-		if commits, cErr := git.RangeCommits(ctx, app.RepoRoot, logArgs); cErr == nil {
-			manifest = formatManifest(commits)
+	switch {
+	case commitFilter.Active():
+		// The filter already resolved the exact commit set that produced this
+		// diff, with full metadata. Reusing it keeps the attribution honest —
+		// a second, unfiltered `git log` would credit commits the review never
+		// looked at.
+		manifest = formatManifest(selection.Commits)
+	default:
+		if logArgs, ok := deriveLogRange(diffArgs); ok {
+			if commits, cErr := git.RangeCommits(ctx, app.RepoRoot, logArgs); cErr == nil {
+				manifest = formatManifest(commits)
+			}
 		}
 	}
 
@@ -290,50 +305,6 @@ func emitSummary(cmd *cobra.Command, content string) error {
 		return fmt.Errorf("emit summary: %w", err)
 	}
 	return nil
-}
-
-// deriveLogRange turns the user's `git diff` arguments into a clean
-// two-endpoint `git log` range, returning ok=false when no such range can be
-// derived (in which case the summary proceeds diff-only, with no commit
-// attribution). It deliberately refuses anything ambiguous:
-//
-//   - "main...develop" → "main..develop"  (PR-style three-dot diff → the
-//     commits unique to develop)
-//   - "main..develop"  → "main..develop"  (already a range)
-//   - "HEAD~3 HEAD"     → "HEAD~3..HEAD"   (two endpoints)
-//   - "HEAD" / "<hash>" → ok=false         (a single ref would make git log
-//     walk all of history, not "this change")
-//   - anything with flags or a `--` pathspec → ok=false
-func deriveLogRange(diffArgs []string) ([]string, bool) {
-	if len(diffArgs) == 0 {
-		return nil, false
-	}
-	for _, a := range diffArgs {
-		if a == "--" || strings.HasPrefix(a, "-") {
-			return nil, false
-		}
-	}
-	switch len(diffArgs) {
-	case 1:
-		a := diffArgs[0]
-		if strings.Contains(a, "...") {
-			return []string{strings.Replace(a, "...", "..", 1)}, true
-		}
-		if strings.Contains(a, "..") {
-			return []string{a}, true
-		}
-		return nil, false
-	case 2:
-		// Two bare refs ("main feature", "HEAD~3 HEAD") → a..b. Refs already
-		// carrying range syntax here would be malformed git diff input, so a
-		// plain join is the faithful mapping.
-		if strings.Contains(diffArgs[0], "..") || strings.Contains(diffArgs[1], "..") {
-			return nil, false
-		}
-		return []string{diffArgs[0] + ".." + diffArgs[1]}, true
-	default:
-		return nil, false
-	}
 }
 
 // maxManifestFilesPerCommit caps how many touched paths a single commit

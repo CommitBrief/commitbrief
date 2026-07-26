@@ -14,6 +14,11 @@ const (
 	OriginRange    Origin = "range"
 	OriginBranch   Origin = "branch"
 	OriginDiff     Origin = "diff" // `commitbrief diff <args...>` passthrough
+	// OriginFiltered marks a diff assembled from an explicitly selected set
+	// of commits (the --author / --start-date / --end-date / --text filters).
+	// Unlike every other origin its content is a CONCATENATION of per-commit
+	// patches, so the same path may appear as several file entries.
+	OriginFiltered Origin = "filtered"
 )
 
 type Diff struct {

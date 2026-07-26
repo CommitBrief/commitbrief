@@ -28,7 +28,11 @@ func newDryRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rawDiff, err := fetchDiff(app.Repo, reviewScope, nil)
+			commitFilter, err := buildCommitFilter(app.Catalog, reviewScope, nil)
+			if err != nil {
+				return err
+			}
+			rawDiff, selection, err := fetchDiff(cmd.Context(), app.Repo, reviewScope, nil, commitFilter)
 			if err != nil {
 				return err
 			}
@@ -50,6 +54,12 @@ func newDryRunCmd() *cobra.Command {
 				return errors.New(app.Catalog.T("filter.glob.invalid", err.Error()))
 			}
 			pathFilterExcluded := beforePathFilter - parsed.FileCount()
+			beforeExclude := parsed.FileCount()
+			parsed, err = diff.DropPaths(parsed, global.excludeFiles, global.excludeDirs)
+			if err != nil {
+				return errors.New(app.Catalog.T("filter.glob.invalid", err.Error()))
+			}
+			excludeFilterExcluded := beforeExclude - parsed.FileCount()
 			loaded, err := rules.Load(app.RepoRoot)
 			if err != nil {
 				return err
@@ -120,17 +130,33 @@ func newDryRunCmd() *cobra.Command {
 			lines := []string{
 				"Dry run — no provider call.",
 				fmt.Sprintf("Origin:        %s", rawDiff.Origin),
+			}
+			// Commit accounting only appears for a commit-filtered run — an
+			// ordinary staged/unstaged dry-run has no commit set to report.
+			if commitFilter.Active() {
+				matched := fmt.Sprintf("Commits (matched): %d", len(selection.Commits))
+				if selection.Truncated {
+					matched += fmt.Sprintf("  (truncated at --max-commits %d)", commitFilterLimit(commitFilter))
+				}
+				walked := fmt.Sprintf("Commits (walked):  %d", selection.Walked)
+				if selection.WalkTruncated {
+					walked += "  (walk limit reached; older history not inspected)"
+				}
+				lines = append(lines, walked, matched)
+			}
+			lines = append(lines,
 				fmt.Sprintf("Files (input): %d", before),
 				fmt.Sprintf("  built-in ignore filtered:        %d", builtinExcluded),
 				fmt.Sprintf("  .commitbriefignore net filtered: %d", repoExcluded),
 				fmt.Sprintf("  --file/--dir path filter:        %d", pathFilterExcluded),
+				fmt.Sprintf("  --exclude-file/--exclude-dir:    %d", excludeFilterExcluded),
 				fmt.Sprintf("Files (review): %d", parsed.FileCount()),
 				fmt.Sprintf("Added lines:   %d", parsed.AddedLines()),
 				fmt.Sprintf("Deleted lines: %d", parsed.DeletedLines()),
 				fmt.Sprintf("Provider:      %s", app.Config.Provider),
 				fmt.Sprintf("Model:         %s", modelName),
 				fmt.Sprintf("Lang:          %s (source: %s)", app.Lang.Code, app.Lang.Source),
-			}
+			)
 			rulesLine := fmt.Sprintf("Rules source:  %s", loaded.Source)
 			if loaded.Path != "" {
 				rulesLine += fmt.Sprintf(" (%s)", loaded.Path)

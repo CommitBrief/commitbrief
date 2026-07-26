@@ -59,7 +59,19 @@ type globalFlags struct {
 	showPrompt     bool     // --show-prompt; print the assembled system+user prompt and exit (no provider call)
 	files          []string // global --file (repeatable); path filter applied post-parse
 	dirs           []string // global --dir (repeatable); prefix filter applied post-parse
-	genMan         string   // hidden: --gen-man <dir> writes man pages and exits
+	excludeFiles   []string // global --exclude-file (repeatable); path denylist applied after --file/--dir (ADR-0035)
+	excludeDirs    []string // global --exclude-dir (repeatable); dir denylist applied after --file/--dir (ADR-0035)
+	// Commit-level filters (ADR-0035). Any of authors/committers/startDate/
+	// endDate/text switches diff acquisition from `git diff` to a commit
+	// walk; merges and maxCommits only modify such a walk.
+	authors    []string // --author (repeatable); matches name or email, case-insensitive
+	committers []string // --committer (repeatable)
+	startDate  string   // --start-date YYYY-MM-DD (inclusive)
+	endDate    string   // --end-date YYYY-MM-DD (inclusive; expanded to end-of-day)
+	text       string   // --text; matches the commit message or a branch name
+	maxCommits int      // --max-commits; 0 → git.DefaultMaxCommits
+	merges     bool     // --merges; include merge commits (default: excluded)
+	genMan     string   // hidden: --gen-man <dir> writes man pages and exits
 }
 
 var global globalFlags
@@ -130,6 +142,17 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
 	flags.StringSliceVarP(&global.files, "file", "f", nil, "review only these files or globs (e.g. `*.go`, `internal/**/*.ts`; repeatable, one pattern per flag — patterns can't be comma-joined); combines with the active scope flag")
 	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories or matching dir globs (e.g. `internal/**`; repeatable, one pattern per flag); combines with the active scope flag")
+	flags.StringSliceVar(&global.excludeFiles, "exclude-file", nil, "skip these files or globs (repeatable, one pattern per flag); same matching rules as --file, applied after it so an exclusion wins")
+	flags.StringSliceVar(&global.excludeDirs, "exclude-dir", nil, "skip files under these directories or matching dir globs (repeatable, one pattern per flag); applied after --dir so an exclusion wins")
+	// Commit-level filters (ADR-0035). Long-form only: the short-flag
+	// namespace is reserved for the flags that were already common.
+	flags.StringSliceVar(&global.authors, "author", nil, "review only commits authored by these people (repeatable; matches name or email, case-insensitive). Switches the scope to a commit walk")
+	flags.StringSliceVar(&global.committers, "committer", nil, "review only commits committed by these people (repeatable; matches name or email, case-insensitive)")
+	flags.StringVar(&global.startDate, "start-date", "", "review only commits on or after this date (YYYY-MM-DD, inclusive)")
+	flags.StringVar(&global.endDate, "end-date", "", "review only commits on or before this date (YYYY-MM-DD, inclusive)")
+	flags.StringVar(&global.text, "text", "", "review only commits whose message contains this text, plus commits unique to a branch whose name contains it (case-insensitive)")
+	flags.IntVar(&global.maxCommits, "max-commits", 0, "cap how many matching commits enter the review (0 = "+strconv.Itoa(git.DefaultMaxCommits)+"); only meaningful with another commit filter")
+	flags.BoolVar(&global.merges, "merges", false, "include merge commits in a commit-filtered review (excluded by default); only meaningful with another commit filter")
 	flags.StringVar(&global.cli, "cli", "", "use a locally-installed CLI tool (claude|gemini|codex) as the review backend; shorthand for --provider <name>-cli")
 	flags.BoolVar(&global.withContext, "with-context", false, "let the CLI provider read project files beyond the diff to ground the review (CLI providers only; the host CLI's agent reads your repo — see --help)")
 	flags.BoolVar(&global.showPrompt, "show-prompt", false, "print the exact system + user prompt that would be sent, then exit (no provider call, no cost)")

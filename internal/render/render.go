@@ -92,4 +92,10 @@ type Meta struct {
 	// cache replay, which made no provider call.
 	Retries       int
 	DegradeReason string
+
+	// FilteredCommits is how many commits the commit-level filters selected
+	// (ADR-0035), i.e. how many commits' patches make up the reviewed diff.
+	// Zero — and therefore omitted from JSON — for every ordinary
+	// staged/unstaged/range review, which has no commit set to report.
+	FilteredCommits int
 }

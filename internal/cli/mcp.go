@@ -116,6 +116,61 @@ func reviewToolInputSchema() json.RawMessage {
 				"type":        "boolean",
 				"description": "Skip the deterministic flaky-test detector (ADR-0022).",
 			},
+			// Path filters (ADR-0026). Previously CLI-only: the MCP seam
+			// resets the global flag state, so a host had no way to narrow a
+			// review by path at all.
+			"file": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Review only these files. A plain value is an exact path; a value containing */?/[ is a gitignore-style glob (e.g. \"*.go\", \"internal/**/*.ts\").",
+			},
+			"dir": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Review only files under these directories. A plain value is a <dir>/ prefix; a glob value is matched gitignore-style.",
+			},
+			"exclude_file": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Skip these files or globs. Same matching rules as `file`, applied after it so an exclusion wins.",
+			},
+			"exclude_dir": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Skip files under these directories or matching dir globs. Applied after `dir` so an exclusion wins.",
+			},
+			// Commit-level filters (ADR-0035). Any of these switches the scope
+			// to a commit walk; `staged`/`unstaged` then become invalid.
+			"author": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Review only commits authored by these people (matches name or email, case-insensitive). Selects a commit set instead of a staged/unstaged diff.",
+			},
+			"committer": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Review only commits committed by these people (matches name or email, case-insensitive).",
+			},
+			"start_date": map[string]any{
+				"type":        "string",
+				"description": "Review only commits on or after this date, YYYY-MM-DD, inclusive.",
+			},
+			"end_date": map[string]any{
+				"type":        "string",
+				"description": "Review only commits on or before this date, YYYY-MM-DD, inclusive.",
+			},
+			"text": map[string]any{
+				"type":        "string",
+				"description": "Review only commits whose message contains this text, plus commits unique to a branch whose name contains it (case-insensitive).",
+			},
+			"max_commits": map[string]any{
+				"type":        "integer",
+				"description": "Cap how many matching commits enter the review (0 = the built-in default). Only meaningful alongside another commit filter.",
+			},
+			"merges": map[string]any{
+				"type":        "boolean",
+				"description": "Include merge commits in a commit-filtered review (excluded by default). Only meaningful alongside another commit filter.",
+			},
 		},
 		"additionalProperties": false,
 	}
@@ -151,6 +206,31 @@ type reviewToolArgs struct {
 	FailOn      string   `json:"fail_on,omitempty"`
 	MinSeverity string   `json:"min_severity,omitempty"`
 	NoFlaky     bool     `json:"no_flaky,omitempty"`
+
+	// Path filters (ADR-0026) and commit filters (ADR-0035). They mirror the
+	// identically-named global flags; `guard` fills them from those flags,
+	// an MCP host from the tool arguments.
+	File        []string `json:"file,omitempty"`
+	Dir         []string `json:"dir,omitempty"`
+	ExcludeFile []string `json:"exclude_file,omitempty"`
+	ExcludeDir  []string `json:"exclude_dir,omitempty"`
+	Author      []string `json:"author,omitempty"`
+	Committer   []string `json:"committer,omitempty"`
+	StartDate   string   `json:"start_date,omitempty"`
+	EndDate     string   `json:"end_date,omitempty"`
+	Text        string   `json:"text,omitempty"`
+	MaxCommits  int      `json:"max_commits,omitempty"`
+	Merges      bool     `json:"merges,omitempty"`
+}
+
+// commitFilterRequested reports whether any commit-selecting argument is set,
+// so the scope choice below can skip the staged default that would otherwise
+// conflict with a commit walk.
+func (a reviewToolArgs) commitFilterRequested() bool {
+	return len(a.Author) > 0 || len(a.Committer) > 0 ||
+		strings.TrimSpace(a.StartDate) != "" ||
+		strings.TrimSpace(a.EndDate) != "" ||
+		strings.TrimSpace(a.Text) != ""
 }
 
 // reviewToolHandler returns the ToolHandler that runs the review pipeline. It
@@ -221,6 +301,10 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	case len(args.Diff) > 0:
 		// Range review: scope flags are ignored when diffArgs is non-empty,
 		// matching the `diff` subcommand.
+	case args.commitFilterRequested():
+		// A commit walk has no staged/unstaged scope; leaving both false is
+		// what buildCommitFilter requires (setting staged here would make
+		// every filtered call fail with a scope conflict).
 	case args.Unstaged:
 		scope.unstaged = true
 	default:
@@ -233,6 +317,17 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	global.failOn = strings.TrimSpace(args.FailOn)
 	global.minSeverity = strings.TrimSpace(args.MinSeverity)
 	global.noFlaky = args.NoFlaky
+	global.files = args.File
+	global.dirs = args.Dir
+	global.excludeFiles = args.ExcludeFile
+	global.excludeDirs = args.ExcludeDir
+	global.authors = args.Author
+	global.committers = args.Committer
+	global.startDate = strings.TrimSpace(args.StartDate)
+	global.endDate = strings.TrimSpace(args.EndDate)
+	global.text = strings.TrimSpace(args.Text)
+	global.maxCommits = args.MaxCommits
+	global.merges = args.Merges
 
 	// Synthetic command: buffered sinks + the host context. runReview reads
 	// cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr() — never os.Stdout
