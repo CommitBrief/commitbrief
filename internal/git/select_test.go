@@ -427,7 +427,9 @@ func TestParseSelectCommitsSkipsMalformed(t *testing.T) {
 		strings.Join([]string{
 			"1111111111111111111111111111111111111111", "1111111",
 			"Alice", "alice@example.com", "Alice", "alice@example.com",
-			"2026-01-10T12:00:00+00:00", "feat: x", "body",
+			"2026-01-10T12:00:00+00:00",
+			"2222222222222222222222222222222222222222 3333333333333333333333333333333333333333",
+			"feat: x", "body",
 		}, logFieldSep) + logFieldSep + "\nM\tx.go\n"
 	out := logRecordSep + "deadbeef" + good // first record has no field separators
 
@@ -437,6 +439,13 @@ func TestParseSelectCommitsSkipsMalformed(t *testing.T) {
 	}
 	if got[0].Author != "Alice" || got[0].Date.IsZero() || !equalStrings(got[0].Files, []string{"x.go"}) {
 		t.Fatalf("record not parsed as expected: %#v", got[0])
+	}
+	// %P is space-separated, so a merge commit yields both parents.
+	if len(got[0].Parents) != 2 {
+		t.Fatalf("expected 2 parents, got %#v", got[0].Parents)
+	}
+	if got[0].Subject != "feat: x" || got[0].Body != "body" {
+		t.Fatalf("parents field must not shift subject/body: %#v", got[0])
 	}
 }
 

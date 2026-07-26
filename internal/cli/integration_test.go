@@ -2306,3 +2306,256 @@ func TestExcludeFiltersRejectedByCommitCommand(t *testing.T) {
 		t.Fatal("commit must reject the path denylist for the same reason it rejects --file/--dir")
 	}
 }
+
+// ---------- commitbrief leaks (ADR-0036) ----------
+
+// leakKey is a well-known AWS documentation placeholder that matches the
+// built-in pattern. It is not a real credential.
+const leakKey = "AKIAIOSFODNN7EXAMPLE"
+
+func TestLeaksFindsWorktreeSecret(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "conf.yml"), "key: "+leakKey+"\n")
+	gitCmd(t, e.repoRoot, "add", "conf.yml")
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "add conf")
+
+	err := e.run("leaks", "--no-history")
+	if err == nil {
+		t.Fatal("a found credential must fail the run so CI gates on it")
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "conf.yml:1") {
+		t.Errorf("expected the file:line of the hit; got:\n%s", truncate(out, 600))
+	}
+	if !strings.Contains(out, "AWS Access Key") {
+		t.Errorf("expected the pattern name; got:\n%s", truncate(out, 600))
+	}
+}
+
+// The invariant that must never regress: the scanner reads whole files, so its
+// own report must not become a second copy of the secret.
+func TestLeaksNeverEchoesTheSecret(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "conf.yml"), "key: "+leakKey+"\n")
+	gitCmd(t, e.repoRoot, "add", "conf.yml")
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "add conf")
+
+	_ = e.run("leaks", "--no-history", "--fail-on", "none")
+	combined := e.out.String() + e.errOut.String()
+	if !strings.Contains(combined, "conf.yml") {
+		t.Fatalf("expected a finding to check against; got:\n%s", truncate(combined, 600))
+	}
+	if strings.Contains(combined, leakKey) {
+		t.Fatalf("the matched secret leaked into the report:\n%s", truncate(combined, 600))
+	}
+}
+
+func TestLeaksJSONNeverEchoesTheSecret(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "conf.yml"), "key: "+leakKey+"\n")
+	gitCmd(t, e.repoRoot, "add", "conf.yml")
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "add conf")
+
+	_ = e.run("leaks", "--no-history", "--json", "--fail-on", "none")
+	out := e.out.String()
+	if strings.Contains(out, leakKey) {
+		t.Fatalf("the matched secret leaked into --json output:\n%s", truncate(out, 600))
+	}
+	// Snippet would be the natural place for it to reappear; it must stay
+	// omitted (omitempty) rather than carrying the matching line.
+	if strings.Contains(out, `"snippet"`) {
+		t.Errorf("snippet must never be populated for a credential finding:\n%s", truncate(out, 600))
+	}
+}
+
+// The reason the history half exists: a secret that was committed and then
+// removed is still reachable in every clone.
+func TestLeaksFindsSecretRemovedFromWorktree(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "conf.yml"), "key: "+leakKey+"\n")
+	gitCmd(t, e.repoRoot, "add", "conf.yml")
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "add conf")
+	writeFile(t, filepath.Join(e.repoRoot, "conf.yml"), "key: REDACTED\n")
+	gitCmd(t, e.repoRoot, "add", "conf.yml")
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "scrub")
+
+	// The working tree is clean...
+	if err := e.run("leaks", "--no-history"); err != nil {
+		t.Fatalf("the working tree is clean, so this must pass: %v\n%s",
+			err, truncate(e.out.String(), 400))
+	}
+
+	// ...but the history still carries it.
+	e2 := newCLIEnv(t)
+	writeFile(t, filepath.Join(e2.repoRoot, "conf.yml"), "key: "+leakKey+"\n")
+	gitCmd(t, e2.repoRoot, "add", "conf.yml")
+	gitCmd(t, e2.repoRoot, "commit", "-q", "-m", "add conf")
+	writeFile(t, filepath.Join(e2.repoRoot, "conf.yml"), "key: REDACTED\n")
+	gitCmd(t, e2.repoRoot, "add", "conf.yml")
+	gitCmd(t, e2.repoRoot, "commit", "-q", "-m", "scrub")
+
+	if err := e2.run("leaks", "--no-worktree"); err == nil {
+		t.Fatalf("the history half must find the removed key; got:\n%s",
+			truncate(e2.out.String(), 600))
+	}
+}
+
+func TestLeaksCleanRepoExitsZero(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("leaks"); err != nil {
+		t.Fatalf("a clean repo must exit 0: %v\n%s", err, truncate(e.out.String(), 400))
+	}
+	if !strings.Contains(e.out.String(), "No credentials found") {
+		t.Errorf("expected the all-clear line; got:\n%s", truncate(e.out.String(), 400))
+	}
+}
+
+func TestLeaksFailOnNoneReportsWithoutFailing(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "conf.yml"), "key: "+leakKey+"\n")
+	gitCmd(t, e.repoRoot, "add", "conf.yml")
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "add conf")
+
+	if err := e.run("leaks", "--no-history", "--fail-on", "none"); err != nil {
+		t.Fatalf("--fail-on none must report without failing: %v", err)
+	}
+	if !strings.Contains(e.out.String(), "conf.yml") {
+		t.Errorf("the finding should still be reported; got:\n%s", truncate(e.out.String(), 400))
+	}
+}
+
+func TestLeaksHonorsPathFilters(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "src", "a.yml"), "key: "+leakKey+"\n")
+	gitCmd(t, e.repoRoot, "add", "src/a.yml")
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "add src")
+
+	if err := e.run("leaks", "--no-history", "--exclude-dir", "src"); err != nil {
+		t.Fatalf("--exclude-dir should remove the only hit: %v\n%s",
+			err, truncate(e.out.String(), 400))
+	}
+}
+
+func TestLeaksPatternsListsEffectiveSet(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("leaks", "--patterns"); err != nil {
+		t.Fatalf("--patterns: %v", err)
+	}
+	for _, want := range []string{"AWS Access Key", "JWT", "PEM Private Key"} {
+		if !strings.Contains(e.out.String(), want) {
+			t.Errorf("--patterns should list %q; got:\n%s", want, e.out.String())
+		}
+	}
+}
+
+func TestLeaksRejectsBothHalvesDisabled(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("leaks", "--no-worktree", "--no-history"); err == nil {
+		t.Fatal("disabling both halves leaves nothing to scan and must error")
+	}
+}
+
+func TestLeaksRejectsMalformedDate(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("leaks", "--start-date", "06-2026"); err == nil {
+		t.Fatal("a malformed --start-date must fail fast")
+	}
+}
+
+// --max-commits alone is a usage error on a review (nothing to modify) but an
+// ordinary bound here, because leaks always walks history.
+func TestLeaksAcceptsMaxCommitsAlone(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("leaks", "--max-commits", "5"); err != nil {
+		t.Fatalf("--max-commits alone is valid for a command that always walks: %v", err)
+	}
+}
+
+// ---------- commitbrief map (ADR-0037) ----------
+
+func TestMapDrawsCommitGraph(t *testing.T) {
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "second commit")
+
+	if err := e.run("map"); err != nil {
+		t.Fatalf("map: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "second commit") {
+		t.Errorf("expected the commit subject in the graph; got:\n%s", truncate(out, 600))
+	}
+	if !strings.Contains(out, "initial") {
+		t.Errorf("expected the whole history; got:\n%s", truncate(out, 600))
+	}
+}
+
+func TestMapHighlightsFilterMatches(t *testing.T) {
+	// The point of the command: show WHICH commits a filter selects and what
+	// they sat between.
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "feat: payments gateway")
+
+	if err := e.run("map", "--text", "payments"); err != nil {
+		t.Fatalf("map --text: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "matches the filter") {
+		t.Errorf("a filtered graph must print its legend; got:\n%s", truncate(out, 600))
+	}
+	// Both the match and the unmatched context commit are drawn.
+	if !strings.Contains(out, "payments gateway") || !strings.Contains(out, "initial") {
+		t.Errorf("expected match plus surrounding context; got:\n%s", truncate(out, 600))
+	}
+}
+
+func TestMapBranchesShowsTopology(t *testing.T) {
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "second")
+	gitCmd(t, e.repoRoot, "branch", "feature/x")
+
+	if err := e.run("map", "--branches"); err != nil {
+		t.Fatalf("map --branches: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "main") || !strings.Contains(out, "feature/x") {
+		t.Errorf("expected both branches; got:\n%s", truncate(out, 600))
+	}
+	if !strings.Contains(out, "base") {
+		t.Errorf("the base branch should be labelled; got:\n%s", truncate(out, 600))
+	}
+}
+
+func TestMapRejectsJSONAndMarkdown(t *testing.T) {
+	// A graph JSON would be a new semver-locked schema; rejecting beats
+	// emitting something that isn't what the flag promised.
+	e := newCLIEnv(t)
+	if err := e.run("map", "--json"); err == nil {
+		t.Fatal("map --json must be rejected")
+	}
+	e2 := newCLIEnv(t)
+	if err := e2.run("map", "--markdown"); err == nil {
+		t.Fatal("map --markdown must be rejected")
+	}
+}
+
+func TestMapRejectsFindingsFlags(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("map", "--fail-on", "critical"); err == nil {
+		t.Fatal("map emits no findings, so --fail-on must be rejected")
+	}
+}
+
+func TestMapBranchesRejectsCommitFilters(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("map", "--branches", "--author", "alice"); err == nil {
+		t.Fatal("--branches lists branches, which a commit filter cannot narrow")
+	}
+}
+
+func TestMapExitsZeroOnSuccess(t *testing.T) {
+	// map is a viewer, never a gate.
+	e := newCLIEnv(t)
+	if err := e.run("map", "--max-commits", "1"); err != nil {
+		t.Fatalf("map must exit 0 on a successful render: %v", err)
+	}
+}

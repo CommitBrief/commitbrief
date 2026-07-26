@@ -40,6 +40,23 @@ const commitFilterFlags = "--author/--committer/--start-date/--end-date/--text"
 // positional args the walk defaults to HEAD — the implicit history walk that
 // makes `commitbrief --author alice` work on its own.
 func buildCommitFilter(cat *i18n.Catalog, scope reviewScopeFlags, diffArgs []string) (git.CommitFilter, error) {
+	return commitFilterFor(cat, scope, diffArgs, false)
+}
+
+// buildWalkFilter is buildCommitFilter for commands that walk history
+// unconditionally — `leaks` and `map`. For them `--merges` and `--max-commits`
+// are ordinary knobs rather than modifiers with nothing to modify, so the
+// "modifier used alone" rejection does not apply.
+//
+// The distinction is real: on a review, `--max-commits 50` alone means the
+// user expected a commit walk they never actually asked for, and silently
+// reviewing the staged index instead would be wrong. On `leaks`, there is
+// always a walk to bound.
+func buildWalkFilter(cat *i18n.Catalog, diffArgs []string) (git.CommitFilter, error) {
+	return commitFilterFor(cat, reviewScopeFlags{}, diffArgs, true)
+}
+
+func commitFilterFor(cat *i18n.Catalog, scope reviewScopeFlags, diffArgs []string, alwaysWalks bool) (git.CommitFilter, error) {
 	f := git.CommitFilter{
 		Authors:    trimAll(global.authors),
 		Committers: trimAll(global.committers),
@@ -60,7 +77,7 @@ func buildCommitFilter(cat *i18n.Catalog, scope reviewScopeFlags, diffArgs []str
 			global.startDate, global.endDate))
 	}
 
-	if !f.Active() {
+	if !f.Active() && !alwaysWalks {
 		// A modifier on its own can't do anything. Say so instead of running
 		// a review that silently ignored a flag the user typed.
 		if global.merges || global.maxCommits > 0 {

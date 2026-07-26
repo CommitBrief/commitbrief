@@ -193,6 +193,8 @@ func newRootCmd() *cobra.Command {
 		newMCPCmd(),
 		newGuardCmd(),
 		newUpgradeCmd(),
+		newMapCmd(),
+		newLeaksCmd(),
 	)
 	return cmd
 }

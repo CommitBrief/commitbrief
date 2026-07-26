@@ -24,9 +24,11 @@ import (
 //     Body, Files. The identity/date fields stay zero — the manifest never
 //     needed them.
 //   - SelectCommits (the commit-level filters) sets every field, because
-//     author/committer/date matching happens on this struct.
+//     author/committer/date matching happens on this struct and the commit
+//     graph (ADR-0037) needs Parents to lay out its lanes.
 type CommitMeta struct {
 	Hash           string    // full 40-hex hash; empty for RangeCommits records
+	Parents        []string  // full parent hashes (%P); empty for RangeCommits records
 	Short          string    // abbreviated hash, e.g. "a1b2c3d"
 	Author         string    // author name (%an)
 	AuthorEmail    string    // author email (%ae)

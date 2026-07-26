@@ -150,6 +150,7 @@ const selectRecordFormat = "--format=" + fmtRecordSep +
 	"%cn" + fmtFieldSep +
 	"%ce" + fmtFieldSep +
 	"%aI" + fmtFieldSep +
+	"%P" + fmtFieldSep +
 	"%s" + fmtFieldSep +
 	"%b" + fmtFieldSep
 
@@ -159,7 +160,7 @@ const showRecordFormat = "--format=" + fmtRecordSep
 
 // selectRecordFields is how many US-separated fields selectRecordFormat plus
 // the --name-status block produce.
-const selectRecordFields = 10
+const selectRecordFields = 11
 
 // FilteredDiff selects the commits matching f and returns their concatenated
 // patches together with the selection metadata. It is read-only: `git log`,
@@ -543,14 +544,15 @@ func parseSelectCommits(out string) []CommitMeta {
 			AuthorEmail:    strings.TrimSpace(fields[3]),
 			Committer:      strings.TrimSpace(fields[4]),
 			CommitterEmail: strings.TrimSpace(fields[5]),
-			Subject:        strings.TrimSpace(fields[7]),
-			Body:           strings.TrimSpace(fields[8]),
+			Parents:        strings.Fields(fields[7]),
+			Subject:        strings.TrimSpace(fields[8]),
+			Body:           strings.TrimSpace(fields[9]),
 		}
 		if ts, err := time.Parse(time.RFC3339, strings.TrimSpace(fields[6])); err == nil {
 			c.Date = ts
 		}
 		if len(fields) == selectRecordFields {
-			c.Files = parseNameStatus(fields[9])
+			c.Files = parseNameStatus(fields[10])
 		}
 		commits = append(commits, c)
 	}

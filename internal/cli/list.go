@@ -28,7 +28,7 @@ commitbrief diff main feature          # review feature vs main
 commitbrief diff main...feature        # PR-style three-dot diff
 ` + "```" + `
 
-Narrow any scope with ` + "`--file`" + ` / ` + "`--dir`" + ` (repeatable, see below).
+Narrow any scope with the path and commit filters (see below).
 
 ## Summary
 
@@ -42,46 +42,106 @@ commitbrief summary HEAD~3 HEAD        # digest the last three commits
 Read-only, plain text (no findings); each line is grouped by logical area and
 attributed to the short commit hash(es) for a range. Use ` + "`-o`" + ` to write to a file.
 
-## Setup and rules
+## Commit message
 
 ` + "```" + `
-commitbrief setup [--local]       # provider + API key wizard
-commitbrief init                  # write COMMITBRIEF.md to the repo
+commitbrief commit                     # suggest a message for the staged diff, then commit
+commitbrief commit -t conventional     # plain | conventional | conventional+body | gitmoji | subject+body
+commitbrief commit -g 3                # offer 3 alternatives to choose from
+commitbrief commit --yes               # commit the first suggestion, no prompt
 ` + "```" + `
+
+The only command that writes to git, and only after confirmation.
 
 ## Inspection
 
 ` + "```" + `
-commitbrief dry-run               # build prompt and report; no API call
-commitbrief list                  # this reference
+commitbrief dry-run                    # build prompt and report; no API call
+commitbrief map                        # draw the commit graph
+commitbrief map --branches             # branch topology: ahead/behind the base
+commitbrief leaks                      # scan tree + history for credentials
+commitbrief list                       # this reference
+commitbrief doctor                     # pipeline health check
+` + "```" + `
+
+` + "`map`" + ` and ` + "`leaks`" + ` are deterministic: no provider call, no cost. With a
+commit filter set, ` + "`map`" + ` highlights the matching commits and dims the rest.
+` + "`leaks`" + ` exits 1 when it finds anything (` + "`--fail-on none`" + ` to report only).
+
+## CI and automation
+
+` + "```" + `
+commitbrief --fail-on critical         # exit 1 on a critical finding
+commitbrief guard                      # gate on .commitbrief/policy.yml
+commitbrief leaks --json | commitbrief guard --from-json -
+commitbrief mcp                        # MCP server over stdio (agent review gate)
+commitbrief install-hook               # install a git hook
+commitbrief remote pr 42               # review a GitHub PR
+` + "```" + `
+
+## Setup and rules
+
+` + "```" + `
+commitbrief setup [--local]            # provider + API key wizard
+commitbrief init                       # write COMMITBRIEF.md to the repo
+commitbrief providers list|use|test    # list/switch/ping providers
+commitbrief config show|get|set        # inspect/edit merged config
 ` + "```" + `
 
 ## Maintenance
 
 ` + "```" + `
-commitbrief compress              # shrink COMMITBRIEF.md losslessly
-commitbrief cache clear           # remove every cached LLM response for this repo
-commitbrief cache prune [flags]   # drop old/excess entries; defaults --keep-last 500 --older-than 7d
+commitbrief compress                   # shrink COMMITBRIEF.md losslessly
+commitbrief cache clear                # remove every cached LLM response for this repo
+commitbrief cache prune [flags]        # drop old/excess entries; defaults --keep-last 500 --older-than 7d
+commitbrief cache stats|inspect        # cache footprint / one entry
+commitbrief upgrade [--check]          # check for and install a newer CommitBrief
 ` + "```" + `
 
 ## Global flags
 
-- ` + "`--json`" + ` — machine-readable JSON output
+- ` + "`--json`" + ` — machine-readable JSON output (schema v1)
 - ` + "`--markdown`" + ` — plain markdown, no ANSI
 - ` + "`-o, --output <file>`" + ` — write to file instead of stdout
 - ` + "`--no-cache`" + ` — bypass cache read and write
-- ` + "`-f, --file <path>`" + ` — narrow review to this file (repeatable)
-- ` + "`-d, --dir <path>`" + ` — narrow review to files under this directory (repeatable)
-- ` + "`--copy`" + ` — copy findings (severity, path, title, description) to the system clipboard
-- ` + "`-y, --yes`" + ` — auto-confirm prompts
+- ` + "`--copy`" + ` — copy findings to the system clipboard
+- ` + "`-y, --yes`" + ` — auto-confirm prompts (never the secret scan or cost preflight)
 - ` + "`-v, --verbose`" + ` — show token/cost/latency footer
 - ` + "`-q, --quiet`" + ` — suppress info messages on stderr
 - ` + "`--lang <code>`" + ` — override output language
-- ` + "`--provider <name>`" + ` — override configured provider
-- ` + "`--model <model>`" + ` — override configured model
+- ` + "`--provider <name>`" + ` / ` + "`--model <model>`" + ` — override the backend
+- ` + "`--cli claude|gemini|codex`" + ` — use a local CLI tool as the backend
 - ` + "`--color <mode>`" + ` — auto | always | never
+- ` + "`--fail-on <sev>`" + ` — exit 1 at/above this severity (critical…info, any, none)
+- ` + "`--min-severity <sev>`" + ` — hide lower severities from the rendered output
+- ` + "`--show-prompt`" + ` — print the exact prompt that would be sent, then exit
 
 ## Filtering
+
+### Path filters
+
+- ` + "`-f, --file <path|glob>`" + ` — review only these files (repeatable)
+- ` + "`-d, --dir <path|glob>`" + ` — review only files under these dirs (repeatable)
+- ` + "`--exclude-file <path|glob>`" + ` — skip these files (repeatable)
+- ` + "`--exclude-dir <path|glob>`" + ` — skip these dirs (repeatable)
+
+A value with ` + "`*`" + `, ` + "`?`" + ` or ` + "`[`" + ` is a gitignore-style glob. Exclusions are
+applied last, so ` + "`--dir internal --exclude-dir internal/cli`" + ` reviews everything
+under ` + "`internal/`" + ` except ` + "`internal/cli`" + `.
+
+### Commit filters
+
+- ` + "`--author <person>`" + ` / ` + "`--committer <person>`" + ` — name or email (repeatable)
+- ` + "`--start-date`" + ` / ` + "`--end-date <YYYY-MM-DD>`" + ` — both ends inclusive
+- ` + "`--text <string>`" + ` — commit message, or a branch name
+- ` + "`--max-commits <N>`" + ` — cap the selection (default 200)
+- ` + "`--merges`" + ` — keep merge commits (excluded by default)
+
+Different kinds are AND'd, multiple values of one kind are OR'd. Setting any of
+them selects a set of commits instead of the index, so they replace
+` + "`--staged`" + `/` + "`--unstaged`" + ` rather than combining with them.
+
+### Ignore layers
 
 Three layers, applied in order. Later layers win, so a ` + "`!pattern`" + ` in
 ` + "`.commitbriefignore`" + ` can revert a built-in exclusion:
@@ -94,21 +154,8 @@ Three layers, applied in order. Later layers win, so a ` + "`!pattern`" + ` in
 3. **` + "`COMMITBRIEF.md`" + ` semantic filter** — interpreted by the LLM
    (file-level decisions happen above; this is the natural-language layer).
 
-Example ` + "`.commitbriefignore`" + `:
-
-` + "```" + `gitignore
-# generated migrations
-db/migrations/*.sql
-
-# vendored docs
-docs/vendor/**
-
-# but please review go.sum despite the built-in default
-!go.sum
-` + "```" + `
-
-` + "`commitbrief dry-run --staged`" + ` reports how many files each layer
-removed.
+` + "`commitbrief dry-run`" + ` reports how many commits matched and how many files
+each layer removed.
 `
 
 func newListCmd() *cobra.Command {
