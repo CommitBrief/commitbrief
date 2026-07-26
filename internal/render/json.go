@@ -68,6 +68,13 @@ type jsonMeta struct {
 	// live-call-only (a cache replay reports neither).
 	RetryCount    int    `json:"retry_count,omitempty"`
 	DegradeReason string `json:"degrade_reason,omitempty"`
+
+	// Commit-filter accounting (ADR-0035). Same omitempty discipline again:
+	// emitted only when the commit-level filters selected a commit set, so a
+	// staged/unstaged/range review's meta block is byte-for-byte what schema
+	// v1 always produced. It tells a consumer how many commits' patches the
+	// reviewed diff was assembled from.
+	FilteredCommits int `json:"filtered_commits,omitempty"`
 }
 
 type jsonUsage struct {
@@ -96,17 +103,18 @@ func JSON(w io.Writer, p Payload) error {
 		Content:  content,
 		Findings: findings,
 		Meta: jsonMeta{
-			Provider:      p.Meta.Provider,
-			Model:         p.Meta.Model,
-			Lang:          p.Meta.Lang,
-			Cost:          p.Meta.Cost,
-			LatencyMS:     p.Meta.Latency.Milliseconds(),
-			Cached:        p.Meta.Cached,
-			Timestamp:     p.Meta.Timestamp,
-			Baselined:     p.Meta.Baselined,
-			Suppressed:    p.Meta.Suppressed,
-			RetryCount:    p.Meta.Retries,
-			DegradeReason: p.Meta.DegradeReason,
+			Provider:        p.Meta.Provider,
+			Model:           p.Meta.Model,
+			Lang:            p.Meta.Lang,
+			Cost:            p.Meta.Cost,
+			LatencyMS:       p.Meta.Latency.Milliseconds(),
+			Cached:          p.Meta.Cached,
+			Timestamp:       p.Meta.Timestamp,
+			Baselined:       p.Meta.Baselined,
+			Suppressed:      p.Meta.Suppressed,
+			RetryCount:      p.Meta.Retries,
+			DegradeReason:   p.Meta.DegradeReason,
+			FilteredCommits: p.Meta.FilteredCommits,
 			Usage: jsonUsage{
 				InputTokens:       p.Meta.Usage.InputTokens,
 				OutputTokens:      p.Meta.Usage.OutputTokens,

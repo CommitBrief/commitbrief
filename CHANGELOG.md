@@ -11,6 +11,44 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [Unreleased]
 
 ### Added
+- **Commit-level filters: `--author`, `--committer`, `--start-date`,
+  `--end-date`, `--text` (ADR-0035).** Review a *set of commits* rather than a
+  single diff. `git diff` has no author/date/message options — those are
+  `git log` options — so setting any of these switches diff acquisition to a
+  commit walk: pick the matching commits, then concatenate their patches.
+  Different filter kinds are AND'd, multiple values of one kind are OR'd, so
+  `--author alice --author bob --start-date 2026-06-01` means "(Alice or Bob)
+  and since June". Identity matching is a case-insensitive substring over both
+  the name and the email. `--end-date` is **inclusive** of the day named
+  (git's bare `--until` stops at that day's midnight and silently drops it).
+  `--text` matches the commit message *and* the name of a branch, in which
+  case the commits unique to that branch are pulled in — best-effort by
+  nature, since a squash- or rebase-merged branch no longer owns its commits.
+  With no explicit range the walk covers `HEAD`; a subcommand's range bounds
+  it (`commitbrief diff main..develop --author alice`).
+  Two modifiers shape a walk but never start one, and are rejected if used
+  alone: `--max-commits N` (default 200) caps the selection and always reports
+  truncation rather than silently reviewing a subset, and `--merges` keeps
+  merge commits, which are excluded by default.
+  Available on the default review, `diff`, `summary`, `dry-run`, the MCP
+  `review` tool and `guard`. Rejected by `commit` (it describes the staged
+  index, which has no commits) and by `remote pr` (its diff comes from
+  `gh pr diff`, not local git).
+- **`--exclude-file` / `--exclude-dir` path denylists.** The inverse of
+  `--file` / `--dir`, sharing their exact matching rules (literal path or
+  gitignore-style glob) and applied after them, so an exclusion always wins:
+  `--dir internal --exclude-dir internal/cli`. An invalid glob errors before
+  any provider call, as it does for the allowlist.
+- **Path and commit filters are now reachable over MCP.** The `review` tool
+  gained `file`, `dir`, `exclude_file`, `exclude_dir`, `author`, `committer`,
+  `start_date`, `end_date`, `text`, `max_commits` and `merges` arguments.
+  `--file` / `--dir` were previously CLI-only in practice: the MCP seam resets
+  the global flag state, so a host had no way to narrow a review by path.
+  `guard` forwards the same set from its inherited persistent flags.
+- **`meta.filtered_commits` in the JSON output.** Optional, `omitempty`, so
+  schema stays `1` — the count of commits whose patches make up the reviewed
+  diff. `dry-run` gains matching `Commits (walked)` / `Commits (matched)` lines
+  and an `--exclude-file/--exclude-dir` row in its per-layer file accounting.
 - **`commitbrief upgrade` — in-tool updates across every install method (ADR-0034).**
   Detects whether the running binary came from Homebrew, Scoop, `go install`
   or a GitHub Releases tarball. Package-managed installs are delegated to
@@ -23,6 +61,12 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   always exits 0; `--json` implies `--check`.
   The version check runs **only** when you invoke the command: there is no
   automatic update check and no telemetry.
+
+### Fixed
+- `commitbrief remote pr` now applies `--file` / `--dir` on the **posting**
+  path too. Only the `--no-post` path honored them, so a narrowed run that
+  commented on GitHub reviewed a different file set than the same command with
+  `--no-post`.
 
 ## [1.14.0] - 2026-07-25
 

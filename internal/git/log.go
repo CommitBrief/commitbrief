@@ -8,20 +8,34 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
-// CommitMeta is one commit's human-relevant metadata, used by the
-// `commitbrief summary` command to attribute logical changes to the
-// commit(s) that introduced them. It carries no diff body — the cumulative
-// range diff is fetched separately via the Diff() passthrough — only the
-// short hash, the author's subject/body (the "commit message" the summary
-// is asked to take into account), and the paths the commit touched (so the
-// model can map a logical area back to the commit responsible for it).
+// CommitMeta is one commit's human-relevant metadata. It carries no diff
+// body — patches are fetched separately (via the Diff() passthrough for a
+// range, or PatchesFor for a selected commit set) — only the identity, the
+// author's subject/body (the "commit message"), and the paths the commit
+// touched (so the model can map a logical area back to the commit
+// responsible for it).
+//
+// Two producers fill it, and they populate different subsets:
+//
+//   - RangeCommits (the `commitbrief summary` manifest) sets Short, Subject,
+//     Body, Files. The identity/date fields stay zero — the manifest never
+//     needed them.
+//   - SelectCommits (the commit-level filters) sets every field, because
+//     author/committer/date matching happens on this struct.
 type CommitMeta struct {
-	Short   string   // abbreviated hash, e.g. "a1b2c3d"
-	Subject string   // first line of the commit message
-	Body    string   // remainder of the commit message (may be empty)
-	Files   []string // post-change paths touched by this commit
+	Hash           string    // full 40-hex hash; empty for RangeCommits records
+	Short          string    // abbreviated hash, e.g. "a1b2c3d"
+	Author         string    // author name (%an)
+	AuthorEmail    string    // author email (%ae)
+	Committer      string    // committer name (%cn)
+	CommitterEmail string    // committer email (%ce)
+	Date           time.Time // author date (%aI), parsed from strict ISO 8601
+	Subject        string    // first line of the commit message
+	Body           string    // remainder of the commit message (may be empty)
+	Files          []string  // post-change paths touched by this commit
 }
 
 // maxRangeCommits bounds how many commits RangeCommits feeds into a summary

@@ -148,7 +148,25 @@ func guardReviewJSON(cmd *cobra.Command) (string, error) {
 		NoFlaky:  global.noFlaky,
 		// FailOn deliberately left empty: the policy gate decides the verdict,
 		// not the review's own --fail-on.
+
+		// The MCP seam wipes the global flag state, so the path (ADR-0026)
+		// and commit (ADR-0035) filters have to be carried across explicitly
+		// or a `guard --author alice` would gate on an unfiltered review.
+		File:        global.files,
+		Dir:         global.dirs,
+		ExcludeFile: global.excludeFiles,
+		ExcludeDir:  global.excludeDirs,
+		Author:      global.authors,
+		Committer:   global.committers,
+		StartDate:   strings.TrimSpace(global.startDate),
+		EndDate:     strings.TrimSpace(global.endDate),
+		Text:        strings.TrimSpace(global.text),
+		MaxCommits:  global.maxCommits,
+		Merges:      global.merges,
 	}
+	// guard --unstaged together with a commit filter is left to fail in
+	// buildCommitFilter, which reports the scope conflict with the same
+	// message a review would — one rule, one message.
 	_, reviewJSON, err := runReviewForMCP(cmd.Context(), args)
 	if err != nil {
 		return "", err

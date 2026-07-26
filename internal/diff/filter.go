@@ -66,15 +66,60 @@ func shouldExclude(f FileDiff, m *ignore.Matcher) bool {
 // `filepath.ToSlash` normalization on both sides so a user passing
 // `app\Models` on Windows still matches `app/Models/User.go`.
 func KeepPaths(d Diff, files, dirs []string) (Diff, error) {
+	return selectPaths(d, files, dirs, true)
+}
+
+// DropPaths is the inverse of KeepPaths: it removes every file matching the
+// supplied denylists (`--exclude-file` / `--exclude-dir`) and keeps the rest.
+// Pattern semantics are identical — same literal/glob bucketing, same
+// gitignore matcher, same union across files, dirs and globs — so a pattern
+// that would select a file under KeepPaths removes exactly that file here.
+//
+// Both empty → no filtering (returns d unchanged). Applied after KeepPaths,
+// so exclusion wins: `--dir internal --exclude-dir internal/cli` reviews
+// everything under internal/ except internal/cli.
+//
+// An invalid glob returns a non-nil error, exactly as KeepPaths does — an
+// unusable denylist must not silently pass every file through.
+func DropPaths(d Diff, files, dirs []string) (Diff, error) {
+	return selectPaths(d, files, dirs, false)
+}
+
+// selectPaths is the shared engine: build the matcher once, then keep the
+// files whose match result equals `keepOnMatch`.
+func selectPaths(d Diff, files, dirs []string, keepOnMatch bool) (Diff, error) {
 	if len(files) == 0 && len(dirs) == 0 {
 		return d, nil
 	}
+	m, err := newPathMatcher(files, dirs)
+	if err != nil {
+		return Diff{}, err
+	}
+	out := Diff{Origin: d.Origin, Args: d.Args}
+	for _, f := range d.Files {
+		if m.matches(f) == keepOnMatch {
+			out.Files = append(out.Files, f)
+		}
+	}
+	out.addedLines, out.deletedLines = countLineKinds(out.Files)
+	return out, nil
+}
 
-	var (
-		literalFiles = make(map[string]struct{}, len(files))
-		literalDirs  = make([]string, 0, len(dirs))
-		globSources  = make([]string, 0, len(files)+len(dirs))
-	)
+// pathMatcher holds one compiled --file/--dir style pattern set. Splitting it
+// out lets the allowlist and the denylist share a single implementation of
+// the bucketing rules ADR-0026 froze, so the two can never drift apart.
+type pathMatcher struct {
+	literalFiles map[string]struct{}
+	literalDirs  []string
+	globs        []gitignore.Pattern
+}
+
+func newPathMatcher(files, dirs []string) (pathMatcher, error) {
+	m := pathMatcher{
+		literalFiles: make(map[string]struct{}, len(files)),
+		literalDirs:  make([]string, 0, len(dirs)),
+	}
+	globSources := make([]string, 0, len(files)+len(dirs))
 
 	for _, f := range files {
 		trimmed := strings.TrimSpace(f)
@@ -86,7 +131,7 @@ func KeepPaths(d Diff, files, dirs []string) (Diff, error) {
 			globSources = append(globSources, norm)
 			continue
 		}
-		literalFiles[norm] = struct{}{}
+		m.literalFiles[norm] = struct{}{}
 	}
 	for _, dir := range dirs {
 		trimmed := strings.TrimSpace(dir)
@@ -102,22 +147,19 @@ func KeepPaths(d Diff, files, dirs []string) (Diff, error) {
 		if clean == "" {
 			continue
 		}
-		literalDirs = append(literalDirs, clean+"/")
+		m.literalDirs = append(m.literalDirs, clean+"/")
 	}
 
 	globs, err := compileGlobs(globSources)
 	if err != nil {
-		return Diff{}, err
+		return pathMatcher{}, err
 	}
+	m.globs = globs
+	return m, nil
+}
 
-	out := Diff{Origin: d.Origin, Args: d.Args}
-	for _, f := range d.Files {
-		if matchesPathAllowlist(f, literalFiles, literalDirs) || matchesAnyGlob(f, globs) {
-			out.Files = append(out.Files, f)
-		}
-	}
-	out.addedLines, out.deletedLines = countLineKinds(out.Files)
-	return out, nil
+func (m pathMatcher) matches(f FileDiff) bool {
+	return matchesPathAllowlist(f, m.literalFiles, m.literalDirs) || matchesAnyGlob(f, m.globs)
 }
 
 // toSlashPattern normalizes a user-supplied --file/--dir pattern to

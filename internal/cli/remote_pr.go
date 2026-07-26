@@ -84,6 +84,15 @@ func parseRequestChangesOn(raw string) (render.Severity, error) {
 }
 
 func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote.Runner) error {
+	// The PR diff comes from `gh pr diff`, not from local git, so there is no
+	// commit history here to walk. Reject the commit filters up front, on both
+	// entry paths, rather than accepting flags that could not be honored.
+	if commitFiltersRequested() {
+		// pickErrorCatalog, not appContext: this check runs before either
+		// path resolves its context, and it must fire the same way whether
+		// or not the user is standing in a git repo.
+		return errors.New(pickErrorCatalog().T("remote.commit_filter_unsupported", commitFilterFlags))
+	}
 	// --no-post (ADR-0016 §Update): use the PR diff purely as a review
 	// source and render to the terminal like a local review — no GitHub
 	// writes (no comments, no verdict), so the local-render and CLI flags
@@ -295,7 +304,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		return err
 	}
 	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
-	parsed, err = diff.KeepPaths(parsed, global.files, global.dirs)
+	parsed, err = keepAndDropPaths(parsed)
 	if err != nil {
 		err = errors.New(cat.T("filter.glob.invalid", err.Error()))
 		prog.Fail(err)
@@ -547,6 +556,13 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 		return prReviewResult{}, err
 	}
 	parsed = diff.Filter(parsed, buildMatcher(app.RepoRoot))
+	// The --no-post path has always honored --file/--dir; the posting path
+	// silently did not. Both go through the shared helper now so a narrowed
+	// `remote pr` reviews the same file set whether or not it comments.
+	parsed, err = keepAndDropPaths(parsed)
+	if err != nil {
+		return prReviewResult{}, errors.New(app.Catalog.T("filter.glob.invalid", err.Error()))
+	}
 	if parsed.Empty() {
 		return prReviewResult{findings: []render.Finding{}, anchors: map[string]diff.FileAnchors{}}, nil
 	}

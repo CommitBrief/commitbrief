@@ -552,3 +552,40 @@ func TestFormatDurationBuckets(t *testing.T) {
 		}
 	}
 }
+
+func TestJSONFilteredCommitsOmittedWhenZero(t *testing.T) {
+	// A staged/unstaged/range review has no commit set, so the meta block must
+	// stay byte-for-byte what schema v1 always produced.
+	p := samplePayload()
+	var w bytes.Buffer
+	if err := JSON(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(w.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := doc["meta"].(map[string]any)["filtered_commits"]; ok {
+		t.Error("filtered_commits must be omitted when zero (schema-v1 byte stability)")
+	}
+}
+
+func TestJSONFilteredCommitsPresentWhenSet(t *testing.T) {
+	p := samplePayload()
+	p.Meta.FilteredCommits = 7
+	var w bytes.Buffer
+	if err := JSON(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(w.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if got := doc["meta"].(map[string]any)["filtered_commits"]; got != float64(7) {
+		t.Errorf("filtered_commits = %v, want 7", got)
+	}
+	// Additive optional field — the schema version must not move.
+	if doc["schema"] != float64(1) {
+		t.Errorf("schema = %v, want 1 (additive change must not bump)", doc["schema"])
+	}
+}

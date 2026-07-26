@@ -331,3 +331,159 @@ func TestKeepPaths_InvalidGlobReturnsError(t *testing.T) {
 		t.Fatalf("invalid glob '[abc.go' should return an error")
 	}
 }
+
+// --- DropPaths (--exclude-file / --exclude-dir) -----------------------------
+
+// mustDrop mirrors mustKeep for the denylist side.
+func mustDrop(t *testing.T, d Diff, files, dirs []string) Diff {
+	t.Helper()
+	got, err := DropPaths(d, files, dirs)
+	if err != nil {
+		t.Fatalf("DropPaths(%v, %v) unexpected error: %v", files, dirs, err)
+	}
+	return got
+}
+
+func TestDropPaths_NoFiltersReturnsInput(t *testing.T) {
+	d := sample()
+	if got := mustDrop(t, d, nil, nil); !reflect.DeepEqual(got, d) {
+		t.Errorf("DropPaths with no filters should be identity; got %v", got)
+	}
+	if got := mustDrop(t, d, []string{}, []string{}); !reflect.DeepEqual(got, d) {
+		t.Errorf("DropPaths with empty slices should be identity")
+	}
+}
+
+func TestDropPaths_FileDenylist(t *testing.T) {
+	d := sample()
+	got := mustDrop(t, d, []string{"routes/web.php", "app/Models/User.go"}, nil)
+	want := []string{
+		"app/Http/Controllers/API.php",
+		"database/seeder/UserSeeder.php",
+		"database/seeder/RoleSeeder.php",
+		"tests/unit_test.go",
+		"renamed.go",
+	}
+	if !reflect.DeepEqual(paths(got), want) {
+		t.Errorf("file denylist = %v, want %v", paths(got), want)
+	}
+}
+
+func TestDropPaths_DirDenylistPrefixMatch(t *testing.T) {
+	d := sample()
+	got := mustDrop(t, d, nil, []string{"database/seeder"})
+	want := []string{
+		"app/Http/Controllers/API.php",
+		"app/Models/User.go",
+		"routes/web.php",
+		"tests/unit_test.go",
+		"renamed.go",
+	}
+	if !reflect.DeepEqual(paths(got), want) {
+		t.Errorf("dir denylist = %v, want %v", paths(got), want)
+	}
+}
+
+func TestDropPaths_DirDenylistDoesNotMatchSibling(t *testing.T) {
+	d := Diff{Files: []FileDiff{
+		{Path: "database/seeder/file.php"},
+		{Path: "database/seedother/file.php"},
+	}}
+	got := mustDrop(t, d, nil, []string{"database/seeder"})
+	want := []string{"database/seedother/file.php"}
+	if !reflect.DeepEqual(paths(got), want) {
+		t.Errorf("dir prefix drop = %v, want %v (no substring leakage)", paths(got), want)
+	}
+}
+
+func TestDropPaths_Glob(t *testing.T) {
+	d := sample()
+	got := mustDrop(t, d, []string{"*.go"}, nil)
+	want := []string{
+		"app/Http/Controllers/API.php",
+		"routes/web.php",
+		"database/seeder/UserSeeder.php",
+		"database/seeder/RoleSeeder.php",
+	}
+	if !reflect.DeepEqual(paths(got), want) {
+		t.Errorf("glob denylist = %v, want %v", paths(got), want)
+	}
+}
+
+func TestDropPaths_AnchoredGlob(t *testing.T) {
+	d := sample()
+	got := mustDrop(t, d, nil, []string{"database/**"})
+	want := []string{
+		"app/Http/Controllers/API.php",
+		"app/Models/User.go",
+		"routes/web.php",
+		"tests/unit_test.go",
+		"renamed.go",
+	}
+	if !reflect.DeepEqual(paths(got), want) {
+		t.Errorf("anchored glob denylist = %v, want %v", paths(got), want)
+	}
+}
+
+func TestDropPaths_OldPathConsidered(t *testing.T) {
+	// A rename is dropped by either its new or its pre-rename path, matching
+	// KeepPaths' two-sided candidate check.
+	d := Diff{Files: []FileDiff{{Path: "renamed.go", OldPath: "legacy/old.go"}}}
+	if got := mustDrop(t, d, nil, []string{"legacy"}); len(got.Files) != 0 {
+		t.Errorf("pre-rename path should be considered; got %v", paths(got))
+	}
+}
+
+func TestDropPaths_IsExactInverseOfKeep(t *testing.T) {
+	// The two share one matcher, so for any pattern set every file must land
+	// in exactly one side. This is the invariant that keeps them from drifting.
+	d := sample()
+	patterns := [][2][]string{
+		{{"*.go"}, nil},
+		{nil, {"database/seeder"}},
+		{{"routes/web.php"}, {"app/Models"}},
+		{{"app/**"}, {"tests"}},
+	}
+	for _, p := range patterns {
+		kept := mustKeep(t, d, p[0], p[1])
+		dropped := mustDrop(t, d, p[0], p[1])
+		if len(kept.Files)+len(dropped.Files) != len(d.Files) {
+			t.Errorf("keep(%d)+drop(%d) != input(%d) for %v/%v",
+				len(kept.Files), len(dropped.Files), len(d.Files), p[0], p[1])
+		}
+	}
+}
+
+func TestDropPaths_AfterKeepExclusionWins(t *testing.T) {
+	// The pipeline order: KeepPaths narrows, then DropPaths removes. An
+	// exclusion inside an inclusion must win.
+	d := Diff{Files: []FileDiff{
+		{Path: "internal/cli/root.go"},
+		{Path: "internal/diff/filter.go"},
+		{Path: "cmd/main.go"},
+	}}
+	kept := mustKeep(t, d, nil, []string{"internal"})
+	got := mustDrop(t, kept, nil, []string{"internal/cli"})
+	want := []string{"internal/diff/filter.go"}
+	if !reflect.DeepEqual(paths(got), want) {
+		t.Errorf("keep-then-drop = %v, want %v", paths(got), want)
+	}
+}
+
+func TestDropPaths_RecountsLineTotals(t *testing.T) {
+	d := Diff{Files: []FileDiff{
+		{Path: "a.go", Hunks: []Hunk{{Lines: []HunkLine{{Kind: LineAdd}, {Kind: LineDel}}}}},
+		{Path: "b.go", Hunks: []Hunk{{Lines: []HunkLine{{Kind: LineAdd}}}}},
+	}}
+	got := mustDrop(t, d, []string{"a.go"}, nil)
+	if got.AddedLines() != 1 || got.DeletedLines() != 0 {
+		t.Errorf("counters = +%d/-%d, want +1/-0", got.AddedLines(), got.DeletedLines())
+	}
+}
+
+func TestDropPaths_InvalidGlobReturnsError(t *testing.T) {
+	d := sample()
+	if _, err := DropPaths(d, []string{"[abc.go"}, nil); err == nil {
+		t.Fatalf("invalid glob '[abc.go' should return an error")
+	}
+}

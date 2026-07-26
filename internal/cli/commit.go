@@ -86,8 +86,15 @@ func runCommit(cmd *cobra.Command) error {
 	if global.json || global.markdown || global.output != "" {
 		return errors.New(app.Catalog.T("commit.flag_conflict_output"))
 	}
-	if len(global.files) > 0 || len(global.dirs) > 0 {
+	if len(global.files) > 0 || len(global.dirs) > 0 ||
+		len(global.excludeFiles) > 0 || len(global.excludeDirs) > 0 {
 		return errors.New(app.Catalog.T("commit.flag_conflict_filter"))
+	}
+	// Commit filters select commits that already exist; `commit` describes the
+	// staged index, which by definition has none yet. Reject rather than
+	// silently ignore.
+	if commitFiltersRequested() {
+		return errors.New(app.Catalog.T("commit.flag_conflict_commit_filter", commitFilterFlags))
 	}
 
 	// Committing needs confirmation we can only get on a TTY. A non-TTY run
@@ -102,7 +109,7 @@ func runCommit(cmd *cobra.Command) error {
 	defer prog.Close()
 
 	prog.Start(app.Catalog.T("progress.searching"))
-	raw, err := fetchDiff(app.Repo, reviewScopeFlags{staged: true}, nil)
+	raw, _, err := fetchDiff(cmd.Context(), app.Repo, reviewScopeFlags{staged: true}, nil, git.CommitFilter{})
 	if err != nil {
 		prog.Fail(err)
 		return err

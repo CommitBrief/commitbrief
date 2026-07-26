@@ -2050,3 +2050,259 @@ func TestInjectionScanToggleOffSilences(t *testing.T) {
 			truncate(e.errOut.String(), 400))
 	}
 }
+
+// ---------- --exclude-file / --exclude-dir path denylists (ADR-0035) ----------
+
+func TestExcludeFileRemovesNamedFile(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "second.go"),
+		"package app\n\nfunc Other() {}\n")
+	gitCmd(t, e.repoRoot, "add", "second.go")
+
+	if err := e.run("dry-run", "--staged", "--exclude-file", "second.go"); err != nil {
+		t.Fatalf("dry-run --exclude-file: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Files (review): 1") {
+		t.Errorf("expected one file after --exclude-file; got:\n%s", truncate(out, 600))
+	}
+	if !strings.Contains(out, "--exclude-file/--exclude-dir:    1") {
+		t.Errorf("expected the dry-run report to attribute 1 file to the denylist; got:\n%s",
+			truncate(out, 600))
+	}
+}
+
+func TestExcludeDirRemovesSubtree(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "models", "user.go"),
+		"package models\n\ntype User struct{}\n")
+	gitCmd(t, e.repoRoot, "add", "models/user.go")
+
+	if err := e.run("dry-run", "--staged", "--exclude-dir", "models"); err != nil {
+		t.Fatalf("dry-run --exclude-dir: %v", err)
+	}
+	if out := e.out.String(); !strings.Contains(out, "Files (review): 1") {
+		t.Errorf("expected the models/ subtree to be dropped; got:\n%s", truncate(out, 600))
+	}
+}
+
+func TestExcludeWinsOverInclude(t *testing.T) {
+	// --dir narrows, --exclude-dir then removes from within that narrowing.
+	// Order is a contract: the exclusion must win.
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "internal", "cli", "a.go"),
+		"package cli\n\nvar A = 1\n")
+	writeFile(t, filepath.Join(e.repoRoot, "internal", "diff", "b.go"),
+		"package diff\n\nvar B = 1\n")
+	gitCmd(t, e.repoRoot, "add", "internal/cli/a.go", "internal/diff/b.go")
+
+	if err := e.run("dry-run", "--staged",
+		"--dir", "internal", "--exclude-dir", "internal/cli"); err != nil {
+		t.Fatalf("dry-run --dir + --exclude-dir: %v", err)
+	}
+	if out := e.out.String(); !strings.Contains(out, "Files (review): 1") {
+		t.Errorf("expected only internal/diff/b.go to survive; got:\n%s", truncate(out, 600))
+	}
+}
+
+func TestExcludeGlobInvalidErrors(t *testing.T) {
+	e := newCLIEnv(t)
+	err := e.run("dry-run", "--staged", "--exclude-file", "[abc.go")
+	if err == nil {
+		t.Fatal("an unterminated character class must error, not silently pass every file")
+	}
+	if !strings.Contains(err.Error(), "glob") {
+		t.Errorf("expected a glob error; got %v", err)
+	}
+}
+
+// ---------- commit-level filters (ADR-0035) ----------
+
+// commitAs commits the working tree under an explicit author identity and
+// author date, which is what the commit filters select on.
+func commitAs(t *testing.T, repo, name, email, date, msg string) {
+	t.Helper()
+	gitCmd(t, repo, "commit", "-q",
+		"--author", name+" <"+email+">",
+		"--date", date+"T12:00:00+00:00",
+		"-m", msg)
+}
+
+// newFilterEnv extends the standard harness with a second commit by a
+// different author, so author/date filters have both a hit and a miss.
+// The staged change the harness leaves behind is committed first so the
+// working tree is clean.
+func newFilterEnv(t *testing.T) *cliEnv {
+	t.Helper()
+	e := newCLIEnv(t)
+	commitAs(t, e.repoRoot, "Alice", "alice@example.com", "2026-01-10", "feat: login validation")
+	writeFile(t, filepath.Join(e.repoRoot, "billing.go"), "package app\n\nvar Rate = 1\n")
+	gitCmd(t, e.repoRoot, "add", "billing.go")
+	commitAs(t, e.repoRoot, "Bob", "bob@example.com", "2026-02-10", "feat: billing rate")
+	return e
+}
+
+func TestCommitFilterAuthorSelectsCommits(t *testing.T) {
+	e := newFilterEnv(t)
+	if err := e.run("dry-run", "--author", "alice"); err != nil {
+		t.Fatalf("dry-run --author: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Commits (matched): 1") {
+		t.Errorf("expected exactly Alice's commit; got:\n%s", truncate(out, 800))
+	}
+	if !strings.Contains(out, "Origin:        filtered") {
+		t.Errorf("expected the filtered origin; got:\n%s", truncate(out, 800))
+	}
+}
+
+func TestCommitFilterAuthorAndDateCombine(t *testing.T) {
+	e := newFilterEnv(t)
+	// Alice's commit is in January; the window excludes it.
+	if err := e.run("dry-run", "--author", "alice",
+		"--start-date", "2026-02-01", "--end-date", "2026-02-28"); err != nil {
+		t.Fatalf("dry-run --author+dates: %v", err)
+	}
+	if out := e.out.String(); !strings.Contains(out, "Commits (matched): 0") {
+		t.Errorf("author AND date must both apply; got:\n%s", truncate(out, 800))
+	}
+}
+
+func TestCommitFilterTextMatchesMessage(t *testing.T) {
+	e := newFilterEnv(t)
+	if err := e.run("dry-run", "--text", "billing"); err != nil {
+		t.Fatalf("dry-run --text: %v", err)
+	}
+	if out := e.out.String(); !strings.Contains(out, "Commits (matched): 1") {
+		t.Errorf("expected the billing commit; got:\n%s", truncate(out, 800))
+	}
+}
+
+func TestCommitFilterMaxCommitsTruncates(t *testing.T) {
+	e := newFilterEnv(t)
+	if err := e.run("dry-run", "--start-date", "2026-01-01", "--max-commits", "1"); err != nil {
+		t.Fatalf("dry-run --max-commits: %v", err)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "Commits (matched): 1") {
+		t.Errorf("expected the cap to apply; got:\n%s", truncate(out, 800))
+	}
+	if !strings.Contains(out, "truncated at --max-commits 1") {
+		t.Errorf("truncation must be reported, never silent; got:\n%s", truncate(out, 800))
+	}
+}
+
+func TestCommitFilterCombinesWithPathFilters(t *testing.T) {
+	e := newFilterEnv(t)
+	if err := e.run("dry-run", "--start-date", "2026-01-01",
+		"--exclude-file", "billing.go"); err != nil {
+		t.Fatalf("dry-run commit+path filter: %v", err)
+	}
+	out := e.out.String()
+	// Three commits: the harness's "initial", Alice's, and Bob's.
+	if !strings.Contains(out, "Commits (matched): 3") {
+		t.Errorf("every commit should match the date filter; got:\n%s", truncate(out, 800))
+	}
+	if !strings.Contains(out, "--exclude-file/--exclude-dir:    1") {
+		t.Errorf("the path denylist must still apply on top; got:\n%s", truncate(out, 800))
+	}
+}
+
+func TestCommitFilterRunsFullReview(t *testing.T) {
+	// End-to-end through the mock provider: a commit-filtered run must reach
+	// the renderer like any other review.
+	e := newFilterEnv(t)
+	if err := e.run("--author", "alice", "--no-cache", "--no-cost-check"); err != nil {
+		t.Fatalf("commit-filtered review: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	if !strings.Contains(e.out.String(), "mock review output") {
+		t.Errorf("expected mock provider output; got:\n%s", truncate(e.out.String(), 400))
+	}
+}
+
+func TestCommitFilterReportsCountInJSON(t *testing.T) {
+	e := newFilterEnv(t)
+	if err := e.run("--author", "alice", "--json", "--no-cache", "--no-cost-check"); err != nil {
+		t.Fatalf("commit-filtered --json review: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+	if !strings.Contains(e.out.String(), `"filtered_commits": 1`) {
+		t.Errorf("expected meta.filtered_commits in the JSON document; got:\n%s",
+			truncate(e.out.String(), 800))
+	}
+}
+
+func TestCommitFilterRejectsStagedScope(t *testing.T) {
+	e := newFilterEnv(t)
+	err := e.run("--staged", "--author", "alice")
+	if err == nil {
+		t.Fatal("--staged with a commit filter must error: the index has no commits")
+	}
+	if !strings.Contains(err.Error(), "--staged") {
+		t.Errorf("error should name the conflicting scope flag; got %v", err)
+	}
+}
+
+func TestCommitFilterRejectsUnstagedScope(t *testing.T) {
+	e := newFilterEnv(t)
+	if err := e.run("--unstaged", "--text", "billing"); err == nil {
+		t.Fatal("--unstaged with a commit filter must error")
+	}
+}
+
+func TestCommitFilterRejectsMalformedDate(t *testing.T) {
+	e := newCLIEnv(t)
+	err := e.run("dry-run", "--start-date", "06-2026")
+	if err == nil {
+		t.Fatal("a malformed --start-date must fail before any provider call")
+	}
+	if !strings.Contains(err.Error(), "YYYY-MM-DD") {
+		t.Errorf("error should show the expected form; got %v", err)
+	}
+}
+
+func TestCommitFilterRejectsInvertedDateRange(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("dry-run", "--start-date", "2026-03-01", "--end-date", "2026-01-01"); err == nil {
+		t.Fatal("an inverted date range selects nothing and must error")
+	}
+}
+
+func TestCommitFilterModifierAloneIsRejected(t *testing.T) {
+	// --merges / --max-commits shape a commit walk but never start one.
+	// Accepting them alone would silently ignore what the user typed.
+	e := newCLIEnv(t)
+	if err := e.run("dry-run", "--merges"); err == nil {
+		t.Fatal("--merges alone must error")
+	}
+	e2 := newCLIEnv(t)
+	if err := e2.run("dry-run", "--max-commits", "5"); err == nil {
+		t.Fatal("--max-commits alone must error")
+	}
+}
+
+func TestCommitFilterRejectedByCommitCommand(t *testing.T) {
+	e := newCLIEnv(t)
+	err := e.run("commit", "--author", "alice")
+	if err == nil {
+		t.Fatal("commit describes the staged index, which has no commits; must error")
+	}
+	if !strings.Contains(err.Error(), "commit") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCommitFilterRejectedByRemotePR(t *testing.T) {
+	// The PR diff comes from `gh`, not local git — reject before anything
+	// else, including the gh presence check.
+	e := newCLIEnv(t)
+	if err := e.run("remote", "pr", "1", "--author", "alice"); err == nil {
+		t.Fatal("remote pr with a commit filter must error")
+	}
+}
+
+func TestExcludeFiltersRejectedByCommitCommand(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("commit", "--exclude-file", "app.go"); err == nil {
+		t.Fatal("commit must reject the path denylist for the same reason it rejects --file/--dir")
+	}
+}

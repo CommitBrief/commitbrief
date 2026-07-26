@@ -5,6 +5,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -236,5 +237,74 @@ func decodeResult(t *testing.T, r mcpResponse, v any) {
 	}
 	if err := json.Unmarshal(r.Result, v); err != nil {
 		t.Fatalf("decode result: %v\n%s", err, r.Result)
+	}
+}
+
+// TestMCPReviewPathFilterArgs covers the path filters over MCP. They were
+// CLI-only before ADR-0035: the MCP seam resets the global flag state, so a
+// host had no way to narrow a review by path at all.
+func TestMCPReviewPathFilterArgs(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.repoRoot, "second.go"), "package app\n\nfunc Other() {}\n")
+	gitCmd(t, e.repoRoot, "add", "second.go")
+
+	resps := runMCPServer(t, e,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"review","arguments":{"staged":true,"exclude_file":["second.go"]}}}`,
+	)
+	var callRes struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	decodeResult(t, resps[0], &callRes)
+	if callRes.IsError {
+		t.Fatalf("path filter args should be accepted; got %q", callRes.Content[0].Text)
+	}
+}
+
+// TestMCPReviewCommitFilterArgs drives a commit walk through the tool
+// arguments. The handler must not set the staged scope for a commit-filtered
+// call, or buildCommitFilter would reject it as a scope conflict.
+func TestMCPReviewCommitFilterArgs(t *testing.T) {
+	e := newCLIEnv(t)
+	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "feat: login validation")
+
+	resps := runMCPServer(t, e,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"review","arguments":{"text":"login"}}}`,
+	)
+	var callRes struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	decodeResult(t, resps[0], &callRes)
+	if callRes.IsError {
+		t.Fatalf("commit filter args should drive a commit walk; got %q", callRes.Content[0].Text)
+	}
+	if !strings.Contains(callRes.Content[1].Text, `"filtered_commits": 1`) {
+		t.Errorf("expected meta.filtered_commits in the returned document; got %q",
+			callRes.Content[1].Text)
+	}
+}
+
+// TestMCPReviewToolSchemaAdvertisesFilters guards the two-surface contract:
+// every argument reviewToolArgs decodes must also be advertised, or a host
+// following the schema can never reach it (additionalProperties:false).
+func TestMCPReviewToolSchemaAdvertisesFilters(t *testing.T) {
+	var schema struct {
+		Properties map[string]any `json:"properties"`
+	}
+	if err := json.Unmarshal(reviewToolInputSchema(), &schema); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{
+		"file", "dir", "exclude_file", "exclude_dir",
+		"author", "committer", "start_date", "end_date", "text", "max_commits", "merges",
+	} {
+		if _, ok := schema.Properties[key]; !ok {
+			t.Errorf("input schema is missing the %q property", key)
+		}
 	}
 }

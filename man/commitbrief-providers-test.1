@@ -23,12 +23,20 @@ Ping a configured provider to verify the API key and reachability
 	bypass the pre-send secret scanner (use with care)
 
 .PP
+\fB--author\fP=[]
+	review only commits authored by these people (repeatable; matches name or email, case-insensitive). Switches the scope to a commit walk
+
+.PP
 \fB--cli\fP=""
 	use a locally-installed CLI tool (claude|gemini|codex) as the review backend; shorthand for --provider -cli
 
 .PP
 \fB--color\fP="auto"
 	color output: auto, always, never
+
+.PP
+\fB--committer\fP=[]
+	review only commits committed by these people (repeatable; matches name or email, case-insensitive)
 
 .PP
 \fB--compact\fP[=false]
@@ -41,6 +49,18 @@ Ping a configured provider to verify the API key and reachability
 .PP
 \fB-d\fP, \fB--dir\fP=[]
 	review only files under these directories or matching dir globs (e.g. \fBinternal/**\fR; repeatable, one pattern per flag); combines with the active scope flag
+
+.PP
+\fB--end-date\fP=""
+	review only commits on or before this date (YYYY-MM-DD, inclusive)
+
+.PP
+\fB--exclude-dir\fP=[]
+	skip files under these directories or matching dir globs (repeatable, one pattern per flag); applied after --dir so an exclusion wins
+
+.PP
+\fB--exclude-file\fP=[]
+	skip these files or globs (repeatable, one pattern per flag); same matching rules as --file, applied after it so an exclusion wins
 
 .PP
 \fB--fail-on\fP=""
@@ -61,6 +81,14 @@ Ping a configured provider to verify the API key and reachability
 .PP
 \fB--markdown\fP[=false]
 	emit plain markdown (no ANSI)
+
+.PP
+\fB--max-commits\fP=0
+	cap how many matching commits enter the review (0 = 200); only meaningful with another commit filter
+
+.PP
+\fB--merges\fP[=false]
+	include merge commits in a commit-filtered review (excluded by default); only meaningful with another commit filter
 
 .PP
 \fB--min-severity\fP=""
@@ -111,8 +139,16 @@ Ping a configured provider to verify the API key and reachability
 	print the exact system + user prompt that would be sent, then exit (no provider call, no cost)
 
 .PP
+\fB--start-date\fP=""
+	review only commits on or after this date (YYYY-MM-DD, inclusive)
+
+.PP
 \fB--suggest-commit\fP[=false]
 	after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)
+
+.PP
+\fB--text\fP=""
+	review only commits whose message contains this text, plus commits unique to a branch whose name contains it (case-insensitive)
 
 .PP
 \fB--update-baseline\fP[=false]
