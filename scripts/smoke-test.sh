@@ -84,7 +84,7 @@ step "commitbrief dry-run --staged"
 out=$(cd "$TMPDIR" && "$OLDPWD/$BIN" dry-run --staged)
 echo "$out" | grep -q "Origin:" || fail "dry-run missing Origin line"
 echo "$out" | grep -q "Cache key:" || fail "dry-run missing Cache key line"
-echo "$out" | grep -q "Est. tokens:" || fail "dry-run missing token estimate"
+echo "$out" | grep -q "Input tokens (est):" || fail "dry-run missing token estimate"
 echo "$out" | grep -q "staged" || fail "dry-run did not detect staged origin"
 ok "dry-run pipeline produced a prompt + cache key"
 
