@@ -301,8 +301,36 @@ then exit — no provider call, no cost; honours `--output`), `--no-flaky`
 sandbox-rerun confirmation of flagged flaky tests; see below),
 `--no-architecture` (skip
 architecture-aware review; see below), `--update-baseline` /
-`--no-baseline` (signal-control baseline; see below), `--color`. See
+`--no-baseline` (signal-control baseline; see below), `--color`,
+`--timeout <duration>` (bound the whole run; see below). See
 `commitbrief --help`.
+
+### Timeouts (`--timeout`, `review.timeout`)
+
+Every provider ships a built-in ceiling: the CLI-tool providers
+(`claude-cli` / `gemini-cli` / `codex-cli`) kill their subprocess after 5
+minutes, ollama's HTTP client after 5, and the Anthropic SDK refuses a
+non-streaming request that could run past 10. On a large diff or a slow
+local model that is exactly when the run dies.
+
+`--timeout` replaces those ceilings for one run:
+
+```sh
+commitbrief --staged --cli claude --timeout 20m   # give the host CLI 20 minutes
+commitbrief --staged --timeout 600                # bare integer = seconds
+commitbrief config set review.timeout 15m         # make it the default
+```
+
+The value is a Go duration (`90s`, `10m`, `1h30m`) or a whole number of
+seconds. It bounds the **whole command run** — diff acquisition, provider
+call, render, and any time you spend at a confirmation prompt — and it is
+the one knob that can *lengthen* a run, since a deadline alone can only
+cut one short. Resolution is `--timeout` → `review.timeout` → the
+provider's built-in, so `--timeout 0` restores the built-ins for a single
+run. Expiring is a normal failure: exit code 1 with a message naming the
+duration. It also applies to `doctor` (whose provider probes otherwise
+fast-fail at 5 seconds) and `providers test`; on `commitbrief mcp` it
+becomes a per-tool-call budget rather than a lifetime for the server.
 
 ### Flaky-test detection (deterministic, ADR-0022)
 
@@ -843,6 +871,7 @@ review:
   baseline: true                   # apply the user-private signal-control baseline (ADR-0027); --no-baseline overrides per-run, --update-baseline rewrites it
   architecture: true               # architecture-aware review (ADR-0030): read architecture.json into the prompt; --no-architecture overrides per-run
   architecture_file: ""            # override the architecture.json discovery path (relative to repo root, or absolute); empty = auto-discover
+  timeout: ""                      # bound the whole run: "10m", "90s", "600" (seconds); empty/"0" = keep each provider's built-in cap; --timeout overrides per-run
 ```
 
 ### Default command (`command.default`)

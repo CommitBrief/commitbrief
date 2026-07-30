@@ -311,3 +311,5 @@ leaks.clean: "No credentials found."
 leaks.found: "%d possible credential(s) found. Rotate them — a key in git history stays reachable in every existing clone."
 leaks.nothing_to_scan: "--no-worktree and --no-history together leave nothing to scan."
 leaks.gate_failed: "failing: %d credential finding(s). Pass --fail-on none to report without failing."
+
+timeout.exceeded: "timed out after %s — the run was stopped by --timeout / review.timeout, not by the provider. Pass a larger --timeout (e.g. --timeout 20m) to allow more time, or --timeout 0 to fall back to the provider's own limit."

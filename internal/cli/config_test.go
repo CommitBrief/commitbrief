@@ -437,3 +437,34 @@ func loadCfg(t *testing.T, home string) *config.Config {
 	}
 	return &cfg
 }
+
+func TestConfigReviewTimeoutRoundTrips(t *testing.T) {
+	e := newCLIEnv(t)
+	if err := e.run("config", "get", "review.timeout"); err != nil {
+		t.Fatalf("config get review.timeout: %v", err)
+	}
+	if got := strings.TrimSpace(e.out.String()); got != "" {
+		t.Errorf("review.timeout default = %q, want empty (no deadline)", got)
+	}
+
+	if err := e.run("config", "set", "review.timeout", "10m"); err != nil {
+		t.Fatalf("config set review.timeout 10m: %v", err)
+	}
+	cfg := loadCfg(t, e.homeDir)
+	if cfg.Review.Timeout != "10m" {
+		t.Errorf("review.timeout = %q, want %q", cfg.Review.Timeout, "10m")
+	}
+}
+
+func TestConfigReviewTimeoutRejectsGarbage(t *testing.T) {
+	// Validating on write keeps the YAML from growing a value that would
+	// fail every later run — the failure belongs at `config set` time.
+	e := newCLIEnv(t)
+	err := e.run("config", "set", "review.timeout", "ten-minutes")
+	if err == nil {
+		t.Fatal("want error for an unparseable review.timeout, got nil")
+	}
+	if !strings.Contains(err.Error(), "review.timeout") {
+		t.Errorf("error %q should name the key", err.Error())
+	}
+}

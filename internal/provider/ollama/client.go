@@ -43,6 +43,17 @@ func New(cfg config.ProviderConfig) (provider.Provider, error) {
 	}, nil
 }
 
+// SetTimeout implements provider.TimeoutSetter. http.Client.Timeout is a
+// hard whole-request ceiling that fires independently of the caller's
+// context, so a local model that needs more than [requestTimeout] to
+// think would be cut off even under a generous --timeout. A non-positive
+// d is ignored so callers can pass "unset" unconditionally.
+func (c *Client) SetTimeout(d time.Duration) {
+	if d > 0 {
+		c.http.Timeout = d
+	}
+}
+
 func (c *Client) Name() string { return Name }
 
 func (c *Client) DefaultModel() string {

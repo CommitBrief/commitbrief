@@ -252,8 +252,10 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 			return strconv.Itoa(cfg.Review.SandboxRerun), nil
 		case "sandbox_command":
 			return strings.Join(cfg.Review.SandboxCommand, " "), nil
+		case "timeout":
+			return cfg.Review.Timeout, nil
 		default:
-			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command)", parts[1])
+			return "", fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command, timeout)", parts[1])
 		}
 
 	case "version":
@@ -477,8 +479,16 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 			// the YAML directly, mirroring guard.secret_patterns and
 			// per-model pricing — the other non-scalar surfaces.
 			return errors.New("config: review.sandbox_command is a list of argv elements; edit the config file directly (commitbrief config show prints its path)")
+		case "timeout":
+			// Validate before writing so the YAML never grows a value that
+			// would fail every subsequent run. The stored form is the user's
+			// spelling ("10m", "600"); parseTimeout normalizes at read time.
+			if _, err := parseTimeout(value); err != nil {
+				return fmt.Errorf("config: review.timeout: %w", err)
+			}
+			cfg.Review.Timeout = strings.TrimSpace(value)
 		default:
-			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command)", parts[1])
+			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command, timeout)", parts[1])
 		}
 		return nil
 

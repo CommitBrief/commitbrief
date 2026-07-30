@@ -289,6 +289,12 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	// tool error, which is the correct, safe behavior.
 	global.json = true
 	global.quiet = true
+	// --timeout survives the reset. For `guard` it is the flag the user just
+	// typed; for a long-lived `commitbrief mcp --timeout 10m` it becomes a
+	// PER-TOOL-CALL budget, which is the only sane reading — the server
+	// itself must never carry a deadline. When neither set it, runReview
+	// still falls back to review.timeout from config.
+	global.timeout = savedGlobal.timeout
 	// The host is an agent, not a person at a TTY. Executing repository code
 	// (sandbox rerun) requires a human in the loop, so it is forced off here
 	// regardless of --sandbox-rerun or review.sandbox_rerun. This is a

@@ -14,6 +14,8 @@
 package doctor
 
 import (
+	"time"
+
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
 )
@@ -80,6 +82,23 @@ type Runner struct {
 	// Catalog provides i18n translations for check names. Nil falls
 	// back to a no-op catalog (returns the key verbatim).
 	Catalog *i18n.Catalog
+
+	// ConnTimeout overrides the per-provider connection-probe budget with
+	// the user's resolved --timeout / review.timeout. Zero — the default —
+	// keeps the fast-failing [connectionTimeout]. It exists because the
+	// built-in 5 seconds reports a Warn on a link that is merely slow, and
+	// "my provider is unreachable" is exactly the wrong diagnosis to hand
+	// someone on a high-latency network.
+	ConnTimeout time.Duration
+}
+
+// connTimeoutOrDefault resolves the per-provider probe budget: the
+// caller's override when set, else the fast-fail built-in.
+func (r *Runner) connTimeoutOrDefault() time.Duration {
+	if r.ConnTimeout > 0 {
+		return r.ConnTimeout
+	}
+	return connectionTimeout
 }
 
 // t looks up an i18n key with optional format args, defaulting to the

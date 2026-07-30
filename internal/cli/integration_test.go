@@ -2559,3 +2559,61 @@ func TestMapExitsZeroOnSuccess(t *testing.T) {
 		t.Fatalf("map must exit 0 on a successful render: %v", err)
 	}
 }
+
+// ---------- --timeout ----------
+
+func TestTimeoutFlagRunsCleanWhenGenerous(t *testing.T) {
+	// A generous budget must be invisible: the review completes exactly as
+	// it does without the flag.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--timeout", "10m"); err != nil {
+		t.Fatalf("--timeout 10m should not disturb the pipeline: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+}
+
+func TestTimeoutFlagAcceptsBareSeconds(t *testing.T) {
+	// `--timeout 600` is what a CI author types; rejecting it for a
+	// missing unit would be a papercut.
+	e := newCLIEnv(t)
+	if err := e.run("--staged", "--no-cache", "--timeout", "600"); err != nil {
+		t.Fatalf("--timeout 600 should parse as 600s: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+}
+
+func TestTimeoutFlagRejectsGarbageBeforeAnyProviderCall(t *testing.T) {
+	// resolveContext validates the value, so the run dies before the diff
+	// is even read — no tokens, no cost.
+	e := newCLIEnv(t)
+	err := e.run("--staged", "--no-cache", "--timeout", "abc")
+	if err == nil {
+		t.Fatal("want error for an unparseable --timeout, got nil")
+	}
+	if !strings.Contains(err.Error(), "abc") {
+		t.Errorf("error %q should quote the offending value", err.Error())
+	}
+}
+
+func TestTimeoutFlagRejectsNegative(t *testing.T) {
+	e := newCLIEnv(t)
+	// `--` stops cobra flag parsing so the negative value reaches
+	// validation as the flag's value rather than a shorthand flag.
+	err := e.run("--staged", "--no-cache", "--timeout=-5s")
+	if err == nil {
+		t.Fatal("want error for a negative --timeout, got nil")
+	}
+	if !strings.Contains(err.Error(), "negative") {
+		t.Errorf("error %q should say it cannot be negative", err.Error())
+	}
+}
+
+func TestTimeoutConfigDrivesRunWithoutFlag(t *testing.T) {
+	// review.timeout is the persistent half of the pair; a bad stored
+	// value must fail the run the same way a bad flag does.
+	e := newCLIEnv(t)
+	if err := e.run("config", "set", "review.timeout", "10m"); err != nil {
+		t.Fatalf("config set review.timeout: %v", err)
+	}
+	if err := e.run("--staged", "--no-cache"); err != nil {
+		t.Fatalf("a configured review.timeout should not disturb the pipeline: %v\nstderr:\n%s", err, e.errOut.String())
+	}
+}

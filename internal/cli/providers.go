@@ -162,6 +162,8 @@ func newProvidersTestCmd() *cobra.Command {
 			if !isRegistered(name) {
 				return errors.New(app.Catalog.T("providers.test.unknown", name, provider.Names()))
 			}
+			ctx, cancel := app.withTimeout(cmd.Context())
+			defer cancel()
 			pc := app.Config.Providers[name]
 			// Single network step, shown through the shared staged-tree
 			// progress (a spinner while the ping is in flight). Close keeps
@@ -170,8 +172,8 @@ func newProvidersTestCmd() *cobra.Command {
 			defer prog.Close()
 			prog.Start(app.Catalog.T("providers.test.pinging", name))
 			start := time.Now()
-			if err := setup.TestConnection(cmd.Context(), name, pc); err != nil {
-				e := errors.New(app.Catalog.T("providers.test.failed", name, err.Error()))
+			if err := setup.TestConnectionTimeout(ctx, name, pc, app.Timeout); err != nil {
+				e := wrapTimeoutErr(ctx, errors.New(app.Catalog.T("providers.test.failed", name, err.Error())), app.Catalog, app.Timeout)
 				prog.Fail(e)
 				return e
 			}

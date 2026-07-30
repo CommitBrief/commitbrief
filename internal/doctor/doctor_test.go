@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
@@ -386,3 +387,21 @@ func TestStatusString(t *testing.T) {
 // guard against unused-import drift if I refactor away one of these
 // later — the test file itself is what justifies them.
 var _ = provider.ErrUnauthorized
+
+func TestConnTimeoutOrDefault(t *testing.T) {
+	r := minimalRunner(t)
+	if got := r.connTimeoutOrDefault(); got != connectionTimeout {
+		t.Errorf("unset ConnTimeout = %v, want the built-in %v", got, connectionTimeout)
+	}
+	// The built-in 5s reports "unreachable" for a link that is merely
+	// slow; --timeout is what lets a user on a high-latency network get a
+	// truthful answer.
+	r.ConnTimeout = 30 * time.Second
+	if got := r.connTimeoutOrDefault(); got != 30*time.Second {
+		t.Errorf("ConnTimeout override = %v, want 30s", got)
+	}
+	r.ConnTimeout = -time.Second
+	if got := r.connTimeoutOrDefault(); got != connectionTimeout {
+		t.Errorf("negative ConnTimeout = %v, want the built-in %v", got, connectionTimeout)
+	}
+}

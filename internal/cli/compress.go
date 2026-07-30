@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/CommitBrief/commitbrief/internal/compress"
-	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/rules"
 	"github.com/CommitBrief/commitbrief/internal/ui"
 )
@@ -39,6 +38,9 @@ func newCompressCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			ctx, cancel := app.withTimeout(cmd.Context())
+			defer cancel()
+			cmd.SetContext(ctx)
 
 			level, err := compress.ParseLevel(levelFlag)
 			if err != nil {
@@ -54,7 +56,7 @@ func newCompressCmd() *cobra.Command {
 				return fmt.Errorf("compress: read %s: %w", rulesPath, err)
 			}
 
-			prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
+			prov, err := newProviderWithTimeout(app.Config.Provider, app.Config.Providers[app.Config.Provider], app.Timeout)
 			if err != nil {
 				return err
 			}
@@ -79,6 +81,7 @@ func newCompressCmd() *cobra.Command {
 				Model:    model,
 			})
 			if err != nil {
+				err = wrapTimeoutErr(ctx, err, app.Catalog, app.Timeout)
 				prog.Fail(err)
 				return err
 			}

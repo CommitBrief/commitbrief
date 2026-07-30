@@ -54,6 +54,7 @@ type globalFlags struct {
 	provider       string
 	model          string
 	color          string
+	timeout        string   // --timeout <dur|seconds>; bounds the whole command run and raises provider-internal caps; "" / "0" = built-in behavior
 	cli            string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
 	withContext    bool     // --with-context; CLI providers only — let the host CLI read project files beyond the diff (ADR-0017)
 	showPrompt     bool     // --show-prompt; print the assembled system+user prompt and exit (no provider call)
@@ -140,6 +141,7 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
+	flags.StringVar(&global.timeout, "timeout", "", "bound the whole run to this `duration` — 90s, 10m, 1h30m, or a bare number of seconds (600). Covers diff, provider call, render, and time spent at a confirmation prompt. Also RAISES the provider's own cap (claude/gemini/codex-cli 5m, ollama 5m, Anthropic SDK 10m), which a deadline alone cannot do. Unset or 0 keeps those built-ins. Resolution: --timeout → review.timeout → built-in")
 	flags.StringSliceVarP(&global.files, "file", "f", nil, "review only these files or globs (e.g. `*.go`, `internal/**/*.ts`; repeatable, one pattern per flag — patterns can't be comma-joined); combines with the active scope flag")
 	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories or matching dir globs (e.g. `internal/**`; repeatable, one pattern per flag); combines with the active scope flag")
 	flags.StringSliceVar(&global.excludeFiles, "exclude-file", nil, "skip these files or globs (repeatable, one pattern per flag); same matching rules as --file, applied after it so an exclusion wins")

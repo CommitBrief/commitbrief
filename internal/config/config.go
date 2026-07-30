@@ -53,6 +53,19 @@ type Config struct {
 // caller-provided), and only the flaky pre-pass is affected. Precedence is
 // --sandbox-rerun[=N] > review.sandbox_rerun config > built-in (0 / off).
 //
+// Timeout bounds a whole command run — diff acquisition, prompt build,
+// provider call, render, and any interactive confirmation in between. It
+// is a STRING, not a duration, so the YAML stays readable (`timeout:
+// "10m"`) instead of serializing as a nanosecond count; both a Go
+// duration ("90s", "10m", "1h30m") and a bare whole number of seconds
+// ("600") parse. Empty or "0" (the default) means no deadline, leaving
+// each provider's built-in cap in place — the historical behaviour.
+// Precedence is --timeout > review.timeout > built-in, so `--timeout 0`
+// cancels a configured value for a single run. Beyond the deadline it
+// also RAISES the caps that would otherwise fire first (clireview's 5
+// minutes, ollama's http.Client timeout, the Anthropic SDK's 10-minute
+// non-streaming ceiling) via provider.TimeoutSetter.
+//
 // SandboxCommand is the argv of the command that re-runs a single flagged
 // test in isolation (ADR-0033). Each element is a Go text/template over
 // {{.File}}, {{.Line}}, {{.Test}} and is passed to exec as an argv element
@@ -66,6 +79,7 @@ type ReviewConfig struct {
 	ArchitectureFile string   `yaml:"architecture_file"`
 	SandboxRerun     int      `yaml:"sandbox_rerun"`
 	SandboxCommand   []string `yaml:"sandbox_command"`
+	Timeout          string   `yaml:"timeout,omitempty"`
 }
 
 // CommitConfig sets defaults for the `commit` command (ADR-0019) so a repo

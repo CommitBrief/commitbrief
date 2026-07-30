@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -27,6 +28,10 @@ type Client struct {
 	sdk     sdk.Client
 	model   string
 	baseURL string
+	// timeout is the resolved --timeout / review.timeout value, applied
+	// per request via option.WithRequestTimeout. Zero leaves the SDK's own
+	// timeout policy in charge. See SetTimeout.
+	timeout time.Duration
 }
 
 func New(cfg config.ProviderConfig) (provider.Provider, error) {
@@ -70,9 +75,31 @@ func (c *Client) Pricing(model string) provider.Pricing {
 	return pricingFor(model)
 }
 
+// SetTimeout implements provider.TimeoutSetter. The SDK derives its own
+// non-streaming timeout from max_tokens and caps it at 10 minutes —
+// worse, it refuses outright ("streaming is required for operations that
+// may take longer than 10 minutes") rather than waiting. Passing an
+// explicit request timeout short-circuits that calculation, so a user who
+// allows 20 minutes actually gets them. A non-positive d is ignored.
+func (c *Client) SetTimeout(d time.Duration) {
+	if d > 0 {
+		c.timeout = d
+	}
+}
+
+// requestOpts returns the per-request options for a call: the resolved
+// timeout when one is set, nothing otherwise (leaving SDK defaults
+// untouched).
+func (c *Client) requestOpts() []option.RequestOption {
+	if c.timeout <= 0 {
+		return nil
+	}
+	return []option.RequestOption{option.WithRequestTimeout(c.timeout)}
+}
+
 func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Response, error) {
 	params := c.buildParams(req)
-	msg, err := c.sdk.Messages.New(ctx, params)
+	msg, err := c.sdk.Messages.New(ctx, params, c.requestOpts()...)
 	if err != nil {
 		return provider.Response{}, mapError(err)
 	}
@@ -105,7 +132,7 @@ func (c *Client) TestConnection(ctx context.Context) error {
 			sdk.NewUserMessage(sdk.NewTextBlock(testPingPrompt)),
 		},
 	}
-	if _, err := c.sdk.Messages.New(ctx, params); err != nil {
+	if _, err := c.sdk.Messages.New(ctx, params, c.requestOpts()...); err != nil {
 		return mapError(err)
 	}
 	return nil
