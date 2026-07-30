@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-07-30
+
 ### Added
 - **`--timeout` — bound a run, and raise the ceilings that used to end it early
   (ADR-0038).** Every provider shipped a hard, invisible cap: the CLI-tool
@@ -2100,7 +2102,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/CommitBrief/commitbrief/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/CommitBrief/commitbrief/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/CommitBrief/commitbrief/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/CommitBrief/commitbrief/compare/v1.12.0...v1.13.0
