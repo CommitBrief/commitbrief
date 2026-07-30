@@ -101,12 +101,13 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		return runRemotePRLocal(cmd, prID, f, runner)
 	}
 
-	ctx := cmd.Context()
-
 	app, err := resolveContext(false)
 	if err != nil {
 		return err
 	}
+	ctx, cancel := app.withTimeout(cmd.Context())
+	defer cancel()
+	cmd.SetContext(ctx)
 	cat := app.Catalog
 
 	// Local-render flags have no meaning here — the output channel is GitHub.
@@ -136,7 +137,7 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		return errors.New(cat.T("remote.gh_missing"))
 	}
 
-	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
+	prov, err := newProviderWithTimeout(app.Config.Provider, app.Config.Providers[app.Config.Provider], app.Timeout)
 	if err != nil {
 		return err
 	}
@@ -231,11 +232,13 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 // aborts (you can't fix another author's PR locally, and aborting a
 // read-only review is unhelpful), matching the posting path's posture.
 func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner remote.Runner) error {
-	ctx := cmd.Context()
 	app, err := resolveContext(false)
 	if err != nil {
 		return err
 	}
+	ctx, cancel := app.withTimeout(cmd.Context())
+	defer cancel()
+	cmd.SetContext(ctx)
 	cat := app.Catalog
 
 	if _, _, err := parseMinSeverity(global.minSeverity); err != nil {
@@ -253,7 +256,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		return errors.New(cat.T("remote.gh_missing"))
 	}
 
-	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
+	prov, err := newProviderWithTimeout(app.Config.Provider, app.Config.Providers[app.Config.Provider], app.Timeout)
 	if err != nil {
 		return err
 	}
@@ -427,8 +430,9 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 	if plainText {
 		resp, callErr := prov.Review(ctx, req)
 		if callErr != nil {
+			callErr = wrapTimeoutErr(ctx, fmt.Errorf("provider %s: %w", prov.Name(), callErr), cat, app.Timeout)
 			prog.Fail(callErr)
-			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+			return callErr
 		}
 		content, usage, format = resp.Content, resp.Usage, cache.FormatPlainText
 	} else {
@@ -437,8 +441,9 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 			prog.Start(cat.T("progress.retrying"))
 		})
 		if callErr != nil {
+			callErr = wrapTimeoutErr(ctx, fmt.Errorf("provider %s: %w", prov.Name(), callErr), cat, app.Timeout)
 			prog.Fail(callErr)
-			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+			return callErr
 		}
 		content, usage, format = outcome.Content, outcome.Usage, outcome.Format
 		retries, degrade = outcome.Retries, outcome.DegradeReason
@@ -603,7 +608,7 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	start := time.Now()
 	outcome, err := tryStructuredReview(ctx, prov, req, func() {})
 	if err != nil {
-		return prReviewResult{}, err
+		return prReviewResult{}, wrapTimeoutErr(ctx, err, app.Catalog, app.Timeout)
 	}
 	latency := time.Since(start)
 	if outcome.Format != cache.FormatJSON {

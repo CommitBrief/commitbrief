@@ -49,11 +49,18 @@ func bindScopeFlags(cmd *cobra.Command) {
 }
 
 func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) error {
-	ctx := cmd.Context()
 	app, err := resolveContext(true)
 	if err != nil {
 		return err
 	}
+	// --timeout / review.timeout bounds the WHOLE run, not just the
+	// provider round-trip: a review that stalls on a huge diff or on a
+	// confirmation nobody is there to answer is just as stuck. Pushed back
+	// onto cmd so the helpers that read cmd.Context() (sandbox rerun,
+	// suggest-commit) inherit the same deadline without threading it.
+	ctx, cancel := app.withTimeout(cmd.Context())
+	defer cancel()
+	cmd.SetContext(ctx)
 
 	// Validate --min-severity up front so a typo fails fast instead of
 	// silently showing every finding after a paid provider round-trip.
@@ -238,7 +245,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 
 	prog.Start(app.Catalog.T("progress.preparing"))
 
-	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
+	prov, err := newProviderWithTimeout(app.Config.Provider, app.Config.Providers[app.Config.Provider], app.Timeout)
 	if err != nil {
 		prog.Fail(err)
 		return err
@@ -462,8 +469,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		// review which we stream straight to stdout after Clear.
 		resp, callErr := prov.Review(ctx, req)
 		if callErr != nil {
+			callErr = wrapTimeoutErr(ctx, fmt.Errorf("provider %s: %w", prov.Name(), callErr), app.Catalog, app.Timeout)
 			prog.Fail(callErr)
-			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+			return callErr
 		}
 		content, usage, format = resp.Content, resp.Usage, cache.FormatPlainText
 	} else {
@@ -477,8 +485,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			prog.Start(app.Catalog.T("progress.retrying"))
 		})
 		if callErr != nil {
+			callErr = wrapTimeoutErr(ctx, fmt.Errorf("provider %s: %w", prov.Name(), callErr), app.Catalog, app.Timeout)
 			prog.Fail(callErr)
-			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+			return callErr
 		}
 		content, usage, format = outcome.Content, outcome.Usage, outcome.Format
 		retries, degrade = outcome.Retries, outcome.DegradeReason

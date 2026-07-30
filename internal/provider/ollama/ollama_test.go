@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/provider"
@@ -218,3 +219,28 @@ func TestTestConnectionUnreachable(t *testing.T) {
 		t.Error("expected error against closed server")
 	}
 }
+
+func TestSetTimeoutOverridesTheHTTPCap(t *testing.T) {
+	// http.Client.Timeout is a hard whole-request ceiling that fires
+	// regardless of the caller's context, so a local model that needs more
+	// than requestTimeout to answer would be cut off under any --timeout.
+	p, err := New(config.ProviderConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := p.(*Client)
+	if c.http.Timeout != requestTimeout {
+		t.Fatalf("baseline http timeout = %v, want %v", c.http.Timeout, requestTimeout)
+	}
+	c.SetTimeout(20 * time.Minute)
+	if c.http.Timeout != 20*time.Minute {
+		t.Errorf("http timeout = %v, want 20m", c.http.Timeout)
+	}
+	// Non-positive is "unset" — callers pass it unconditionally.
+	c.SetTimeout(0)
+	if c.http.Timeout != 20*time.Minute {
+		t.Errorf("http timeout = %v, want the previous 20m left untouched", c.http.Timeout)
+	}
+}
+
+var _ provider.TimeoutSetter = (*Client)(nil)

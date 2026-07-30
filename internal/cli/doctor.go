@@ -33,13 +33,16 @@ run produces no output.`,
 			if err != nil {
 				return err
 			}
+			ctx, cancel := app.withTimeout(cmd.Context())
+			defer cancel()
 			runner := &doctor.Runner{
-				RepoRoot: app.RepoRoot,
-				Home:     userHome(),
-				Config:   app.Config,
-				Catalog:  app.Catalog,
+				RepoRoot:    app.RepoRoot,
+				Home:        userHome(),
+				Config:      app.Config,
+				Catalog:     app.Catalog,
+				ConnTimeout: app.Timeout,
 			}
-			results := runner.RunAll(cmd.Context())
+			results := runner.RunAll(ctx)
 			summary := doctor.Summarize(results)
 
 			w := cmd.OutOrStdout()

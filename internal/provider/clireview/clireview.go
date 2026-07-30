@@ -128,6 +128,18 @@ func New(spec Spec) *Backend {
 // interface review.go uses to branch into the CLI-output path.
 func (b *Backend) EmitsPlainText() {}
 
+// SetTimeout implements provider.TimeoutSetter, replacing the Spec's
+// per-invocation cap with the user's --timeout / review.timeout value.
+// Without it a host CLI chewing through a large diff would still be
+// killed at the Spec default no matter how much time the user allowed,
+// because a context deadline can only shorten the window. A
+// non-positive d is ignored so callers can pass "unset" unconditionally.
+func (b *Backend) SetTimeout(d time.Duration) {
+	if d > 0 {
+		b.spec.Timeout = d
+	}
+}
+
 func (b *Backend) Name() string { return b.spec.Name }
 
 // DefaultModel returns a stable identifier for the cache key. CLI

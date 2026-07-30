@@ -71,6 +71,10 @@ func runMap(cmd *cobra.Command, f mapFlags, args []string) error {
 		return err
 	}
 
+	ctx, cancel := app.withTimeout(cmd.Context())
+	defer cancel()
+	cmd.SetContext(ctx)
+
 	// map draws a graph, not findings. Rejecting the findings-oriented output
 	// flags up front beats emitting something that isn't what the flag
 	// promised. A graph JSON would be a new semver-locked schema; that is

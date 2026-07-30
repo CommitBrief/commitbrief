@@ -75,6 +75,9 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 	if err != nil {
 		return err
 	}
+	tctx, tcancel := app.withTimeout(cmd.Context())
+	defer tcancel()
+	cmd.SetContext(tctx)
 	if f.noWorktree && f.noHistory {
 		return errors.New(app.Catalog.T("leaks.nothing_to_scan"))
 	}

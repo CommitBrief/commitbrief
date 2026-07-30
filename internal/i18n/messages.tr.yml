@@ -310,3 +310,5 @@ leaks.clean: "Kimlik bilgisi bulunamadı."
 leaks.found: "%d olası kimlik bilgisi bulundu. Bunları döndürün (rotate) — git geçmişindeki bir anahtar mevcut tüm klonlarda erişilebilir kalır."
 leaks.nothing_to_scan: "--no-worktree ve --no-history birlikte kullanılınca taranacak bir şey kalmıyor."
 leaks.gate_failed: "başarısız: %d kimlik bilgisi bulgusu. Hata vermeden raporlamak için --fail-on none kullanın."
+
+timeout.exceeded: "%s sonunda zaman aşımına uğradı — koşuyu durduran --timeout / review.timeout, provider değil. Daha fazla süre için daha büyük bir --timeout verin (örn. --timeout 20m) ya da provider'ın kendi sınırına dönmek için --timeout 0 kullanın."

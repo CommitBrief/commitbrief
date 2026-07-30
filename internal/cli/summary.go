@@ -56,11 +56,13 @@ func newSummaryCmd() *cobra.Command {
 }
 
 func runSummary(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) error {
-	ctx := cmd.Context()
 	app, err := resolveContext(true)
 	if err != nil {
 		return err
 	}
+	ctx, cancel := app.withTimeout(cmd.Context())
+	defer cancel()
+	cmd.SetContext(ctx)
 
 	// summary emits prose, not findings. Reject the structured-output flags
 	// (--json/--markdown drive the findings renderers) and the findings-only
@@ -156,7 +158,7 @@ func runSummary(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) e
 	prog.Resume()
 
 	prog.Start(app.Catalog.T("progress.preparing"))
-	prov, err := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider])
+	prov, err := newProviderWithTimeout(app.Config.Provider, app.Config.Providers[app.Config.Provider], app.Timeout)
 	if err != nil {
 		prog.Fail(err)
 		return err
@@ -256,8 +258,9 @@ func runSummary(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) e
 			},
 		})
 		if callErr != nil {
+			callErr = wrapTimeoutErr(ctx, fmt.Errorf("provider %s: %w", prov.Name(), callErr), app.Catalog, app.Timeout)
 			prog.Fail(callErr)
-			return fmt.Errorf("provider %s: %w", prov.Name(), callErr)
+			return callErr
 		}
 		prog.Finish()
 		content = resp.Content

@@ -10,6 +10,29 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`--timeout` — bound a run, and raise the ceilings that used to end it early
+  (ADR-0038).** Every provider shipped a hard, invisible cap: the CLI-tool
+  providers killed their subprocess after 5 minutes, ollama's HTTP client after
+  5, and the Anthropic SDK refuses a non-streaming request that could exceed 10.
+  A large diff or a slow local model hit those, and there was no way to ask for
+  more time. `--timeout <duration>` now bounds the **whole command run** — diff,
+  provider call, render, and time spent at a confirmation prompt — and, crucially,
+  hands the value down to the provider, which is the only way to *lengthen* a run
+  (a context deadline can only cut one short). Accepts a Go duration (`90s`,
+  `10m`, `1h30m`) or a bare number of seconds (`600`) so CI can say
+  `--timeout 600`. Resolution is `--timeout` > `review.timeout` config > the
+  built-in, and `--timeout 0` restores the built-ins for a single run. Applies to
+  every command that can spend real time, including `doctor` (whose provider
+  probes otherwise fast-fail at 5 seconds) and `providers test`; on
+  `commitbrief mcp` it becomes a per-tool-call budget instead of a lifetime for
+  the long-lived server. Expiring is a normal exit-1 failure with a message that
+  names the duration and points back at the flag, so a self-inflicted deadline is
+  never mistaken for a provider outage.
+- **`review.timeout` config key** — the persistent half of `--timeout`, settable
+  with `commitbrief config set review.timeout 15m`. Validated on write, so a
+  typo fails at `config set` rather than on every later run.
+
 ## [1.15.0] - 2026-07-26
 
 ### Added

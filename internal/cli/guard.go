@@ -82,6 +82,11 @@ func runGuard(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	// Bounds the whole gate, including the review it drives through the MCP
+	// seam (which reads cmd.Context()).
+	ctx, cancel := app.withTimeout(cmd.Context())
+	defer cancel()
+	cmd.SetContext(ctx)
 
 	policyPath := resolveGuardPolicyPath(cmd, app.RepoRoot)
 	pol, err := policy.Load(policyPath)

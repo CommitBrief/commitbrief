@@ -197,13 +197,14 @@ func (r *Runner) checkProviderConnections(ctx context.Context) []Result {
 		wg.Add(1)
 		go func(i int, providerName string) {
 			defer wg.Done()
-			ctx2, cancel := context.WithTimeout(ctx, connectionTimeout)
+			budget := r.connTimeoutOrDefault()
+			ctx2, cancel := context.WithTimeout(ctx, budget)
 			defer cancel()
 
 			pc := r.Config.Providers[providerName]
 			label := r.t("doctor.check.provider_connection", providerName)
 			start := time.Now()
-			err := setup.TestConnection(ctx2, providerName, pc)
+			err := setup.TestConnectionTimeout(ctx2, providerName, pc, r.ConnTimeout)
 			elapsed := time.Since(start).Round(time.Millisecond)
 			if err != nil {
 				results[i] = Result{Name: label, Status: StatusWarn, Detail: err.Error()}

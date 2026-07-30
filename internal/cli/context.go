@@ -5,6 +5,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/git"
@@ -22,6 +23,11 @@ type appContext struct {
 	RawGlobal  *config.Config
 	Lang       lang.Resolution
 	Catalog    *i18n.Catalog
+	// Timeout is the resolved --timeout / review.timeout value; zero means
+	// "no deadline, keep every built-in provider cap" (the historical
+	// behavior). Consumed by appContext.withTimeout and
+	// newProviderWithTimeout.
+	Timeout time.Duration
 }
 
 func resolveContext(requireRepo bool) (*appContext, error) {
@@ -70,6 +76,15 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 		cfg.Providers[cfg.Provider] = pc
 	}
 
+	// Timeout resolution is deliberately here, not at the call site: every
+	// command that can spend real time reads app.Timeout, and resolving it
+	// once means a malformed value fails the run before the diff is read,
+	// let alone sent to a provider.
+	timeout, err := resolveTimeout(global.timeout, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// Language resolution (ADR-0021) is independent of the merged config: it
 	// reads the raw per-file configs so each level (--lang flag → repo → user
 	// → English) is judged on its own value, with invalid/empty values falling
@@ -95,6 +110,7 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 		RawGlobal:  rawGlobal,
 		Lang:       langRes,
 		Catalog:    cat,
+		Timeout:    timeout,
 	}, nil
 }
 

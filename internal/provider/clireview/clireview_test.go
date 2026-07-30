@@ -390,3 +390,41 @@ func TestBackendDefaultModelMemoisesVersionCall(t *testing.T) {
 
 // guard: keep import for fmt usage in formatted assertions
 var _ = fmt.Sprint
+
+func TestBackendSetTimeoutRaisesTheSpecCap(t *testing.T) {
+	// --timeout must be able to LENGTHEN a CLI invocation, not just
+	// shorten it: a ctx deadline can only cut a run short, so a host CLI
+	// still chewing on a large diff would die at Spec.Timeout regardless.
+	scriptPath(t, "slow-cli", "sleep 0.4; echo done")
+
+	b := New(Spec{
+		Name:       "slow-cli",
+		Binary:     "slow-cli",
+		PromptArgs: func(p string, _ bool) []string { return []string{p} },
+		Timeout:    50 * time.Millisecond,
+	})
+	if _, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"}); err == nil {
+		t.Fatal("expected the 50ms spec cap to fire before the script finished")
+	}
+
+	b.SetTimeout(5 * time.Second)
+	resp, err := b.Review(context.Background(), provider.Request{UserPrompt: "x"})
+	if err != nil {
+		t.Fatalf("after SetTimeout the same call should succeed; got: %v", err)
+	}
+	if resp.Content != "done" {
+		t.Errorf("Content = %q, want %q", resp.Content, "done")
+	}
+}
+
+func TestBackendSetTimeoutIgnoresNonPositive(t *testing.T) {
+	b := New(Spec{Name: "x-cli", Binary: "x", Timeout: 2 * time.Minute})
+	b.SetTimeout(0)
+	b.SetTimeout(-time.Second)
+	if b.spec.Timeout != 2*time.Minute {
+		t.Errorf("spec.Timeout = %v, want the original 2m left untouched", b.spec.Timeout)
+	}
+}
+
+// Compile-time proof that the CLI layer's type assertion will succeed.
+var _ provider.TimeoutSetter = (*Backend)(nil)

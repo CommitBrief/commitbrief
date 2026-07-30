@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/provider"
@@ -362,3 +363,30 @@ func TestTestConnectionSuccess(t *testing.T) {
 		t.Errorf("TestConnection: %v", err)
 	}
 }
+
+func TestSetTimeoutDrivesTheRequestOption(t *testing.T) {
+	// The SDK derives its own non-streaming timeout from max_tokens and
+	// refuses outright past 10 minutes ("streaming is required…"), so a
+	// user allowing 20 needs an explicit per-request timeout to get them.
+	p, err := New(config.ProviderConfig{APIKey: "sk-ant-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := p.(*Client)
+	if opts := c.requestOpts(); len(opts) != 0 {
+		t.Errorf("unset timeout should add no request options; got %d", len(opts))
+	}
+	c.SetTimeout(20 * time.Minute)
+	if c.timeout != 20*time.Minute {
+		t.Errorf("timeout = %v, want 20m", c.timeout)
+	}
+	if opts := c.requestOpts(); len(opts) != 1 {
+		t.Errorf("configured timeout should add exactly one request option; got %d", len(opts))
+	}
+	c.SetTimeout(0)
+	if c.timeout != 20*time.Minute {
+		t.Errorf("timeout = %v, want the previous 20m left untouched", c.timeout)
+	}
+}
+
+var _ provider.TimeoutSetter = (*Client)(nil)
