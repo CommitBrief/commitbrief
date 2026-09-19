@@ -134,7 +134,8 @@ cache:
 	iProvider := strings.Index(out, "provider:")
 	iOutput := strings.Index(out, "output:")
 	iCache := strings.Index(out, "cache:")
-	if !(iProvider < iOutput && iOutput < iCache) {
+	ordered := iProvider < iOutput && iOutput < iCache
+	if !ordered {
 		t.Errorf("top-level key order changed; file:\n%s", out)
 	}
 	if !strings.Contains(out, "ttl_days: 30") {

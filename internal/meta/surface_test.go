@@ -339,7 +339,7 @@ func TestSurfaceHasNoBuildStamp(t *testing.T) {
 	// legitimate config section, so only a field NAME can be judged.
 	var walk func(t reflect.Type, path string, seen map[reflect.Type]bool)
 	walk = func(rt reflect.Type, path string, seen map[reflect.Type]bool) {
-		for rt.Kind() == reflect.Ptr || rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
+		for rt.Kind() == reflect.Pointer || rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
 			rt = rt.Elem()
 		}
 		if rt.Kind() != reflect.Struct || seen[rt] {

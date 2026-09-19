@@ -102,7 +102,7 @@ func ConfigKeys() []ConfigKey {
 // key, or inside a slice element). emit is false only for a slice element,
 // whose own "path[]" row would be noise — its fields are what a user sets.
 func walkConfigNode(t reflect.Type, v reflect.Value, path string, freeForm, isElem bool, out *[]ConfigKey) {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 		if v.IsValid() {
 			if v.IsNil() {
@@ -151,7 +151,7 @@ func walkConfigNode(t reflect.Type, v reflect.Value, path string, freeForm, isEl
 		// []SecretPatternConfig). A []string is a leaf and its row above is
 		// the whole story.
 		elem := t.Elem()
-		for elem.Kind() == reflect.Ptr {
+		for elem.Kind() == reflect.Pointer {
 			elem = elem.Elem()
 		}
 		if elem.Kind() == reflect.Struct {
@@ -186,7 +186,7 @@ func yamlFields(t reflect.Type) []yamlField {
 		}
 		if inline {
 			ft := f.Type
-			for ft.Kind() == reflect.Ptr {
+			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
 			if ft.Kind() != reflect.Struct {
@@ -227,7 +227,7 @@ func yamlName(f reflect.StructField) (name string, inline bool) {
 // Widths are deliberately collapsed — a reader setting cache.ttl_days cares
 // that it is an integer, not that it is an int rather than an int64.
 func typeName(t reflect.Type) string {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch t.Kind() {

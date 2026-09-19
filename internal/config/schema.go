@@ -197,7 +197,7 @@ func walkMapping(t reflect.Type, m map[string]any, prefix, source string, found 
 
 // walkValue descends into whatever the field's type allows.
 func walkValue(t reflect.Type, val any, path, source string, found *[]UnknownKey) {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -256,7 +256,7 @@ func yamlFields(t reflect.Type) (map[string]reflect.Type, []string) {
 			// An inlined struct's keys live at this level; flatten them so
 			// they are not reported as unknown.
 			ft := f.Type
-			for ft.Kind() == reflect.Ptr {
+			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
 			if ft.Kind() == reflect.Struct {
