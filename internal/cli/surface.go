@@ -48,9 +48,14 @@ func writeSurface(root *cobra.Command, path string) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpName, 0o644); err != nil {
-		return err
-	}
+	// No os.Chmod here: os.CreateTemp already leaves tmpName at 0600, which
+	// is strictly tighter than the 0644 a plain os.WriteFile would use for a
+	// non-secret file (see G306's exclusion rationale in
+	// scripts/security-scan.sh). Widening it back to 0644 before the rename
+	// only trips gosec's G302 for no behavioral gain: the committed artifact
+	// in git is tracked as 100644 regardless of the generating process's
+	// working-tree mode, and a fresh clone gets the user's umask either way.
+	// Leave it at 0600 rather than chmod-ing or adding another exclusion.
 	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("rename %s: %w", tmpName, err)
 	}
