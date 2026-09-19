@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -56,6 +57,12 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 
 	cfg, err := config.Load(globalPath, repoPath)
 	if err != nil {
+		// An unknown-key error already opens with "config:" and names the
+		// offending file, so re-wrapping it here printed "config: config:".
+		var uk config.UnknownKey
+		if errors.As(err, &uk) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	config.ApplyEnv(cfg)

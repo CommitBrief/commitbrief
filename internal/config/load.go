@@ -29,6 +29,12 @@ func Load(globalPath, repoPath string) (*Config, error) {
 		}
 		layer, err := readLayer(p.path)
 		if err != nil {
+			// An unknown-key error already names the exact file and key;
+			// re-wrapping it would print "config:" twice and bury the path.
+			var uk UnknownKey
+			if errors.As(err, &uk) {
+				return nil, err
+			}
 			return nil, fmt.Errorf("config: %s (%s): %w", p.label, p.path, err)
 		}
 		if layer != nil {
@@ -57,6 +63,16 @@ func LoadFile(path string) (*Config, error) {
 		}
 		return nil, fmt.Errorf("config: read %s: %w", path, err)
 	}
+	// LoadFile backs `config set`, `providers use` and lang.Resolve. It has
+	// to be as strict as Load, or `config set` would happily write into a
+	// file the next Load refuses.
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+	}
+	if err := unknownKeyError(ValidateKeys(raw, path)); err != nil {
+		return nil, err
+	}
 	var c Config
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
@@ -75,6 +91,11 @@ func readLayer(path string) (map[string]any, error) {
 	var m map[string]any
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
+	}
+	// Validate per layer, never on the merged map: after the merge the data
+	// has been re-marshalled, so nothing can say which file was wrong.
+	if err := unknownKeyError(ValidateKeys(m, path)); err != nil {
+		return nil, err
 	}
 	return m, nil
 }
