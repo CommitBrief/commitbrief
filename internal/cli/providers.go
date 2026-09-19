@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/setup"
 	"github.com/CommitBrief/commitbrief/internal/ui"
@@ -121,34 +120,21 @@ func newProvidersUseCmd() *cobra.Command {
 				infof("%s", app.Catalog.T("providers.use.no_key_warning", name))
 			}
 
-			// Load and rewrite only the targeted file so we don't accidentally
-			// promote merged-in repo-level state to global, or vice versa.
+			// writeConfigField (internal/cli/config.go) targets only this one
+			// file — never the merged view — so a --local write can't
+			// promote repo-level state to global or vice versa. It patches
+			// an existing file in place (preserving comments, key order,
+			// anchors/aliases, and any key the typed schema doesn't know
+			// about — see internal/config/patch.go's PatchField and its
+			// documented limits) or writes a fresh config.Default()-based
+			// skeleton when the target doesn't exist yet; see
+			// 06-config-set-write-path.md for why a struct
+			// decode-then-marshal round-trip is no longer used here.
 			path, err := targetPath(app.RepoRoot, local)
 			if err != nil {
 				return err
 			}
-			// LoadFileWith (not the strict LoadFile) so --ignore-unknown-config
-			// actually reaches this write path too; resolveContext above
-			// already warned about any offender in this same file. But this
-			// command does not get to silently keep going the way a read path
-			// would: it is about to decode into a typed config.Config and
-			// serialize the WHOLE thing back out, and a key the schema
-			// doesn't know has nowhere to land in that struct. Writing it
-			// back would permanently drop the user's original value, so a
-			// non-empty `found` here refuses the write instead (see
-			// refuseUnknownKeysWrite).
-			cfg, found, err := config.LoadFileWith(path, config.LoadOptions{IgnoreUnknownKeys: global.ignoreUnknownConfig})
-			if err != nil {
-				return err
-			}
-			if len(found) > 0 {
-				return refuseUnknownKeysWrite(app.Catalog, path, found)
-			}
-			if cfg == nil {
-				cfg = config.Default()
-			}
-			cfg.Provider = name
-			if err := setup.WriteConfig(path, cfg); err != nil {
+			if err := writeConfigField(path, "provider", name); err != nil {
 				return err
 			}
 			if _, err := fmt.Fprintln(cmd.OutOrStdout(), app.Catalog.T("providers.use.success", name, path)); err != nil {
