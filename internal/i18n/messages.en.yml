@@ -156,6 +156,11 @@ providers.test.failed: "%s test failed: %s"
 providers.test.unknown: "unknown provider %q; known: %v"
 
 config.set.success: "Set %s (written to %s)"
+# --ignore-unknown-config (Wave 0). The strict loader rejects a key the
+# schema has no field for; under the flag the run proceeds and this warning
+# names every key that was ignored, with the file it came from. The key list
+# is built Go-side (internal/cli/context.go) like guard.secret_patterns.invalid.
+config.unknown_key_ignored: "⚠  Ignoring unknown configuration key(s): %s. The setting(s) have no effect — fix or remove them."
 
 doctor.heading: "Doctor — running %d checks"
 doctor.summary: "%d checks: %d ok, %d warning, %d failed"

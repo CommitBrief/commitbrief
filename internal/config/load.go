@@ -11,10 +11,38 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// LoadOptions tunes a load. The zero value is the strict default, so every
+// existing caller keeps the behavior it had.
+type LoadOptions struct {
+	// IgnoreUnknownKeys downgrades an unknown key from a hard failure to a
+	// reported finding: the load proceeds and the offenders come back as
+	// []UnknownKey for the caller to warn about. It exists for `commitbrief
+	// --ignore-unknown-config` — a config that loaded yesterday must not
+	// become unusable today — and deliberately does NOT restore the old
+	// silence: a caller that drops the returned findings on the floor is
+	// reintroducing the exact bug strict validation removed.
+	//
+	// Note what "ignoring" means: the key stays in the merged map and is
+	// dropped by the final typed decode, so a typo'd key simply has no
+	// effect. That is precisely why the warning is mandatory — the user
+	// believes the setting is in force and it is not.
+	IgnoreUnknownKeys bool
+}
+
 func Load(globalPath, repoPath string) (*Config, error) {
+	cfg, _, err := LoadWith(globalPath, repoPath, LoadOptions{})
+	return cfg, err
+}
+
+// LoadWith is Load with explicit options. It additionally returns every
+// unknown key it walked past; with the strict (zero) options that slice is
+// always empty, because the first offender is an error instead.
+func LoadWith(globalPath, repoPath string, opts LoadOptions) (*Config, []UnknownKey, error) {
+	var unknown []UnknownKey
+
 	merged, err := marshalToMap(Default())
 	if err != nil {
-		return nil, fmt.Errorf("config: encode defaults: %w", err)
+		return nil, nil, fmt.Errorf("config: encode defaults: %w", err)
 	}
 
 	for _, p := range []struct {
@@ -27,15 +55,16 @@ func Load(globalPath, repoPath string) (*Config, error) {
 		if p.path == "" {
 			continue
 		}
-		layer, err := readLayer(p.path)
+		layer, found, err := readLayer(p.path, opts)
+		unknown = append(unknown, found...)
 		if err != nil {
 			// An unknown-key error already names the exact file and key;
 			// re-wrapping it would print "config:" twice and bury the path.
 			var uk UnknownKey
 			if errors.As(err, &uk) {
-				return nil, err
+				return nil, unknown, err
 			}
-			return nil, fmt.Errorf("config: %s (%s): %w", p.label, p.path, err)
+			return nil, unknown, fmt.Errorf("config: %s (%s): %w", p.label, p.path, err)
 		}
 		if layer != nil {
 			deepMerge(merged, layer)
@@ -44,60 +73,72 @@ func Load(globalPath, repoPath string) (*Config, error) {
 
 	out, err := unmarshalFromMap(merged)
 	if err != nil {
-		return nil, fmt.Errorf("config: decode merged: %w", err)
+		return nil, unknown, fmt.Errorf("config: decode merged: %w", err)
 	}
 	if err := Migrate(out); err != nil {
-		return nil, err
+		return nil, unknown, err
 	}
-	return out, nil
+	return out, unknown, nil
 }
 
 func LoadFile(path string) (*Config, error) {
+	cfg, _, err := LoadFileWith(path, LoadOptions{})
+	return cfg, err
+}
+
+// LoadFileWith is LoadFile with explicit options; see LoadOptions.
+func LoadFileWith(path string, opts LoadOptions) (*Config, []UnknownKey, error) {
 	if path == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, fmt.Errorf("config: read %s: %w", path, err)
+		return nil, nil, fmt.Errorf("config: read %s: %w", path, err)
 	}
 	// LoadFile backs `config set`, `providers use` and lang.Resolve. It has
 	// to be as strict as Load, or `config set` would happily write into a
 	// file the next Load refuses.
 	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+		return nil, nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
-	if err := unknownKeyError(ValidateKeys(raw, path)); err != nil {
-		return nil, err
+	found := ValidateKeys(raw, path)
+	if !opts.IgnoreUnknownKeys {
+		if err := unknownKeyError(found); err != nil {
+			return nil, nil, err
+		}
 	}
 	var c Config
 	if err := yaml.Unmarshal(data, &c); err != nil {
-		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+		return nil, found, fmt.Errorf("config: parse %s: %w", path, err)
 	}
-	return &c, nil
+	return &c, found, nil
 }
 
-func readLayer(path string) (map[string]any, error) {
+func readLayer(path string, opts LoadOptions) (map[string]any, []UnknownKey, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, fmt.Errorf("read: %w", err)
+		return nil, nil, fmt.Errorf("read: %w", err)
 	}
 	var m map[string]any
 	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parse: %w", err)
+		return nil, nil, fmt.Errorf("parse: %w", err)
 	}
 	// Validate per layer, never on the merged map: after the merge the data
 	// has been re-marshalled, so nothing can say which file was wrong.
-	if err := unknownKeyError(ValidateKeys(m, path)); err != nil {
-		return nil, err
+	found := ValidateKeys(m, path)
+	if !opts.IgnoreUnknownKeys {
+		if err := unknownKeyError(found); err != nil {
+			return nil, nil, err
+		}
 	}
-	return m, nil
+	return m, found, nil
 }
 
 func marshalToMap(c *Config) (map[string]any, error) {
