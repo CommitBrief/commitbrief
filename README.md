@@ -601,20 +601,68 @@ them.
 
 ## Providers and pricing
 
-Four API providers + two CLI-tool-backed providers ship in the box:
+<!-- commitbrief:gen providers -->
+10 providers ship in the box: 6 API, 1 local, 3 CLI-tool-backed. Context and
+price are per model, not per provider. See the accompanying notes for what
+it can't say (preview status, latency, auth, invocation).
 
-| Provider | Models | Notes |
-|----------|--------|-------|
-| **Anthropic** | Claude Opus 4.8 (default), Sonnet 4.6, Haiku 4.5 | Ephemeral prompt caching (5 m TTL) cuts repeated input cost ~10×. Opus 4.8 advertises a 1 M-token context. |
-| **OpenAI** | GPT-5.4-mini (default), GPT-5.5, GPT-5.5-pro, GPT-4o, GPT-4o-mini | Automatic prompt caching at ≥1024-token prefixes. `gpt-5.5-pro` runs via the Responses API (not Chat Completions) and can take several minutes per review. |
-| **Google Gemini** | Gemini 3.5 Flash (default), 3.1 Pro, 3.1 Flash-Lite | ~1 M-token context windows. `gemini-3.1-pro-preview` is a preview model. |
-| **DeepSeek** | deepseek-chat, deepseek-reasoner | OpenAI-compatible API (`DEEPSEEK_API_KEY`); JSON is prompt-driven (degrades gracefully). |
-| **Mistral** | Mistral Large / Small, Codestral | OpenAI-compatible API (`MISTRAL_API_KEY`). |
-| **Cohere** | Command R+ / R, Command A | Cohere's OpenAI-compatibility endpoint (`COHERE_API_KEY`). |
-| **Ollama** | Whatever you've `ollama pull`'d | Local-only, no API key, no per-token cost. |
-| **`claude-cli`** | Whatever your local Claude Code uses | Subprocess of `claude -p -` — no API key on our side; reuses your Claude Code subscription. `commitbrief --cli claude --staged`. |
-| **`gemini-cli`** | Whatever your local Gemini CLI uses | Subprocess of `gemini -p` — no API key on our side; reuses your Gemini CLI auth. `commitbrief --cli gemini --staged`. |
-| **`codex-cli`** | Whatever your local Codex CLI uses | Subprocess of `codex exec --sandbox read-only --skip-git-repo-check` — no API key on our side; reuses your Codex CLI (ChatGPT) auth. `commitbrief --cli codex --staged`. |
+| Provider | Kind | Model | Default | Context | $/1M in / out / cached |
+|---|---|---|---|---|---|
+| `anthropic` | API | `claude-opus-4-8` | ✓ | 1,000,000 | $5 / $25 / $0.5 |
+| `anthropic` | API | `claude-sonnet-4-6` | — | 1,000,000 | $3 / $15 / $0.3 |
+| `anthropic` | API | `claude-haiku-4-5-20251001` | — | 200,000 | $1 / $5 / $0.1 |
+| `claude-cli` | CLI-backed | — | — | — | — |
+| `codex-cli` | CLI-backed | — | — | — | — |
+| `cohere` | API | `command-r-plus` | ✓ | 128,000 | $2.5 / $10 / = $2.5 |
+| `cohere` | API | `command-r` | — | 128,000 | $0.15 / $0.6 / = $0.15 |
+| `cohere` | API | `command-a-03-2025` | — | 256,000 | $2.5 / $10 / = $2.5 |
+| `deepseek` | API | `deepseek-chat` | ✓ | 64,000 | $0.27 / $1.1 / $0.07 |
+| `deepseek` | API | `deepseek-reasoner` | — | 64,000 | $0.55 / $2.19 / $0.14 |
+| `gemini` | API | `gemini-3.1-pro-preview` | — | 1,000,000 | $2 / $12 / $0.5 |
+| `gemini` | API | `gemini-3.5-flash` | ✓ | 1,000,000 | $1.5 / $9 / $0.375 |
+| `gemini` | API | `gemini-3.1-flash-lite` | — | 1,000,000 | $0.25 / $1.5 / $0.0625 |
+| `gemini-cli` | CLI-backed | — | — | — | — |
+| `mistral` | API | `mistral-large-latest` | ✓ | 128,000 | $2 / $6 / = $2 |
+| `mistral` | API | `mistral-small-latest` | — | 32,000 | $0.2 / $0.6 / = $0.2 |
+| `mistral` | API | `codestral-latest` | — | 256,000 | $0.3 / $0.9 / = $0.3 |
+| `ollama` | Local | `qwen2.5-coder:14b` | ✓ | 32,768 | free |
+| `ollama` | Local | `qwen2.5-coder:7b` | — | 32,768 | free |
+| `ollama` | Local | `llama3.3:latest` | — | 128,000 | free |
+| `ollama` | Local | `llama3.2:latest` | — | 128,000 | free |
+| `ollama` | Local | `deepseek-coder-v2:latest` | — | 8,192 | free |
+| `openai` | API | `gpt-5.4-mini` | ✓ | 400,000 | $0.75 / $4.5 / $0.075 |
+| `openai` | API | `gpt-5.5` | — | 1,050,000 | $5 / $30 / $0.5 |
+| `openai` | API | `gpt-5.5-pro` | — | 1,050,000 | $30 / $180 / = $30 |
+| `openai` | API | `gpt-4o` | — | 128,000 | $2.5 / $10 / $1.25 |
+| `openai` | API | `gpt-4o-mini` | — | 128,000 | $0.15 / $0.6 / $0.075 |
+<!-- commitbrief:end providers -->
+
+Notes the table above can't carry — not derivable from `surface.json`, so
+they stay hand-written here rather than inside the generated region:
+
+- **OpenAI** — `gpt-5.5-pro` runs via the Responses API (not Chat
+  Completions) and **can take several minutes per review**.
+- **Google Gemini** — `gemini-3.1-pro-preview` is a **preview** model.
+- **Anthropic** — ephemeral prompt caching (5 m TTL) cuts repeated input
+  cost ~10×.
+- **OpenAI** — automatic prompt caching kicks in at ≥1024-token prefixes.
+- **DeepSeek**, **Mistral**, **Cohere** — OpenAI-compatible APIs: each
+  reuses the `openai-go` client pointed at that provider's own base URL
+  instead of a native SDK (see the credentials table below for
+  `DEEPSEEK_API_KEY` / `MISTRAL_API_KEY` / `COHERE_API_KEY`). DeepSeek's
+  JSON is prompt-driven rather than schema-enforced, so it degrades
+  gracefully instead of failing hard on a malformed reply.
+- **Ollama** — local only; `ollama pull` whatever model you like, the
+  table above only lists what ships as a documented example. Its context
+  windows are **best-effort**: a Modelfile can raise a model's `num_ctx`
+  past what we advertise.
+- **`claude-cli`** — subprocess of `claude -p -`; no API key on our side,
+  it reuses your Claude Code subscription. `commitbrief --cli claude --staged`.
+- **`gemini-cli`** — subprocess of `gemini -p`; no API key on our side, it
+  reuses your Gemini CLI auth. `commitbrief --cli gemini --staged`.
+- **`codex-cli`** — subprocess of `codex exec --sandbox read-only
+  --skip-git-repo-check`; no API key on our side, it reuses your Codex CLI
+  (ChatGPT) auth. `commitbrief --cli codex --staged`.
 
 CLI-backed providers emit pre-formatted plain text — they bypass the
 structured-findings JSON path, the per-finding cards renderer, and the
@@ -715,16 +763,29 @@ text summary. It does not re-implement the review — it reuses `runReview`.
 
 **Tool: `review`** — all arguments optional:
 
-| Argument | Type | Meaning |
-|----------|------|---------|
-| `staged` | bool | review the staged diff (default) |
-| `unstaged` | bool | review the working tree (⊥ `staged`) |
-| `diff` | string[] | `git diff` range args, e.g. `["HEAD~3","HEAD"]` or `["main...feature"]` |
-| `provider` | string | override the configured provider |
-| `model` | string | override the configured model |
-| `fail_on` | string | `critical\|high\|medium\|low\|info\|any\|none` — reported as a gate failure in the summary; findings are still returned |
-| `min_severity` | string | hide findings below this severity in the returned set |
-| `no_flaky` | bool | skip the deterministic flaky-test detector |
+<!-- commitbrief:gen mcp-tool-args -->
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `author` | `array<string>` | — | Review only commits authored by these people (matches name or email, case-insensitive). Selects a commit set instead of a staged/unstaged diff. |
+| `committer` | `array<string>` | — | Review only commits committed by these people (matches name or email, case-insensitive). |
+| `diff` | `array<string>` | — | Arbitrary `git diff` arguments to review a range instead of staged/unstaged changes, e.g. ["HEAD~3","HEAD"] or ["main...feature"]. Forwarded verbatim to git. |
+| `dir` | `array<string>` | — | Review only files under these directories. A plain value is a \<dir>/ prefix; a glob value is matched gitignore-style. |
+| `end_date` | `string` | — | Review only commits on or before this date, YYYY-MM-DD, inclusive. |
+| `exclude_dir` | `array<string>` | — | Skip files under these directories or matching dir globs. Applied after `dir` so an exclusion wins. |
+| `exclude_file` | `array<string>` | — | Skip these files or globs. Same matching rules as `file`, applied after it so an exclusion wins. |
+| `fail_on` | `string` | — | Allowed: `critical`, `high`, `medium`, `low`, `info`, `any`, `none` — Report a gate failure (failed=true in the summary) when a finding meets/exceeds this severity. Findings are still returned regardless. |
+| `file` | `array<string>` | — | Review only these files. A plain value is an exact path; a value containing \*/?/[ is a gitignore-style glob (e.g. "\*.go", "internal/\*\*/\*.ts"). |
+| `max_commits` | `integer` | — | Cap how many matching commits enter the review (0 = the built-in default). Only meaningful alongside another commit filter. |
+| `merges` | `boolean` | — | Include merge commits in a commit-filtered review (excluded by default). Only meaningful alongside another commit filter. |
+| `min_severity` | `string` | — | Allowed: `critical`, `high`, `medium`, `low`, `info`, `none` — Hide findings below this severity in the returned set (display filter; the gate still sees the full set). |
+| `model` | `string` | — | Override the configured model for this review. |
+| `no_flaky` | `boolean` | — | Skip the deterministic flaky-test detector (ADR-0022). |
+| `provider` | `string` | — | Override the configured provider for this review (e.g. "anthropic", "openai"). |
+| `staged` | `boolean` | — | Review the staged diff (default true). Set false together with unstaged=true to review the working tree. |
+| `start_date` | `string` | — | Review only commits on or after this date, YYYY-MM-DD, inclusive. |
+| `text` | `string` | — | Review only commits whose message contains this text, plus commits unique to a branch whose name contains it (case-insensitive). |
+| `unstaged` | `boolean` | — | Review the unstaged (working-tree) diff instead of the staged diff. Mutually exclusive with staged. |
+<!-- commitbrief:end mcp-tool-args -->
 
 The result carries two content blocks: a one-line summary (finding counts,
 provider, and a `GATE FAILED` note when `--fail-on` trips) and the schema-v1
@@ -818,61 +879,124 @@ Plus environment variables for credentials and runtime tweaks, and
 CLI flags for one-off overrides (`--provider gemini --model
 gemini-3.5-flash`).
 
+<!-- commitbrief:gen env-vars -->
+These are read AFTER config is loaded and merged, so each one below
+always overrides its config value for this run — including one left
+over in your shell from a previous session.
+
+| Variable | Effect | Config key |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic API credential — overrides `providers.anthropic.api_key` in config. | `providers.anthropic.api_key` |
+| `OPENAI_API_KEY` | OpenAI API credential — overrides `providers.openai.api_key` in config. | `providers.openai.api_key` |
+| `GEMINI_API_KEY` | Google Gemini API credential — overrides `providers.gemini.api_key` in config. | `providers.gemini.api_key` |
+| `DEEPSEEK_API_KEY` | DeepSeek API credential — overrides `providers.deepseek.api_key` in config. | `providers.deepseek.api_key` |
+| `MISTRAL_API_KEY` | Mistral API credential — overrides `providers.mistral.api_key` in config. | `providers.mistral.api_key` |
+| `COHERE_API_KEY` | Cohere API credential — overrides `providers.cohere.api_key` in config. | `providers.cohere.api_key` |
+| `OLLAMA_HOST` | Ollama base URL — overrides `providers.ollama.base_url` in config UNCONDITIONALLY, even if you set base_url explicitly. | `providers.ollama.base_url` |
+| `COMMITBRIEF_PROVIDER` | Selects the active provider for this run — overrides `provider` in config. | `provider` |
+| `COMMITBRIEF_MODEL` | Selects the active provider's model for this run — overrides `providers.<name>.model` in config. | `providers.<name>.model` |
+<!-- commitbrief:end env-vars -->
+
+`COMMITBRIEF_CONFIG`, `NO_COLOR`/`COMMITBRIEF_NO_COLOR` and `LANG` affect the
+CLI too, but they aren't config overrides `ApplyEnv` applies — they're read
+directly where they're used, so they have no `Config key` to point at:
+
 | Variable | Effect |
 |---|---|
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` | Provider credentials. Overrides the matching `providers.<name>.api_key` in config. |
-| `OLLAMA_HOST` | Sets `providers.ollama.base_url` when not set in config. |
-| `COMMITBRIEF_PROVIDER` | Selects the active provider (same as `--provider` / `config.provider`). |
-| `COMMITBRIEF_MODEL` | Overrides the active provider's model. |
 | `COMMITBRIEF_CONFIG` | Absolute path to the user-level config file; replaces the default `~/.commitbrief/config.yml` lookup. Useful for tests and ephemeral CI environments. |
 | `COMMITBRIEF_NO_COLOR`, `NO_COLOR` | Force ANSI color off (overrides `--color always`). |
 | `LANG` | No longer drives language (ADR-0021): language is config-driven (`--lang` → repo `output.lang` → user `output.lang` → English). |
 
+<!-- commitbrief:gen config-schema -->
 ```yaml
-# ~/.commitbrief/config.yml
-version: 1
-provider: anthropic                # default provider
-providers:
-  anthropic:
-    model: claude-opus-4-8
-    pricing:                         # optional: override built-in $/1M rates
-      claude-opus-4-8:               # (cost preflight / verbose footer / cache)
-        input_per_1m: 5.0
-        output_per_1m: 25.0          # omitted fields keep the built-in value
-  openai:
-    model: gpt-5.4-mini
-  ollama:
-    model: qwen2.5-coder:14b
-    base_url: http://localhost:11434
-output:
-  lang: en                         # AI output language (any recognized lang, e.g. fr); UI localizes for en/tr only
-  stream: true
-  color: auto                      # auto | always | never
+# Schema reference generated from code: every settable key, its type,
+# and its built-in default (when it has one). <name> and <model> are
+# placeholders you choose — see "Providers and pricing" above for the
+# real provider names.
 cache:
-  enabled: true
-  ttl_days: 7
-  max_size_mb: 0                   # 0 = unlimited; >0 evicts oldest entries past the cap
-guard:
-  secret_scan: true                # scan diff + rules for credential patterns before sending
-  token_preflight: false           # opt-in: confirm/abort when the prompt overflows the model's context window
-  injection_scan: true             # warn (never abort) if a non-default COMMITBRIEF.md/OUTPUT.md has prompt-injection phrasing
-  secret_patterns:                 # additive user credential regexes; built-ins always run (ADR-0024)
-    - name: "Internal Service Token"
-      regex: 'INT-[0-9]{10}'
+  enabled: true                           # bool
+  max_size_mb: 0                          # int
+  ttl_days: 7                             # int
 command:
-  default: ""                      # args applied to a bare `commitbrief`; empty = `--staged`
+  default: ""                             # string
 commit:
-  type: plain                      # default --type for `commitbrief commit` (plain|conventional|conventional+body|gitmoji|subject+body)
-  generate: 1                      # default --generate (number of message alternatives)
+  generate: 1                             # int
+  type: "plain"                           # string
+cost:
+  warn_threshold_usd: 0.5                 # float
+guard:
+  injection_scan: true                    # bool
+  secret_patterns:                        # []object
+    - name: ""                            # string — no built-in default
+      regex: ""                           # string — no built-in default
+  secret_scan: true                       # bool
+  token_preflight: false                  # bool
+output:
+  color: "auto"                           # string
+  lang: "en"                              # string
+  stream: true                            # bool
+provider: "anthropic"                     # string
+providers:                                # map[string]object — key is user-chosen
+  <name>:
+    api_key: ""                           # string — no built-in default
+    base_url: ""                          # string — no built-in default
+    model: ""                             # string — no built-in default
+    pricing:                              # map[string]object — key is user-chosen
+      <model>:
+        cached_input_per_1m: 0            # float — no built-in default
+        input_per_1m: 0                   # float — no built-in default
+        output_per_1m: 0                  # float — no built-in default
 review:
-  flaky: true                      # deterministic flaky-test detector pre-pass (ADR-0022); --no-flaky overrides per-run
-  sandbox_rerun: 0                  # opt-in sandbox-rerun confirmation (ADR-0022): re-run a flagged test N times in isolation; 0 = off; --sandbox-rerun[=N] overrides per-run
-  sandbox_command: []               # the rerun executor (ADR-0033): argv list, e.g. ["go", "test", "-run", "^{{.Test}}$", "./..."]; requires sandbox_rerun > 0 too (double opt-in); hand-edit only, config set rejects it; Go-only test-name resolution
-  baseline: true                   # apply the user-private signal-control baseline (ADR-0027); --no-baseline overrides per-run, --update-baseline rewrites it
-  architecture: true               # architecture-aware review (ADR-0030): read architecture.json into the prompt; --no-architecture overrides per-run
-  architecture_file: ""            # override the architecture.json discovery path (relative to repo root, or absolute); empty = auto-discover
-  timeout: ""                      # bound the whole run: "10m", "90s", "600" (seconds); empty/"0" = keep each provider's built-in cap; --timeout overrides per-run
+  architecture: true                      # bool
+  architecture_file: "architecture.json"  # string — effective default; `config get` returns "" (auto-discovery applies this)
+  baseline: true                          # bool
+  flaky: true                             # bool
+  sandbox_command: []                     # []string — no built-in default
+  sandbox_rerun: 0                        # int
+  timeout: ""                             # string
+version: 1                                # int
 ```
+<!-- commitbrief:end config-schema -->
+
+What the schema above can't say — not derivable from `config_keys`, so
+these stay hand-written here rather than inside the generated region:
+
+- **`providers.<name>.pricing.<model>`** — optional: overrides the
+  built-in $/1M rate table for that one model. Any field you omit keeps
+  the built-in value; the `0` shown above is just this reference's
+  placeholder, not a claim that the built-in price is zero. Example:
+  ```yaml
+  providers:
+    anthropic:
+      pricing:
+        claude-opus-4-8:
+          input_per_1m: 5.0
+          output_per_1m: 25.0   # omitted fields keep the built-in value
+  ```
+- **`guard.secret_patterns`** — purely additive (ADR-0024): the built-in
+  credential patterns always run and cannot be disabled through this
+  field (set `secret_scan: false` to turn the whole scan off instead).
+  Example entry: `{name: "Internal Service Token", regex: 'INT-[0-9]{10}'}`.
+- **`guard.token_preflight`** — opt-in (default `false`); when on, a
+  review whose estimated prompt tokens exceed the provider's context
+  window prompts for confirmation (TTY) or aborts (non-TTY) before the
+  paid round-trip, instead of letting the provider reject it.
+- **`guard.injection_scan`** — on by default; **warns, never aborts**, if a
+  non-default `COMMITBRIEF.md`/`OUTPUT.md` contains prompt-injection-shaped
+  phrasing ("ignore previous instructions", etc.). Defense-in-depth
+  visibility alongside the passive XML-wrap immutability guard (ADR-0025);
+  the embedded defaults are trusted and skipped.
+- **`output.lang`** — the AI review's OUTPUT language: any language name or
+  code you write here is passed straight to the provider (e.g. `fr`). The
+  CLI's own interface text only localizes for `en`/`tr`, independently of
+  this setting.
+- **`output.color`** — one of `auto` (the default, TTY-detecting),
+  `always`, or `never`.
+- **`cost.warn_threshold_usd`** — the estimated-cost ceiling (USD) above
+  which a review prompts for confirmation (TTY) or aborts (non-TTY) before
+  contacting the provider; `0` or negative disables the check. The default
+  (`0.5`) is an "occasional dev review" budget — raise it for scheduled
+  jobs, or pass `--no-cost-check` per run.
 
 ### Default command (`command.default`)
 
