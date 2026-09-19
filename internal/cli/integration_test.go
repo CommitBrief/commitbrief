@@ -38,14 +38,22 @@ type cliEnv struct {
 	stdin    io.Reader
 }
 
-func newCLIEnv(t *testing.T) *cliEnv {
+// isolateHomeEnv points HOME (and every variant config's path resolution or
+// os.UserHomeDir consults) at a fresh temp directory, and clears every
+// provider credential env var config.ApplyEnv reads from the process
+// environment. Every CLI test whose command path resolves config —
+// resolveContext directly, or a hand-rolled RunE that calls it — must run
+// this first, or it silently reads the real developer's
+// ~/.commitbrief/config.yml (and real ANTHROPIC_API_KEY / etc). That gap is
+// exactly how TestGuardConsumeBlocks/TestGuardConsumePasses got Turkish
+// verdicts (ENGELLENDİ/GEÇTİ) against English assertions (BLOCKED/PASS) on a
+// machine whose real config sets output.lang: tr — guard_test.go built its
+// own harness instead of reusing this one.
+//
+// Returns the sandbox HOME so a caller that also wants to seed a config file
+// there (as newCLIEnv does) doesn't have to look it up a second time.
+func isolateHomeEnv(t *testing.T) string {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git binary not on PATH; skipping CLI integration test")
-	}
-
-	registerMockOnce.Do(mock.Register)
-
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	// Windows: os.UserHomeDir() reads USERPROFILE, not HOME. Without this
@@ -57,6 +65,58 @@ func newCLIEnv(t *testing.T) *cliEnv {
 	t.Setenv("COMMITBRIEF_CONFIG", "")
 	t.Setenv("LANG", "en_US.UTF-8")
 	t.Setenv("NO_COLOR", "1") // glamour/ansi-free output in tests
+
+	// config.ApplyEnv reads these from the PROCESS environment, which a
+	// temporary HOME does not isolate. A developer with GEMINI_API_KEY or
+	// OPENAI_API_KEY exported in their shell would otherwise have those
+	// providers silently configured into every CLI test, so doctor grew two
+	// extra "unknown provider" warnings (only mock is linked into the test
+	// binary) and the run behaved differently on their machine than in CI.
+	for _, k := range []string{
+		"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+		"DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "COHERE_API_KEY",
+		"OLLAMA_HOST", "COMMITBRIEF_PROVIDER", "COMMITBRIEF_MODEL",
+	} {
+		t.Setenv(k, "")
+	}
+	return home
+}
+
+// chdirIsolated points the process cwd at a fresh, empty, non-repo temp
+// directory and restores the original cwd on test cleanup.
+//
+// resolveContext(false) best-effort-resolves a repo root from cwd via
+// git.FindRepo, even for commands that don't require one. isolateHomeEnv
+// alone only closes the HOME half of config resolution — a test that never
+// changes cwd still runs from inside this very repo's own checkout (the Go
+// test binary's working directory is the package source directory), so it
+// picks up a REPO-level .commitbrief/config.yml the moment anyone runs
+// `setup --local` here even once (Wave 0 review turu 2, item 9). This closes
+// the other half. Not used by newCLIEnv itself: that harness deliberately
+// chdirs into its OWN throwaway git repo instead, which is the more
+// complete isolation full review/list/etc. integration tests need.
+func chdirIsolated(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+}
+
+func newCLIEnv(t *testing.T) *cliEnv {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not on PATH; skipping CLI integration test")
+	}
+
+	registerMockOnce.Do(mock.Register)
+
+	home := isolateHomeEnv(t)
 
 	repo := t.TempDir()
 	initTestRepo(t, repo)

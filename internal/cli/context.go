@@ -3,8 +3,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/config"
@@ -54,8 +56,16 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 
 	globalPath, repoPath := configFilePaths(repoRoot)
 
-	cfg, err := config.Load(globalPath, repoPath)
+	loadOpts := config.LoadOptions{IgnoreUnknownKeys: global.ignoreUnknownConfig}
+
+	cfg, unknownKeys, err := config.LoadWith(globalPath, repoPath, loadOpts)
 	if err != nil {
+		// An unknown-key error already opens with "config:" and names the
+		// offending file, so re-wrapping it here printed "config: config:".
+		var uk config.UnknownKey
+		if errors.As(err, &uk) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	config.ApplyEnv(cfg)
@@ -93,14 +103,25 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 	// langRes.UICatalog(), which degrades to English for any language we don't
 	// ship a catalog for. The flag is NOT folded into cfg.Output.Lang, so
 	// `config get output.lang` still reports the stored file value.
-	rawGlobal, _ := config.LoadFile(globalPath)
-	rawRepo, _ := config.LoadFile(repoPath)
+	// Same options as the merged load above: without them a file with an
+	// unknown key would come back nil here even under
+	// --ignore-unknown-config, silently dropping that file's output.lang.
+	rawGlobal, _, _ := config.LoadFileWith(globalPath, loadOpts)
+	rawRepo, _, _ := config.LoadFileWith(repoPath, loadOpts)
 	langRes := lang.Resolve(global.lang, rawRepo, rawGlobal)
 
 	cat, err := i18n.Load(langRes.UICatalog())
 	if err != nil {
 		cat, _ = i18n.Load(i18n.DefaultLang)
 	}
+
+	// Warn only once the catalog exists, and to stderr — stdout carries the
+	// --json payload CI parses. Deliberately NOT gated on --quiet: --quiet
+	// suppresses *info* (progress) messages, while this reports that part of
+	// the user's configuration is not in force. Muting it for the scripted
+	// runs that pass --quiet is precisely how the silent failure got shipped
+	// in the first place.
+	warnUnknownConfigKeys(cat, unknownKeys)
 
 	return &appContext{
 		RepoRoot:   repoRoot,
@@ -112,6 +133,24 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 		Catalog:    cat,
 		Timeout:    timeout,
 	}, nil
+}
+
+// warnUnknownConfigKeys names every key --ignore-unknown-config let through.
+// Each entry carries its own source file because the two config layers
+// (~/.commitbrief/config.yml and <repo>/.commitbrief/config.yml) merge into
+// one result — "which file do I edit?" is the user's next question.
+//
+// ValidateKeys sorts each layer's findings, so the printed order is stable
+// across runs; an error message that reshuffles itself is not a usable one.
+func warnUnknownConfigKeys(cat *i18n.Catalog, keys []config.UnknownKey) {
+	if len(keys) == 0 || cat == nil {
+		return
+	}
+	named := make([]string, 0, len(keys))
+	for _, k := range keys {
+		named = append(named, fmt.Sprintf("%q (%s)", k.Path, k.Source))
+	}
+	fmt.Fprintln(os.Stderr, cat.T("config.unknown_key_ignored", strings.Join(named, ", ")))
 }
 
 func infof(format string, args ...any) {

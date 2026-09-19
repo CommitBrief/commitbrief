@@ -44,6 +44,17 @@ jobs:
       - name: License audit
         run: bash scripts/license-check.sh
 
+      # ADR-0039 / Faz 08 review P4: README.md is a packaged release
+      # artifact (see .goreleaser.yaml archives.files), not just an
+      # in-repo doc. `main`'s branch protection makes this practically
+      # redundant with the `docs-check` CI job most tags will already
+      # have passed, but it is one cheap step (go is already being set
+      # up for goreleaser above) against a tag that points at a commit
+      # CI never actually gated — a re-tagged SHA, an admin override, or
+      # a future change to the protection rules.
+      - name: Docs drift check
+        run: bash scripts/docs-check.sh
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

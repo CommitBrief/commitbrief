@@ -54,14 +54,18 @@ type globalFlags struct {
 	provider       string
 	model          string
 	color          string
-	timeout        string   // --timeout <dur|seconds>; bounds the whole command run and raises provider-internal caps; "" / "0" = built-in behavior
-	cli            string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
-	withContext    bool     // --with-context; CLI providers only — let the host CLI read project files beyond the diff (ADR-0017)
-	showPrompt     bool     // --show-prompt; print the assembled system+user prompt and exit (no provider call)
-	files          []string // global --file (repeatable); path filter applied post-parse
-	dirs           []string // global --dir (repeatable); prefix filter applied post-parse
-	excludeFiles   []string // global --exclude-file (repeatable); path denylist applied after --file/--dir (ADR-0035)
-	excludeDirs    []string // global --exclude-dir (repeatable); dir denylist applied after --file/--dir (ADR-0035)
+	// --ignore-unknown-config; proceed past a config key the schema has no
+	// field for, warning about each one on stderr. A flag and not a config
+	// key on purpose: the config file is what is failing.
+	ignoreUnknownConfig bool
+	timeout             string   // --timeout <dur|seconds>; bounds the whole command run and raises provider-internal caps; "" / "0" = built-in behavior
+	cli                 string   // --cli <name>; shorthand that resolves to provider "<name>-cli"
+	withContext         bool     // --with-context; CLI providers only — let the host CLI read project files beyond the diff (ADR-0017)
+	showPrompt          bool     // --show-prompt; print the assembled system+user prompt and exit (no provider call)
+	files               []string // global --file (repeatable); path filter applied post-parse
+	dirs                []string // global --dir (repeatable); prefix filter applied post-parse
+	excludeFiles        []string // global --exclude-file (repeatable); path denylist applied after --file/--dir (ADR-0035)
+	excludeDirs         []string // global --exclude-dir (repeatable); dir denylist applied after --file/--dir (ADR-0035)
 	// Commit-level filters (ADR-0035). Any of authors/committers/startDate/
 	// endDate/text switches diff acquisition from `git diff` to a commit
 	// walk; merges and maxCommits only modify such a walk.
@@ -73,6 +77,7 @@ type globalFlags struct {
 	maxCommits int      // --max-commits; 0 → git.DefaultMaxCommits
 	merges     bool     // --merges; include merge commits (default: excluded)
 	genMan     string   // hidden: --gen-man <dir> writes man pages and exits
+	genSurface string   // hidden: --gen-surface <file> writes the surface inventory and exits
 }
 
 var global globalFlags
@@ -93,6 +98,13 @@ func newRootCmd() *cobra.Command {
 		// even attached to a subcommand) short-circuits to man-page emission
 		// instead of running a review. os.Exit(0) is the deliberate end-state.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if global.genSurface != "" {
+				if err := writeSurface(cmd.Root(), global.genSurface); err != nil {
+					return fmt.Errorf("gen-surface: %w", err)
+				}
+				fmt.Fprintf(os.Stderr, "wrote surface inventory to %s\n", global.genSurface)
+				os.Exit(0)
+			}
 			if global.genMan == "" {
 				return nil
 			}
@@ -141,6 +153,7 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&global.provider, "provider", "", "override configured provider")
 	flags.StringVar(&global.model, "model", "", "override configured model")
 	flags.StringVar(&global.color, "color", "auto", "color output: auto, always, never")
+	flags.BoolVar(&global.ignoreUnknownConfig, "ignore-unknown-config", false, "continue when config.yml holds a key the schema doesn't define, instead of failing; every ignored key is still named in a warning on stderr (the setting has no effect — fix the key)")
 	flags.StringVar(&global.timeout, "timeout", "", "bound the whole run to this `duration` — 90s, 10m, 1h30m, or a bare number of seconds (600). Covers diff, provider call, render, and time spent at a confirmation prompt. Also RAISES the provider's own cap (claude/gemini/codex-cli 5m, ollama 5m, Anthropic SDK 10m), which a deadline alone cannot do. Unset or 0 keeps those built-ins. Resolution: --timeout → review.timeout → built-in")
 	flags.StringSliceVarP(&global.files, "file", "f", nil, "review only these files or globs (e.g. `*.go`, `internal/**/*.ts`; repeatable, one pattern per flag — patterns can't be comma-joined); combines with the active scope flag")
 	flags.StringSliceVarP(&global.dirs, "dir", "d", nil, "review only files under these directories or matching dir globs (e.g. `internal/**`; repeatable, one pattern per flag); combines with the active scope flag")
@@ -170,7 +183,10 @@ func newRootCmd() *cobra.Command {
 
 	// Hidden: drives scripts/manpage.sh; not part of the user-visible surface.
 	flags.StringVar(&global.genMan, "gen-man", "", "generate man pages into <dir> and exit (hidden)")
+	// Hidden: drives scripts/docs-gen.sh; not part of the user-visible surface.
+	flags.StringVar(&global.genSurface, "gen-surface", "", "write the CLI surface inventory to <file> and exit (hidden)")
 	_ = cmd.PersistentFlags().MarkHidden("gen-man")
+	_ = cmd.PersistentFlags().MarkHidden("gen-surface")
 
 	// Review-scope flags live on root so `commitbrief --staged` works without
 	// a subcommand. They are re-bound on `dry-run` (see newDryRunCmd) since

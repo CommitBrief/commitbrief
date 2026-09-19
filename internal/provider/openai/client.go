@@ -232,6 +232,7 @@ func mapError(err error) error {
 
 func init() {
 	provider.Register(Name, New)
+	provider.RegisterMetadata(Metadata())
 }
 
 var _ provider.Provider = (*Client)(nil)

@@ -5,6 +5,8 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"strconv"
 	"strings"
 
@@ -105,20 +107,7 @@ By default writes to ~/.commitbrief/config.yml; --local writes to the repo.`,
 			if err != nil {
 				return err
 			}
-			// Operate on the on-disk file directly so we don't accidentally
-			// promote merged-in state from one scope into another. First-time
-			// writes fall back to a Default skeleton.
-			cfg, err := config.LoadFile(path)
-			if err != nil {
-				return err
-			}
-			if cfg == nil {
-				cfg = config.Default()
-			}
-			if err := configFieldSet(cfg, args[0], args[1]); err != nil {
-				return err
-			}
-			if err := setup.WriteConfig(path, cfg); err != nil {
+			if err := writeConfigField(path, args[0], args[1]); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), app.Catalog.T("config.set.success", args[0], path))
@@ -267,26 +256,37 @@ func configFieldGet(cfg *config.Config, path string) (string, error) {
 	}
 }
 
-// configFieldSet writes a value into cfg using dotted-path notation. The
+// configFieldSet writes a value into cfg using dotted-path notation, and
+// returns that same value with its Go type (bool/int/float64/string)
+// preserved rather than the string it was parsed from — writeConfigField
+// uses the returned value to encode the right YAML scalar tag when it
+// patches the on-disk file, without re-implementing this coercion. The
 // supported paths match configFieldGet; type coercion happens here and
 // invalid values surface clear errors (so the YAML file never gets a
 // half-typed mess).
-func configFieldSet(cfg *config.Config, path, value string) error {
+//
+// cfg is mutated the same way it always was — some callers (tests, mainly)
+// still read the result back off cfg via configFieldGet — but nothing here
+// depends on cfg's PRIOR value: every case only reads args and its own
+// freshly coerced value, which is what lets writeConfigField validate
+// against a throwaway config.Default() instead of decoding the real file
+// into a typed struct.
+func configFieldSet(cfg *config.Config, path, value string) (any, error) {
 	parts := strings.Split(path, ".")
 	switch parts[0] {
 	case "provider":
 		if len(parts) != 1 {
-			return fmt.Errorf("config: %q is not a sub-path", path)
+			return nil, fmt.Errorf("config: %q is not a sub-path", path)
 		}
 		if !isRegistered(value) {
-			return fmt.Errorf("config: unknown provider %q; known: %v", value, provider.Names())
+			return nil, fmt.Errorf("config: unknown provider %q; known: %v", value, provider.Names())
 		}
 		cfg.Provider = value
-		return nil
+		return value, nil
 
 	case "providers":
 		if len(parts) != 3 {
-			return fmt.Errorf("config: %q must be providers.<name>.<field>", path)
+			return nil, fmt.Errorf("config: %q must be providers.<name>.<field>", path)
 		}
 		if cfg.Providers == nil {
 			cfg.Providers = map[string]config.ProviderConfig{}
@@ -300,14 +300,14 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 		case "base_url":
 			pc.BaseURL = value
 		default:
-			return fmt.Errorf("config: unknown field %q in providers.%s (allowed: api_key, model, base_url)", parts[2], parts[1])
+			return nil, fmt.Errorf("config: unknown field %q in providers.%s (allowed: api_key, model, base_url)", parts[2], parts[1])
 		}
 		cfg.Providers[parts[1]] = pc
-		return nil
+		return value, nil
 
 	case "output":
 		if len(parts) != 2 {
-			return fmt.Errorf("config: %q must be output.<field>", path)
+			return nil, fmt.Errorf("config: %q must be output.<field>", path)
 		}
 		switch parts[1] {
 		case "lang":
@@ -315,189 +315,271 @@ func configFieldSet(cfg *config.Config, path, value string) error {
 			// level); a non-empty value must name a recognized language so a
 			// typo is caught here instead of silently falling back at runtime.
 			if value != "" && !lang.Recognized(value) {
-				return fmt.Errorf("config: output.lang %q is not a recognized language code (e.g. en, tr, fr, de, es)", value)
+				return nil, fmt.Errorf("config: output.lang %q is not a recognized language code (e.g. en, tr, fr, de, es)", value)
 			}
 			cfg.Output.Lang = value
+			return value, nil
 		case "stream":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: output.stream: %w", err)
+				return nil, fmt.Errorf("config: output.stream: %w", err)
 			}
 			cfg.Output.Stream = b
+			return b, nil
 		case "color":
 			switch value {
 			case "auto", "always", "never":
 				cfg.Output.Color = value
 			default:
-				return fmt.Errorf("config: output.color must be auto/always/never; got %q", value)
+				return nil, fmt.Errorf("config: output.color must be auto/always/never; got %q", value)
 			}
+			return value, nil
 		default:
-			return fmt.Errorf("config: unknown field %q in output (allowed: lang, stream, color)", parts[1])
+			return nil, fmt.Errorf("config: unknown field %q in output (allowed: lang, stream, color)", parts[1])
 		}
-		return nil
 
 	case "cache":
 		if len(parts) != 2 {
-			return fmt.Errorf("config: %q must be cache.<field>", path)
+			return nil, fmt.Errorf("config: %q must be cache.<field>", path)
 		}
 		switch parts[1] {
 		case "enabled":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: cache.enabled: %w", err)
+				return nil, fmt.Errorf("config: cache.enabled: %w", err)
 			}
 			cfg.Cache.Enabled = b
+			return b, nil
 		case "ttl_days":
 			i, err := strconv.Atoi(value)
 			if err != nil {
-				return fmt.Errorf("config: cache.ttl_days must be an integer; got %q", value)
+				return nil, fmt.Errorf("config: cache.ttl_days must be an integer; got %q", value)
 			}
 			if i < 0 {
-				return errors.New("config: cache.ttl_days cannot be negative")
+				return nil, errors.New("config: cache.ttl_days cannot be negative")
 			}
 			cfg.Cache.TTLDays = i
+			return i, nil
 		case "max_size_mb":
 			i, err := strconv.Atoi(value)
 			if err != nil {
-				return fmt.Errorf("config: cache.max_size_mb must be an integer; got %q", value)
+				return nil, fmt.Errorf("config: cache.max_size_mb must be an integer; got %q", value)
 			}
 			if i < 0 {
-				return errors.New("config: cache.max_size_mb cannot be negative")
+				return nil, errors.New("config: cache.max_size_mb cannot be negative")
 			}
 			cfg.Cache.MaxSizeMB = i
+			return i, nil
 		default:
-			return fmt.Errorf("config: unknown field %q in cache (allowed: enabled, ttl_days, max_size_mb)", parts[1])
+			return nil, fmt.Errorf("config: unknown field %q in cache (allowed: enabled, ttl_days, max_size_mb)", parts[1])
 		}
-		return nil
 
 	case "guard":
 		if len(parts) != 2 {
-			return fmt.Errorf("config: %q must be guard.<field>", path)
+			return nil, fmt.Errorf("config: %q must be guard.<field>", path)
 		}
 		switch parts[1] {
 		case "secret_scan":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: guard.secret_scan: %w", err)
+				return nil, fmt.Errorf("config: guard.secret_scan: %w", err)
 			}
 			cfg.Guard.SecretScan = b
+			return b, nil
 		case "token_preflight":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: guard.token_preflight: %w", err)
+				return nil, fmt.Errorf("config: guard.token_preflight: %w", err)
 			}
 			cfg.Guard.TokenPreflight = b
+			return b, nil
 		case "injection_scan":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: guard.injection_scan: %w", err)
+				return nil, fmt.Errorf("config: guard.injection_scan: %w", err)
 			}
 			cfg.Guard.InjectionScan = b
+			return b, nil
 		case "secret_patterns":
 			// A list of {name, regex} objects cannot be expressed through the
 			// flat `config set <key> <value>` form. Reject with guidance to
 			// edit the YAML directly, mirroring how the pricing map (the only
 			// other non-scalar surface) is set — by hand, not via `config set`.
-			return errors.New("config: guard.secret_patterns is a list of {name, regex} objects; edit the config file directly (commitbrief config show prints its path)")
+			return nil, errors.New("config: guard.secret_patterns is a list of {name, regex} objects; edit the config file directly (commitbrief config show prints its path)")
 		default:
-			return fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight, injection_scan, secret_patterns)", parts[1])
+			return nil, fmt.Errorf("config: unknown field %q in guard (allowed: secret_scan, token_preflight, injection_scan, secret_patterns)", parts[1])
 		}
-		return nil
 
 	case "cost":
 		if len(parts) != 2 {
-			return fmt.Errorf("config: %q must be cost.<field>", path)
+			return nil, fmt.Errorf("config: %q must be cost.<field>", path)
 		}
 		switch parts[1] {
 		case "warn_threshold_usd":
 			v, err := strconv.ParseFloat(value, 64)
 			if err != nil {
-				return fmt.Errorf("config: cost.warn_threshold_usd must be a number; got %q", value)
+				return nil, fmt.Errorf("config: cost.warn_threshold_usd must be a number; got %q", value)
 			}
 			if v < 0 {
-				return errors.New("config: cost.warn_threshold_usd cannot be negative; use 0 to disable")
+				return nil, errors.New("config: cost.warn_threshold_usd cannot be negative; use 0 to disable")
 			}
 			cfg.Cost.WarnThresholdUSD = v
+			return v, nil
 		default:
-			return fmt.Errorf("config: unknown field %q in cost (allowed: warn_threshold_usd)", parts[1])
+			return nil, fmt.Errorf("config: unknown field %q in cost (allowed: warn_threshold_usd)", parts[1])
 		}
-		return nil
 
 	case "command":
 		if len(parts) != 2 {
-			return fmt.Errorf("config: %q must be command.<field>", path)
+			return nil, fmt.Errorf("config: %q must be command.<field>", path)
 		}
 		switch parts[1] {
 		case "default":
 			// Free-form argument string applied to a bare `commitbrief`.
 			// Stored verbatim; tokenization happens at invocation time.
 			cfg.Command.Default = value
+			return value, nil
 		default:
-			return fmt.Errorf("config: unknown field %q in command (allowed: default)", parts[1])
+			return nil, fmt.Errorf("config: unknown field %q in command (allowed: default)", parts[1])
 		}
-		return nil
 
 	case "review":
 		if len(parts) != 2 {
-			return fmt.Errorf("config: %q must be review.<field>", path)
+			return nil, fmt.Errorf("config: %q must be review.<field>", path)
 		}
 		switch parts[1] {
 		case "flaky":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: review.flaky: %w", err)
+				return nil, fmt.Errorf("config: review.flaky: %w", err)
 			}
 			cfg.Review.Flaky = b
+			return b, nil
 		case "baseline":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: review.baseline: %w", err)
+				return nil, fmt.Errorf("config: review.baseline: %w", err)
 			}
 			cfg.Review.Baseline = b
+			return b, nil
 		case "architecture":
 			b, err := parseConfigBool(value)
 			if err != nil {
-				return fmt.Errorf("config: review.architecture: %w", err)
+				return nil, fmt.Errorf("config: review.architecture: %w", err)
 			}
 			cfg.Review.Architecture = b
+			return b, nil
 		case "architecture_file":
 			// Free-form path (relative to repo root, or absolute); empty
 			// restores auto-discovery of ./architecture.json.
 			cfg.Review.ArchitectureFile = value
+			return value, nil
 		case "sandbox_rerun":
 			i, err := strconv.Atoi(value)
 			if err != nil {
-				return fmt.Errorf("config: review.sandbox_rerun must be an integer; got %q", value)
+				return nil, fmt.Errorf("config: review.sandbox_rerun must be an integer; got %q", value)
 			}
 			if i < 0 {
-				return errors.New("config: review.sandbox_rerun cannot be negative; use 0 to disable")
+				return nil, errors.New("config: review.sandbox_rerun cannot be negative; use 0 to disable")
 			}
 			cfg.Review.SandboxRerun = i
+			return i, nil
 		case "sandbox_command":
 			// A list of argv elements cannot be expressed through the flat
 			// `config set <key> <value>` form. Reject with guidance to edit
 			// the YAML directly, mirroring guard.secret_patterns and
 			// per-model pricing — the other non-scalar surfaces.
-			return errors.New("config: review.sandbox_command is a list of argv elements; edit the config file directly (commitbrief config show prints its path)")
+			return nil, errors.New("config: review.sandbox_command is a list of argv elements; edit the config file directly (commitbrief config show prints its path)")
 		case "timeout":
 			// Validate before writing so the YAML never grows a value that
 			// would fail every subsequent run. The stored form is the user's
 			// spelling ("10m", "600"); parseTimeout normalizes at read time.
 			if _, err := parseTimeout(value); err != nil {
-				return fmt.Errorf("config: review.timeout: %w", err)
+				return nil, fmt.Errorf("config: review.timeout: %w", err)
 			}
-			cfg.Review.Timeout = strings.TrimSpace(value)
+			trimmed := strings.TrimSpace(value)
+			cfg.Review.Timeout = trimmed
+			return trimmed, nil
 		default:
-			return fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command, timeout)", parts[1])
+			return nil, fmt.Errorf("config: unknown field %q in review (allowed: flaky, baseline, architecture, architecture_file, sandbox_rerun, sandbox_command, timeout)", parts[1])
 		}
-		return nil
 
 	case "version":
-		return errors.New("config: version is managed by migrations and cannot be set manually")
+		return nil, errors.New("config: version is managed by migrations and cannot be set manually")
 
 	default:
-		return fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*, review.*)", parts[0])
+		return nil, fmt.Errorf("config: unknown top-level field %q (allowed: provider, providers.*, output.*, cache.*, guard.*, cost.*, command.*, review.*)", parts[0])
 	}
+}
+
+// writeConfigField is the shared write path for `config set` and
+// `providers use` (which calls it with key "provider"). It validates and
+// coerces value against the typed schema exactly as before, then:
+//
+//   - if the target file already exists, it patches only the changed key
+//     into the raw YAML document (config.PatchField), leaving every other
+//     byte — comments, key order, anchors/aliases, unknown/x- keys — alone;
+//   - if the file does not exist yet, there is nothing on disk to preserve,
+//     so it writes a fully-populated config.Default()-based skeleton via
+//     setup.WriteConfig exactly as before (first-run UX: a fresh config.yml
+//     documents every field, not just the one just set).
+//
+// Validation is deliberately run against a throwaway config.Default()
+// rather than the real file decoded into a typed Config: configFieldSet's
+// coercion never depends on the field's prior value (see its doc comment),
+// and decoding the real file into a typed struct is exactly the round-trip
+// this write path exists to avoid — see
+// .ssot/plans/2026-09-19-wave-0-ground-truth/06-config-set-write-path.md.
+//
+// Unknown-key strictness is unchanged: config.LoadFileWith still runs (in
+// strict mode unless --ignore-unknown-config) purely to surface that error
+// exactly as any read path would; resolveContext has already warned about
+// any offender let through by --ignore-unknown-config. What's gone is the
+// refusal-to-write gate Faz 05 added for the same finding: patching the raw
+// document can never drop an unknown key's value, so refusing had become
+// pure friction once the write path stopped needing the typed round-trip.
+func writeConfigField(path, key, value string) error {
+	existed, err := configFileExists(path)
+	if err != nil {
+		return err
+	}
+	// LoadFileWith's error return already carries a config.UnknownKey (via
+	// errors.As upstream) when strict mode rejects the file; the *Config
+	// and []UnknownKey results themselves are not used for anything past
+	// this point (see doc comment above).
+	if _, _, err := config.LoadFileWith(path, config.LoadOptions{IgnoreUnknownKeys: global.ignoreUnknownConfig}); err != nil {
+		return err
+	}
+
+	scratch := config.Default()
+	typedValue, err := configFieldSet(scratch, key, value)
+	if err != nil {
+		return err
+	}
+
+	if !existed {
+		return setup.WriteConfig(path, scratch)
+	}
+	return config.PatchField(path, strings.Split(key, "."), typedValue)
+}
+
+// configFileExists reports whether path already exists — a plain os.Stat,
+// not a "is it a regular file" check (a directory there stats as existing
+// too, and PatchField's own os.ReadFile/os.Rename calls are what actually
+// surface that as an error, on the patch path just like on the create-fresh
+// path). It distinguishes "not found" from a real stat error the caller
+// should surface rather than silently treat as "create fresh".
+func configFileExists(path string) (bool, error) {
+	if path == "" {
+		return false, nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("config: stat %s: %w", path, err)
+	}
+	return true, nil
 }
 
 func parseConfigBool(s string) (bool, error) {

@@ -24,11 +24,16 @@ import (
 // Name is what users type. Matches the directory suffix convention.
 const Name = "claude-cli"
 
+// binaryName is the executable clireview resolves on PATH. It is a
+// constant so the Spec below and Metadata() cannot drift apart.
+const binaryName = "claude"
+
 func init() {
+	provider.RegisterMetadata(Metadata())
 	provider.Register(Name, func(_ config.ProviderConfig) (provider.Provider, error) {
 		return clireview.New(clireview.Spec{
 			Name:   Name,
-			Binary: "claude",
+			Binary: binaryName,
 			// Claude Code's one-shot, non-interactive invocation:
 			// `-p` ("print") bypasses the interactive REPL and
 			// `--output-format text` keeps the response clean (no

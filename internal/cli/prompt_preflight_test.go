@@ -69,7 +69,7 @@ func TestConfigFieldTokenPreflightRoundTrip(t *testing.T) {
 		t.Fatalf("default guard.token_preflight = %q, err=%v; want \"false\"", got, err)
 	}
 
-	if err := configFieldSet(cfg, "guard.token_preflight", "true"); err != nil {
+	if _, err := configFieldSet(cfg, "guard.token_preflight", "true"); err != nil {
 		t.Fatalf("set guard.token_preflight: %v", err)
 	}
 	if !cfg.Guard.TokenPreflight {
@@ -115,7 +115,7 @@ func TestConfigFieldSecretPatternsGetListsNames(t *testing.T) {
 
 func TestConfigFieldSecretPatternsSetRejected(t *testing.T) {
 	cfg := config.Default()
-	err := configFieldSet(cfg, "guard.secret_patterns", "anything")
+	_, err := configFieldSet(cfg, "guard.secret_patterns", "anything")
 	if err == nil {
 		t.Fatal("expected config set guard.secret_patterns to be rejected")
 	}
@@ -133,7 +133,7 @@ func TestConfigFieldInjectionScanRoundTrip(t *testing.T) {
 	if got, err := configFieldGet(cfg, "guard.injection_scan"); err != nil || got != "true" {
 		t.Fatalf("default guard.injection_scan = %q, err=%v; want \"true\"", got, err)
 	}
-	if err := configFieldSet(cfg, "guard.injection_scan", "false"); err != nil {
+	if _, err := configFieldSet(cfg, "guard.injection_scan", "false"); err != nil {
 		t.Fatalf("set guard.injection_scan: %v", err)
 	}
 	if cfg.Guard.InjectionScan {

@@ -24,11 +24,16 @@ import (
 // Name is what users type. Matches the directory suffix convention.
 const Name = "gemini-cli"
 
+// binaryName is the executable clireview resolves on PATH. It is a
+// constant so the Spec below and Metadata() cannot drift apart.
+const binaryName = "gemini"
+
 func init() {
+	provider.RegisterMetadata(Metadata())
 	provider.Register(Name, func(_ config.ProviderConfig) (provider.Provider, error) {
 		return clireview.New(clireview.Spec{
 			Name:   Name,
-			Binary: "gemini",
+			Binary: binaryName,
 			// `gemini -p "<prompt>"` is Gemini CLI's documented one-shot
 			// invocation. The output is plain text by default; no
 			// extra flag needed.

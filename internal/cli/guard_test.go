@@ -25,6 +25,16 @@ const guardPolicy = "version: 1\nthresholds:\n  critical: 0\n  high: 0\n  medium
 // in a clean global-flag scope, returning the captured stdout and the error.
 func runGuardConsume(t *testing.T, jsonMode bool, policyBody, reviewBody string) (string, error) {
 	t.Helper()
+	// runGuard resolves config via resolveContext (for app.Catalog, among
+	// other things), so this needs the same env sandboxing newCLIEnv gives
+	// full integration tests — without it, the real ~/.commitbrief/config.yml
+	// (e.g. output.lang: tr) decides which language the verdict renders in.
+	isolateHomeEnv(t)
+	// resolveContext(false) also best-effort-resolves a REPO root from cwd;
+	// without this, that's this very repo's own checkout, so a repo-level
+	// .commitbrief/config.yml here (e.g. from `setup --local`) would leak in
+	// exactly the same way (item 9).
+	chdirIsolated(t)
 	dir := t.TempDir()
 	policyPath := filepath.Join(dir, "policy.yml")
 	reviewPath := filepath.Join(dir, "review.json")
@@ -103,6 +113,10 @@ func TestGuardJSONVerdict(t *testing.T) {
 }
 
 func TestGuardMissingPolicy(t *testing.T) {
+	// Same hermeticity requirement as runGuardConsume: runGuard resolves
+	// config before it ever looks at --policy.
+	isolateHomeEnv(t)
+	chdirIsolated(t)
 	dir := t.TempDir()
 	reviewPath := filepath.Join(dir, "review.json")
 	if err := os.WriteFile(reviewPath, []byte(passReviewJSON), 0o644); err != nil {

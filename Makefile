@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 
 GO ?= go
 
-.PHONY: help build test test-live eval eval-live bench lint fmt tidy clean check release-check license-check i18n-check spdx-check security-check manpage smoke
+.PHONY: help build test test-live eval eval-live bench lint fmt tidy clean check release-check license-check i18n-check spdx-check security-check manpage smoke docs-gen docs-check
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -69,10 +69,16 @@ i18n-check: ## Flag i18n catalog keys with no Go source reference (UC-25)
 spdx-check: ## Fail if any Go source file is missing the SPDX header (ADR-0012)
 	bash scripts/spdx-check.sh
 
+docs-gen: ## Regenerate internal/meta/surface.json and README.md's generated regions (ADR-0039)
+	bash scripts/docs-gen.sh
+
+docs-check: ## Fail if generated docs drift from code or from surface.json (ADR-0039)
+	bash scripts/docs-check.sh
+
 security-check: ## Run gosec with the documented exclusion set
 	bash scripts/security-scan.sh
 
-check: ## Run every guard CI runs (fmt-drift, vet, lint, test, release-check, i18n-check, spdx-check)
+check: ## Run every guard CI runs (fmt-drift, vet, lint, test, release-check, i18n-check, spdx-check, docs-check)
 	@echo "==> gofmt drift"
 	@drift=$$(gofmt -l -s . | grep -v '^vendor/' || true); \
 	if [ -n "$$drift" ]; then \
@@ -96,6 +102,8 @@ check: ## Run every guard CI runs (fmt-drift, vet, lint, test, release-check, i1
 	else \
 		echo "gosec not installed locally; skipping. brew install gosec to enable."; \
 	fi
+	@echo "==> docs-check"
+	@$(MAKE) -s docs-check
 	@echo "==> all checks passed"
 
 manpage: ## Regenerate man/commitbrief.1

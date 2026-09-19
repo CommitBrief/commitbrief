@@ -210,4 +210,5 @@ var _ provider.Provider = (*Client)(nil)
 
 func init() {
 	provider.Register(Name, New)
+	provider.RegisterMetadata(Metadata())
 }

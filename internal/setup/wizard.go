@@ -10,6 +10,7 @@ import (
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/provider"
 )
 
 // tr returns the catalog string for key, falling back to fallback
@@ -36,50 +37,50 @@ type ProviderSpec struct {
 	APIKeyHelp string
 }
 
-// DefaultSpecs lists the providers shown in the wizard. The Models slice
-// is the user-facing static list; for Ollama (NeedsURL=true) the models
-// are discovered dynamically via OllamaModels.
-var DefaultSpecs = []ProviderSpec{
+// specUI is the wizard's own half of a provider spec: the presentation
+// text and the shape of the prompts. None of it is a provider fact, so
+// none of it belongs in the provider metadata registry — a label like
+// "Ollama (local, no API key needed)" or a console URL is copy written
+// for this screen.
+//
+// The slice order is the order the user sees, and it is deliberately not
+// the registry's (which sorts alphabetically): the three providers most
+// people configure lead, and the keyless local option closes the list.
+var specUI = []ProviderSpec{
 	{
 		Name:       "anthropic",
 		Label:      "Anthropic (Claude)",
 		NeedsKey:   true,
-		Models:     []string{"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"},
 		APIKeyHelp: "Get an API key from https://console.anthropic.com/",
 	},
 	{
 		Name:       "openai",
 		Label:      "OpenAI (GPT)",
 		NeedsKey:   true,
-		Models:     []string{"gpt-5.4-mini", "gpt-5.5", "gpt-5.5-pro", "gpt-4o", "gpt-4o-mini"},
 		APIKeyHelp: "Get an API key from https://platform.openai.com/",
 	},
 	{
 		Name:       "gemini",
 		Label:      "Google Gemini",
 		NeedsKey:   true,
-		Models:     []string{"gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"},
 		APIKeyHelp: "Get an API key from https://aistudio.google.com/",
 	},
 	{
 		Name:       "deepseek",
 		Label:      "DeepSeek",
 		NeedsKey:   true,
-		Models:     []string{"deepseek-chat", "deepseek-reasoner"},
 		APIKeyHelp: "Get an API key from https://platform.deepseek.com/",
 	},
 	{
 		Name:       "mistral",
 		Label:      "Mistral",
 		NeedsKey:   true,
-		Models:     []string{"mistral-large-latest", "mistral-small-latest", "codestral-latest"},
 		APIKeyHelp: "Get an API key from https://console.mistral.ai/",
 	},
 	{
 		Name:       "cohere",
 		Label:      "Cohere",
 		NeedsKey:   true,
-		Models:     []string{"command-r-plus", "command-r", "command-a-03-2025"},
 		APIKeyHelp: "Get an API key from https://dashboard.cohere.com/",
 	},
 	{
@@ -89,13 +90,44 @@ var DefaultSpecs = []ProviderSpec{
 	},
 }
 
-func FindSpec(name string) *ProviderSpec {
-	for i := range DefaultSpecs {
-		if DefaultSpecs[i].Name == name {
-			return &DefaultSpecs[i]
+// Specs returns the providers the wizard offers, with each one's model list
+// read from the provider metadata registry at call time.
+//
+// It is a function rather than a package-level var for two reasons. The
+// registry is populated by init() in the provider packages that
+// cmd/commitbrief/main.go blank-imports, so a var initialised at package
+// load could observe it half-built; and building fresh means the wizard
+// can never show a model list that has drifted from the provider's own
+// supportedModels table, which is what the hand-copied literals this
+// replaced kept doing (gemini's order had already diverged).
+//
+// Ollama is the one provider with no static list: it serves whatever the
+// user has pulled, so selectModel asks the daemon through OllamaModels and
+// never reads Models. Copying the registry's handful of suggestions in
+// would present them as the supported set.
+func Specs() []ProviderSpec {
+	out := make([]ProviderSpec, 0, len(specUI))
+	for _, spec := range specUI {
+		if !spec.NeedsURL {
+			if md, ok := provider.MetadataFor(spec.Name); ok {
+				models := make([]string, 0, len(md.Models))
+				for _, m := range md.Models {
+					models = append(models, m.ID)
+				}
+				spec.Models = models
+			}
 		}
+		out = append(out, spec)
 	}
-	return nil
+	return out
+}
+
+// FindSpec looks up one provider's wizard spec, or nil when the wizard
+// does not offer that provider. The returned pointer addresses a fresh
+// copy, so mutating it changes nothing for the next caller.
+func FindSpec(name string) *ProviderSpec {
+	specs := Specs()
+	return findSpecIn(specs, name)
 }
 
 type Choices struct {
@@ -111,7 +143,7 @@ type RunOptions struct {
 	RepoRoot   string
 	GlobalPath string
 
-	// Specs overrides DefaultSpecs (test injection).
+	// Specs overrides the Specs() default list (test injection).
 	Specs []ProviderSpec
 
 	// Catalog drives prompt titles, validation messages, and the
@@ -121,6 +153,27 @@ type RunOptions struct {
 	// The CLI layer always passes app.Catalog; see UC-16 in
 	// PATCH_ROADMAP.
 	Catalog *i18n.Catalog
+
+	// IgnoreUnknownKeys mirrors `commitbrief --ignore-unknown-config`: when
+	// set, loading the existing config at the target path tolerates a key
+	// the schema doesn't define instead of failing the wizard outright.
+	// setup is the tool's own repair path for a broken config file, so it
+	// must never be the one command the escape hatch can't reach — the CLI
+	// layer has already warned about the offending key via resolveContext
+	// before Run is called, so this load stays silent about it.
+	//
+	// Unlike `config set` / `providers use` (internal/cli/config.go,
+	// providers.go), Run does NOT refuse to write when the load reports an
+	// ignored key (Wave 0 review turu 2, item 6). Those two commands refuse
+	// because they decode the file into a typed config.Config and rewrite
+	// the WHOLE thing, so an unknown key has nowhere to land and is
+	// silently destroyed by the round-trip. Run has exactly the same
+	// decode-and-rewrite shape, but it is the deliberate exception: it is
+	// the tool's own from-scratch recovery path for a config broken enough
+	// to need this flag, has no claim to preserving content it never
+	// understood in the first place, and refusing it here would relock the
+	// exact user the escape hatch exists to rescue.
+	IgnoreUnknownKeys bool
 }
 
 // Apply produces a Config from collected choices, layered on top of the
@@ -162,6 +215,40 @@ func Apply(base *config.Config, choices Choices) *config.Config {
 	return cfg
 }
 
+// LoadRunConfig performs the pure, non-interactive first step of Run:
+// resolving where the wizard will write (repo-local or user-level, per
+// opts.Local) and loading any existing config already at that path,
+// honoring opts.IgnoreUnknownKeys exactly as Run does. It runs entirely
+// before any prompt is constructed and touches no terminal.
+//
+// It is split out of Run so callers — this package's own tests, and
+// internal/cli's — can assert "did config validation let this proceed"
+// without a controlling terminal. huh cannot be driven headlessly: it
+// blocks in a raw console read that observes neither context
+// cancellation nor a redirected stdin, and on a runner that still has a
+// console attached (Windows CI) it never fails fast the way it does on a
+// TTY-less Linux/macOS runner — so a test that only reaches this point
+// through the real prompt is racing a 10-minute per-package timeout on
+// one platform and not the others. Exercising this function directly
+// instead makes the assertion deterministic on every platform.
+func LoadRunConfig(opts RunOptions) (targetPath string, base *config.Config, err error) {
+	targetPath, err = targetConfigPath(opts)
+	if err != nil {
+		return "", nil, err
+	}
+	// The returned findings are intentionally discarded (not gated on, unlike
+	// config set / providers use): setup rewrites the file from scratch by
+	// design and is itself the recovery route for a config broken enough to
+	// need IgnoreUnknownKeys, so refusing to proceed here would relock the
+	// exact user this flag exists to rescue. See the doc comment on
+	// RunOptions.IgnoreUnknownKeys.
+	base, _, err = config.LoadFileWith(targetPath, config.LoadOptions{IgnoreUnknownKeys: opts.IgnoreUnknownKeys})
+	if err != nil {
+		return "", nil, fmt.Errorf("setup: read existing config %s: %w", targetPath, err)
+	}
+	return targetPath, base, nil
+}
+
 // Run drives the interactive wizard via huh. The terminal must support a
 // TTY; callers should branch on non-TTY environments before invoking.
 // Returns the final config (already persisted to disk per opts).
@@ -173,19 +260,15 @@ func Apply(base *config.Config, choices Choices) *config.Config {
 func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	specs := opts.Specs
 	if specs == nil {
-		specs = DefaultSpecs
+		specs = Specs()
 	}
 
 	// Resolve the target write path up front so we can load any existing
 	// config at that path before the wizard prompts. First-time runs see
 	// a nil base and fall through to config.Default in Apply.
-	targetPath, err := targetConfigPath(opts)
+	targetPath, base, err := LoadRunConfig(opts)
 	if err != nil {
 		return nil, err
-	}
-	base, err := config.LoadFile(targetPath)
-	if err != nil {
-		return nil, fmt.Errorf("setup: read existing config %s: %w", targetPath, err)
 	}
 
 	var choices Choices
