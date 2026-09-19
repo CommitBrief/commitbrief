@@ -165,6 +165,163 @@ func TestValidateKeysReturnsFindingsInStableOrder(t *testing.T) {
 	}
 }
 
+// A top-level `x-`-prefixed key exists purely to hold a YAML anchor for
+// `<<:` merging — a pattern the strict validator broke because an anchor
+// needs *some* key to hang off of. The user-approved fix (2026-09-19) is to
+// exempt that one shape rather than reopen top-level validation generally.
+func TestValidateKeysAllowsTopLevelXPrefixedAnchorHolder(t *testing.T) {
+	m := decodeYAML(t, `
+x-defaults: &d
+  ttl_days: 3
+cache:
+  <<: *d
+  enabled: true
+`)
+	if got := ValidateKeys(m, "cfg.yml"); len(got) != 0 {
+		t.Fatalf("ValidateKeys = %v, want none (x- prefixed top-level keys are exempt)", paths(got))
+	}
+}
+
+// The same shape without the "x-" prefix is exactly the typo class the
+// validator exists to catch, so it must keep failing — and the error must
+// point the user at the escape valve that would have let it through.
+func TestValidateKeysRejectsTopLevelKeyWithoutXPrefix(t *testing.T) {
+	m := decodeYAML(t, `
+defaults: &d
+  ttl_days: 3
+cache:
+  <<: *d
+  enabled: true
+`)
+	got := ValidateKeys(m, "cfg.yml")
+	if len(got) != 1 {
+		t.Fatalf("ValidateKeys = %v, want exactly one finding", paths(got))
+	}
+	if got[0].Path != "defaults" {
+		t.Errorf("Path = %q, want %q", got[0].Path, "defaults")
+	}
+	if !strings.Contains(got[0].Error(), "x-defaults") {
+		t.Errorf("Error() = %q, want it to suggest the x- prefix (\"x-defaults\")", got[0].Error())
+	}
+}
+
+// The x- exemption is deliberately top-level only: inside a known section
+// an "x-" key is far more likely a typo than an anchor holder, so it must
+// still be rejected there.
+func TestValidateKeysRejectsXPrefixedKeyInsideKnownSection(t *testing.T) {
+	m := decodeYAML(t, "guard:\n  x-secret_scan: true\n")
+	got := ValidateKeys(m, "cfg.yml")
+	if len(got) != 1 {
+		t.Fatalf("ValidateKeys = %v, want exactly one finding", paths(got))
+	}
+	if got[0].Path != "guard.x-secret_scan" {
+		t.Errorf("Path = %q, want %q", got[0].Path, "guard.x-secret_scan")
+	}
+	if strings.Contains(got[0].Error(), "x-x-secret_scan") {
+		t.Errorf("Error() = %q, must not suggest an x- prefix for a non-top-level key", got[0].Error())
+	}
+}
+
+// Wave 0 review turu 2, item 8: the "x-" hint is a silencer — suggesting it
+// for an actual typo would make the typo permanent (the config never takes
+// effect, but the error never comes back either). A key close enough to a
+// real one must get "did you mean" instead, never the x- hint.
+// Review turu 3, item 12: a near-miss and a genuine anchor holder are not
+// mutually exclusive (`common: &d` is 2 edits from "command"), so both
+// hints must be offered — the "did you mean" suggestion for the likely-typo
+// case, and the x- prefix for the case where the key really was meant to
+// hold nothing but an anchor.
+func TestValidateKeysOffersBothHintsWhenNearMiss(t *testing.T) {
+	m := decodeYAML(t, "cahce:\n  enabled: true\n")
+	got := ValidateKeys(m, "cfg.yml")
+	if len(got) != 1 {
+		t.Fatalf("ValidateKeys = %v, want exactly one finding", paths(got))
+	}
+	errMsg := got[0].Error()
+	if !strings.Contains(errMsg, `did you mean "cache"`) {
+		t.Errorf("Error() = %q, want a \"did you mean\" suggestion for the near-miss \"cache\"", errMsg)
+	}
+	if !strings.Contains(errMsg, "x-cahce") {
+		t.Errorf("Error() = %q, want the x- prefix also offered alongside the near-miss suggestion", errMsg)
+	}
+}
+
+// The exact scenario item 12 calls out: a real anchor-holder name that
+// happens to be 2 edits from an allowed key. The "did you mean" guess is
+// wrong here, so the x- route must still be reachable.
+func TestValidateKeysAnchorHolderNearMissStillOffersXPrefix(t *testing.T) {
+	m := decodeYAML(t, "common: &d\n  ttl_days: 3\ncache:\n  <<: *d\n  enabled: true\n")
+	got := ValidateKeys(m, "cfg.yml")
+	if len(got) != 1 {
+		t.Fatalf("ValidateKeys = %v, want exactly one finding", paths(got))
+	}
+	errMsg := got[0].Error()
+	if !strings.Contains(errMsg, `did you mean "command"`) {
+		t.Errorf("Error() = %q, want the near-miss suggestion for \"common\"", errMsg)
+	}
+	if !strings.Contains(errMsg, "x-common") {
+		t.Errorf("Error() = %q, must still offer the x- route — \"common\" here is a genuine anchor holder, not a typo of \"command\"", errMsg)
+	}
+}
+
+// Review turu 3, item 13: an empty key has no actionable "x-" spelling
+// (`try "x-"` tells the user nothing) and nothing plausible to near-match,
+// so neither hint should appear.
+func TestValidateKeysSkipsHintForEmptyKey(t *testing.T) {
+	m := decodeYAML(t, "\"\": true\n")
+	got := ValidateKeys(m, "cfg.yml")
+	if len(got) != 1 {
+		t.Fatalf("ValidateKeys = %v, want exactly one finding", paths(got))
+	}
+	errMsg := got[0].Error()
+	if strings.Contains(errMsg, "x-") {
+		t.Errorf("Error() = %q, must not suggest an x- prefix for an empty key", errMsg)
+	}
+	if strings.Contains(errMsg, "did you mean") {
+		t.Errorf("Error() = %q, must not offer a near-miss suggestion for an empty key", errMsg)
+	}
+}
+
+// A key that is NOT a plausible typo of anything real keeps the x- hint —
+// this is the control for the test above and re-covers the exact case item
+// 2's decision introduced (a deliberate anchor-holder name, not a mistake).
+func TestValidateKeysKeepsXPrefixHintWhenNoNearMiss(t *testing.T) {
+	m := decodeYAML(t, "defaults:\n  ttl_days: 3\n")
+	got := ValidateKeys(m, "cfg.yml")
+	if len(got) != 1 {
+		t.Fatalf("ValidateKeys = %v, want exactly one finding", paths(got))
+	}
+	errMsg := got[0].Error()
+	if strings.Contains(errMsg, "did you mean") {
+		t.Errorf("Error() = %q, \"defaults\" should not near-match any allowed top-level key", errMsg)
+	}
+	if !strings.Contains(errMsg, "x-defaults") {
+		t.Errorf("Error() = %q, want the x- prefix hint when there is no near miss", errMsg)
+	}
+}
+
+func TestLevenshteinKnownDistances(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"", "", 0},
+		{"cache", "cache", 0},
+		{"", "cache", 5},
+		{"cahce", "cache", 2},
+		{"revieww", "review", 1},
+		{"kitten", "sitting", 3},
+	}
+	for _, c := range cases {
+		if got := levenshtein(c.a, c.b); got != c.want {
+			t.Errorf("levenshtein(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
+		}
+		if got := levenshtein(c.b, c.a); got != c.want {
+			t.Errorf("levenshtein(%q, %q) = %d, want %d (symmetry)", c.b, c.a, got, c.want)
+		}
+	}
+}
+
 func contains(s []string, v string) bool {
 	for _, x := range s {
 		if x == v {
