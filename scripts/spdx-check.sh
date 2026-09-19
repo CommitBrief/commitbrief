@@ -25,11 +25,21 @@ readonly SCAN_LINES=5
 # tracked files AND brand-new untracked (non-ignored) ones, so a freshly
 # added source file is caught locally before it is even committed — which
 # is the whole point of this guard.
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  mapfile -t files < <(git ls-files --cached --others --exclude-standard '*.go')
-else
-  mapfile -t files < <(find . -name '*.go' -not -path './dist/*' -not -path './vendor/*')
-fi
+#
+# Read with a `while read` loop rather than `mapfile`: mapfile is a bash 4
+# builtin, and macOS still ships bash 3.2, where this script aborted with
+# `mapfile: command not found` (exit 127). CI runs on ubuntu and never saw
+# it, so `make check` was failing only on a maintainer's Mac.
+files=()
+while IFS= read -r f; do
+  [ -n "$f" ] && files+=("$f")
+done < <(
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git ls-files --cached --others --exclude-standard '*.go'
+  else
+    find . -name '*.go' -not -path './dist/*' -not -path './vendor/*'
+  fi
+)
 
 missing=()
 for f in "${files[@]}"; do
