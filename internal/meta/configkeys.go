@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CommitBrief/commitbrief/internal/arch"
 	"github.com/CommitBrief/commitbrief/internal/config"
 )
 
@@ -21,14 +22,39 @@ type ConfigKey struct {
 	// object, []object, map[string]object.
 	Type string `json:"type"`
 
-	// Default is config.Default()'s value rendered as text, and only for a
-	// scalar reachable without crossing a map or a slice. Nothing below a
-	// free-form namespace has a default — there is no key to look up.
+	// Default is the value rendered as text — either config.Default()'s
+	// actual field value, or an entry from effectiveDefaults when the real
+	// behavioral default is applied downstream instead of in config.Default()
+	// (review.architecture_file: config.Default() leaves it "" on purpose so
+	// arch.Discover's own auto-discovery stays a silent no-op, but the
+	// documented default is arch.DefaultFilename). Meaningful only when
+	// HasDefault is true.
 	Default string `json:"default,omitempty"`
+
+	// HasDefault distinguishes "the default is the empty string" (e.g.
+	// command.default, whose real default IS "") from "there is no default to
+	// report" (a struct/slice/map node, or anything below a free-form map key
+	// or inside a slice element). Default's omitempty alone cannot tell those
+	// apart — both render as an absent "default" key — which is exactly how
+	// review.architecture_file and command.default used to look identical in
+	// the generated inventory despite one of them having a real default and
+	// the other legitimately having none.
+	HasDefault bool `json:"has_default,omitempty"`
 
 	// FreeForm marks a key that lives under a user-chosen map key, so its
 	// Path contains a placeholder segment and its name is not fixed.
 	FreeForm bool `json:"free_form,omitempty"`
+}
+
+// effectiveDefaults documents a leaf key whose behavioral default is applied
+// downstream of config.Default() rather than baked into the struct's zero
+// value, keyed by the leaf's dotted Path. Referencing the owning package's
+// exported constant (arch.DefaultFilename) instead of repeating the literal
+// "architecture.json" keeps this in lockstep with the code that actually
+// applies it (internal/arch.Discover) — the same fix applied to the
+// apiKeyEnv/env.go drift in the provider packages.
+var effectiveDefaults = map[string]string{
+	"review.architecture_file": arch.DefaultFilename,
 }
 
 // mapPlaceholders names the placeholder segment emitted for each free-form
@@ -88,11 +114,16 @@ func walkConfigNode(t reflect.Type, v reflect.Value, path string, freeForm, isEl
 	}
 
 	if path != "" && !isElem {
+		def, hasDefault := renderDefault(t, v)
+		if override, ok := effectiveDefaults[path]; ok {
+			def, hasDefault = override, true
+		}
 		*out = append(*out, ConfigKey{
-			Path:     path,
-			Type:     typeName(t),
-			Default:  renderDefault(t, v),
-			FreeForm: freeForm,
+			Path:       path,
+			Type:       typeName(t),
+			Default:    def,
+			HasDefault: hasDefault,
+			FreeForm:   freeForm,
 		})
 	}
 
@@ -220,27 +251,30 @@ func typeName(t reflect.Type) string {
 	}
 }
 
-// renderDefault prints a scalar default as YAML would carry it. Composites
-// get no default: a map or a struct default is the sum of its leaves, each of
-// which already has its own row.
-func renderDefault(t reflect.Type, v reflect.Value) string {
+// renderDefault prints a scalar default as YAML would carry it, plus
+// whether the node has one at all. Composites report no default: a map or a
+// struct default is the sum of its leaves, each of which already has its own
+// row. Reporting hasDefault=false there (rather than "") is what lets a
+// caller tell "no default" apart from a leaf whose real default happens to
+// be the empty string.
+func renderDefault(t reflect.Type, v reflect.Value) (value string, hasDefault bool) {
 	if !v.IsValid() {
-		return ""
+		return "", false
 	}
 	switch t.Kind() {
 	case reflect.Bool:
-		return strconv.FormatBool(v.Bool())
+		return strconv.FormatBool(v.Bool()), true
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return strconv.FormatInt(v.Int(), 10)
+		return strconv.FormatInt(v.Int(), 10), true
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return strconv.FormatUint(v.Uint(), 10)
+		return strconv.FormatUint(v.Uint(), 10), true
 	case reflect.Float32, reflect.Float64:
 		// 'g' with -1 precision keeps 0.5 as "0.5" instead of "0.500000".
-		return strconv.FormatFloat(v.Float(), 'g', -1, 64)
+		return strconv.FormatFloat(v.Float(), 'g', -1, 64), true
 	case reflect.String:
-		return v.String()
+		return v.String(), true
 	default:
-		return ""
+		return "", false
 	}
 }
 
