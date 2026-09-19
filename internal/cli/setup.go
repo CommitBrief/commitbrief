@@ -20,6 +20,16 @@ import (
 // reading as a clear placeholder in `--help`.
 const aliasPromptSentinel = "<prompt>"
 
+// setupRun is setup.Run behind an indirection so tests can substitute a
+// stub that observes the RunOptions the command built without opening the
+// interactive wizard. huh cannot be driven headlessly in a test: it blocks
+// in a raw console read that ignores context cancellation and a redirected
+// stdin, and a runner that still has a console attached (Windows CI) never
+// fails fast the way a TTY-less one does — see setup.LoadRunConfig's doc
+// comment for the full story. Production always resolves this to
+// setup.Run; only tests reassign it.
+var setupRun = setup.Run
+
 func newSetupCmd() *cobra.Command {
 	var local bool
 	var aliasFlag string
@@ -53,7 +63,7 @@ the chosen name already shadows a command on your PATH you are warned first.`,
 			if local {
 				opts.RepoRoot = ctx.RepoRoot
 			}
-			if _, err := setup.Run(cmd.Context(), opts); err != nil {
+			if _, err := setupRun(cmd.Context(), opts); err != nil {
 				return err
 			}
 			if local {

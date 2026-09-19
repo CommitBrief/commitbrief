@@ -215,6 +215,40 @@ func Apply(base *config.Config, choices Choices) *config.Config {
 	return cfg
 }
 
+// LoadRunConfig performs the pure, non-interactive first step of Run:
+// resolving where the wizard will write (repo-local or user-level, per
+// opts.Local) and loading any existing config already at that path,
+// honoring opts.IgnoreUnknownKeys exactly as Run does. It runs entirely
+// before any prompt is constructed and touches no terminal.
+//
+// It is split out of Run so callers — this package's own tests, and
+// internal/cli's — can assert "did config validation let this proceed"
+// without a controlling terminal. huh cannot be driven headlessly: it
+// blocks in a raw console read that observes neither context
+// cancellation nor a redirected stdin, and on a runner that still has a
+// console attached (Windows CI) it never fails fast the way it does on a
+// TTY-less Linux/macOS runner — so a test that only reaches this point
+// through the real prompt is racing a 10-minute per-package timeout on
+// one platform and not the others. Exercising this function directly
+// instead makes the assertion deterministic on every platform.
+func LoadRunConfig(opts RunOptions) (targetPath string, base *config.Config, err error) {
+	targetPath, err = targetConfigPath(opts)
+	if err != nil {
+		return "", nil, err
+	}
+	// The returned findings are intentionally discarded (not gated on, unlike
+	// config set / providers use): setup rewrites the file from scratch by
+	// design and is itself the recovery route for a config broken enough to
+	// need IgnoreUnknownKeys, so refusing to proceed here would relock the
+	// exact user this flag exists to rescue. See the doc comment on
+	// RunOptions.IgnoreUnknownKeys.
+	base, _, err = config.LoadFileWith(targetPath, config.LoadOptions{IgnoreUnknownKeys: opts.IgnoreUnknownKeys})
+	if err != nil {
+		return "", nil, fmt.Errorf("setup: read existing config %s: %w", targetPath, err)
+	}
+	return targetPath, base, nil
+}
+
 // Run drives the interactive wizard via huh. The terminal must support a
 // TTY; callers should branch on non-TTY environments before invoking.
 // Returns the final config (already persisted to disk per opts).
@@ -232,19 +266,9 @@ func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	// Resolve the target write path up front so we can load any existing
 	// config at that path before the wizard prompts. First-time runs see
 	// a nil base and fall through to config.Default in Apply.
-	targetPath, err := targetConfigPath(opts)
+	targetPath, base, err := LoadRunConfig(opts)
 	if err != nil {
 		return nil, err
-	}
-	// The returned findings are intentionally discarded (not gated on, unlike
-	// config set / providers use): setup rewrites the file from scratch by
-	// design and is itself the recovery route for a config broken enough to
-	// need IgnoreUnknownKeys, so refusing to proceed here would relock the
-	// exact user this flag exists to rescue. See the doc comment on
-	// RunOptions.IgnoreUnknownKeys.
-	base, _, err := config.LoadFileWith(targetPath, config.LoadOptions{IgnoreUnknownKeys: opts.IgnoreUnknownKeys})
-	if err != nil {
-		return nil, fmt.Errorf("setup: read existing config %s: %w", targetPath, err)
 	}
 
 	var choices Choices

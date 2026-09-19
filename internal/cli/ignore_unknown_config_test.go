@@ -4,11 +4,16 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/CommitBrief/commitbrief/internal/config"
+	"github.com/CommitBrief/commitbrief/internal/setup"
 )
 
 // The config below is the exact shape the (then-wrong) site docs advertised:
@@ -240,27 +245,53 @@ func TestProvidersUsePatchesThroughAnIgnoredUnknownKey(t *testing.T) {
 // the file from scratch by design and is itself the recovery route for a
 // config broken enough to need --ignore-unknown-config. This exercises the
 // CLI wiring end to end (newSetupCmd's RunE → setup.RunOptions.IgnoreUnknownKeys
-// → setup.Run), covering the specific regression item 7 calls out: reverting
-// wizard.go's LoadFileWith back to the strict LoadFile would relock setup
-// behind the exact config error it exists to rescue the user from.
+// → setup.Run's own pre-prompt config load), covering the specific
+// regression item 7 calls out: reverting wizard.go's LoadFileWith back to
+// the strict LoadFile would relock setup behind the exact config error it
+// exists to rescue the user from.
 //
-// This test environment has no TTY, so Run cannot complete the wizard; the
-// assertion that matters is which error it fails with. Getting past config
-// validation to a TTY-only failure — instead of an "unknown key" config
-// error — is exactly what proves the escape hatch reached setup.
+// This used to run the real `setup` command and rely on it failing with a
+// TTY error in this headless test environment — true on Linux/macOS (no TTY
+// at all) but not on Windows CI, which still has a console attached: huh
+// opened it and blocked on a real console read, hanging until the
+// 10-minute per-package test timeout killed the whole binary. huh cannot be
+// driven headlessly (it observes neither context cancellation nor a
+// redirected stdin), so this substitutes setupRun with a stub that runs the
+// exact same pre-prompt step the real setup.Run runs first
+// (setup.LoadRunConfig) and stops there — proving the CLI flag reached
+// RunOptions.IgnoreUnknownKeys and that config validation let the load
+// through, without ever constructing a prompt.
 func TestSetupCommandIgnoreUnknownConfigReachesThePrompt(t *testing.T) {
 	e := newCLIEnv(t)
 	writeRawUserConfig(t, e.homeDir, unknownKeyUserConfig)
+
+	var captured *setup.RunOptions
+	stubErr := errors.New("stub: interactive prompt not exercised in tests")
+	orig := setupRun
+	setupRun = func(_ context.Context, opts setup.RunOptions) (*config.Config, error) {
+		captured = &opts
+		if _, _, err := setup.LoadRunConfig(opts); err != nil {
+			return nil, err
+		}
+		return nil, stubErr
+	}
+	t.Cleanup(func() { setupRun = orig })
 
 	var err error
 	_ = captureStderr(t, func() {
 		err = e.run("setup", "--ignore-unknown-config")
 	})
 	if err == nil {
-		t.Fatal("setup should still fail in this headless test environment (no TTY) — " +
+		t.Fatal("setup should still fail here (the stub always errors after its config load) — " +
 			"if it now succeeds, this test needs a different way to prove the load got past config validation")
 	}
 	if strings.Contains(err.Error(), "unknown key") {
-		t.Errorf("setup --ignore-unknown-config must not die on the config; got a config error instead of a TTY failure: %v", err)
+		t.Errorf("setup --ignore-unknown-config must not die on the config; got a config error instead of the stub failure: %v", err)
+	}
+	if err != stubErr {
+		t.Errorf("expected the stub's own failure once the config load succeeded; got: %v", err)
+	}
+	if captured == nil || !captured.IgnoreUnknownKeys {
+		t.Fatal("expected --ignore-unknown-config to reach setup.RunOptions.IgnoreUnknownKeys")
 	}
 }

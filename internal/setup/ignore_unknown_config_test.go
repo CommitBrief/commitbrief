@@ -3,12 +3,10 @@
 package setup
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // The config below carries the same shape ACTION_PLAN and internal/cli's own
@@ -31,16 +29,21 @@ func writeSetupTestConfig(t *testing.T, path, body string) {
 
 // Baseline: Run must still fail closed on an unknown key when
 // IgnoreUnknownKeys is false (the default), same as before the escape hatch
-// existed. Without this control, TestRunIgnoreUnknownKeysReachesThePrompt
-// below would not prove anything — both cases would look identical if Run
-// stopped validating keys at all.
+// existed. Without this control, TestLoadRunConfigIgnoresUnknownKey below
+// would not prove anything — both cases would look identical if Run stopped
+// validating keys at all.
+//
+// This asserts through LoadRunConfig (the exact pre-prompt step Run itself
+// runs first) rather than through Run, so it never touches huh — see
+// LoadRunConfig's doc comment for why driving that through the real prompt
+// is not viable on every platform.
 func TestRunStrictFailsOnUnknownConfigKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yml")
 	writeSetupTestConfig(t, path, unknownKeySetupConfig)
 
-	_, err := Run(context.Background(), RunOptions{GlobalPath: path})
+	_, _, err := LoadRunConfig(RunOptions{GlobalPath: path})
 	if err == nil {
-		t.Fatal("Run must fail on an unknown config key when IgnoreUnknownKeys is false")
+		t.Fatal("LoadRunConfig must fail on an unknown config key when IgnoreUnknownKeys is false")
 	}
 	if !strings.Contains(err.Error(), "guard.secret_patterns[0].pattern") {
 		t.Errorf("error must name the offending key; got: %v", err)
@@ -53,27 +56,27 @@ func TestRunStrictFailsOnUnknownConfigKey(t *testing.T) {
 // setup, the one command the escape hatch exists to rescue) would have kept
 // every existing test green.
 //
-// Run cannot be driven fully headless (selectProvider et al. need a real
-// TTY), but the config load happens BEFORE any prompt, so the assertion that
-// actually matters is reachable without one: with IgnoreUnknownKeys true,
-// Run must get past the load and fail for an entirely different reason (no
-// TTY here), never for the unknown key. The short timeout is a safety net,
-// not a requirement — huh fails to open a TTY near-instantly in this
-// environment.
-func TestRunIgnoreUnknownKeysReachesThePrompt(t *testing.T) {
+// This used to drive the assertion through the real Run, relying on huh
+// failing to open a TTY near-instantly in a headless test environment. That
+// held on Linux/macOS (no TTY at all) but not on Windows CI, which still has
+// a console attached: huh opened it and blocked on a real console read,
+// which reads as a hang until the 10-minute per-package test timeout kills
+// the whole binary. Asserting through LoadRunConfig directly — the exact
+// pre-prompt step Run itself runs first — proves the same thing (config
+// validation let an ignored unknown key through) without ever constructing
+// a prompt, so it is deterministic on every platform.
+func TestLoadRunConfigIgnoresUnknownKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yml")
 	writeSetupTestConfig(t, path, unknownKeySetupConfig)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := Run(ctx, RunOptions{GlobalPath: path, IgnoreUnknownKeys: true})
-	if err == nil {
-		t.Fatal("Run should still fail in this headless test environment (no TTY) — " +
-			"if it now succeeds, this test needs a different way to prove the load got past config validation")
+	_, base, err := LoadRunConfig(RunOptions{GlobalPath: path, IgnoreUnknownKeys: true})
+	if err != nil {
+		t.Fatalf("IgnoreUnknownKeys=true must let the config load proceed; got: %v", err)
 	}
-	if strings.Contains(err.Error(), "unknown key") {
-		t.Errorf("IgnoreUnknownKeys=true must let the config load proceed; "+
-			"got a config error instead of an interactive-prompt failure: %v", err)
+	if base == nil {
+		t.Fatal("expected the loaded config back, got nil")
+	}
+	if base.Provider != "mock" {
+		t.Errorf("expected the rest of the file's keys to still apply; got provider %q", base.Provider)
 	}
 }
