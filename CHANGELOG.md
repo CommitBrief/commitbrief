@@ -10,6 +10,27 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-09-19
+
+### Added
+- **`--ignore-unknown-config`** — a global flag that downgrades an unknown
+  configuration key from a hard failure to a warning for one run, still
+  naming every offending key and file on stderr. See "Config strictness" in
+  the README.
+- README's provider and MCP tool-argument tables are now generated from the
+  running code (`internal/meta`) instead of hand-maintained — the MCP table
+  in particular grew from 8 listed arguments to the real 19 as a direct
+  result.
+
+### Changed
+- **Unknown configuration keys are now a hard error instead of a silent
+  no-op.** A typo like `regexp:` for `regex:` in `config.yml` used to parse
+  successfully and simply do nothing; it now fails loudly, naming the file,
+  the exact key, the allowed keys at that level, and a "did you mean"
+  suggestion when one is close. A top-level key that exists only to hold a
+  YAML anchor (for `<<:` merging) is exempt under an `x-` prefix. See
+  `--ignore-unknown-config` above for the escape hatch.
+
 ### Fixed
 - **`config set` / `providers use` no longer silently disables the secret
   scanner — or anything else your config file doesn't explicitly mention.**
@@ -54,25 +75,6 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   so those tests previously configured extra providers or rendered in the
   wrong language depending on the machine they ran on, passing in CI and
   failing (or silently misbehaving) locally.
-
-### Added
-- **`--ignore-unknown-config`** — a global flag that downgrades an unknown
-  configuration key from a hard failure to a warning for one run, still
-  naming every offending key and file on stderr. See "Config strictness" in
-  the README.
-- README's provider and MCP tool-argument tables are now generated from the
-  running code (`internal/meta`) instead of hand-maintained — the MCP table
-  in particular grew from 8 listed arguments to the real 19 as a direct
-  result.
-
-### Changed
-- **Unknown configuration keys are now a hard error instead of a silent
-  no-op.** A typo like `regexp:` for `regex:` in `config.yml` used to parse
-  successfully and simply do nothing; it now fails loudly, naming the file,
-  the exact key, the allowed keys at that level, and a "did you mean"
-  suggestion when one is close. A top-level key that exists only to hold a
-  YAML anchor (for `<<:` merging) is exempt under an `x-` prefix. See
-  `--ignore-unknown-config` above for the escape hatch.
 
 ## [1.16.0] - 2026-07-30
 
@@ -2166,7 +2168,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/CommitBrief/commitbrief/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/CommitBrief/commitbrief/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/CommitBrief/commitbrief/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/CommitBrief/commitbrief/compare/v1.13.0...v1.14.0
