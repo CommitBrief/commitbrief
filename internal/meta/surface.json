@@ -1133,17 +1133,20 @@
     {
       "path": "cache.enabled",
       "type": "bool",
-      "default": "true"
+      "default": "true",
+      "has_default": true
     },
     {
       "path": "cache.max_size_mb",
       "type": "int",
-      "default": "0"
+      "default": "0",
+      "has_default": true
     },
     {
       "path": "cache.ttl_days",
       "type": "int",
-      "default": "7"
+      "default": "7",
+      "has_default": true
     },
     {
       "path": "command",
@@ -1151,7 +1154,8 @@
     },
     {
       "path": "command.default",
-      "type": "string"
+      "type": "string",
+      "has_default": true
     },
     {
       "path": "commit",
@@ -1160,12 +1164,14 @@
     {
       "path": "commit.generate",
       "type": "int",
-      "default": "1"
+      "default": "1",
+      "has_default": true
     },
     {
       "path": "commit.type",
       "type": "string",
-      "default": "plain"
+      "default": "plain",
+      "has_default": true
     },
     {
       "path": "cost",
@@ -1174,7 +1180,8 @@
     {
       "path": "cost.warn_threshold_usd",
       "type": "float",
-      "default": "0.5"
+      "default": "0.5",
+      "has_default": true
     },
     {
       "path": "guard",
@@ -1183,7 +1190,8 @@
     {
       "path": "guard.injection_scan",
       "type": "bool",
-      "default": "true"
+      "default": "true",
+      "has_default": true
     },
     {
       "path": "guard.secret_patterns",
@@ -1200,12 +1208,14 @@
     {
       "path": "guard.secret_scan",
       "type": "bool",
-      "default": "true"
+      "default": "true",
+      "has_default": true
     },
     {
       "path": "guard.token_preflight",
       "type": "bool",
-      "default": "false"
+      "default": "false",
+      "has_default": true
     },
     {
       "path": "output",
@@ -1214,22 +1224,26 @@
     {
       "path": "output.color",
       "type": "string",
-      "default": "auto"
+      "default": "auto",
+      "has_default": true
     },
     {
       "path": "output.lang",
       "type": "string",
-      "default": "en"
+      "default": "en",
+      "has_default": true
     },
     {
       "path": "output.stream",
       "type": "bool",
-      "default": "true"
+      "default": "true",
+      "has_default": true
     },
     {
       "path": "provider",
       "type": "string",
-      "default": "anthropic"
+      "default": "anthropic",
+      "has_default": true
     },
     {
       "path": "providers",
@@ -1287,21 +1301,26 @@
     {
       "path": "review.architecture",
       "type": "bool",
-      "default": "true"
+      "default": "true",
+      "has_default": true
     },
     {
       "path": "review.architecture_file",
-      "type": "string"
+      "type": "string",
+      "default": "architecture.json",
+      "has_default": true
     },
     {
       "path": "review.baseline",
       "type": "bool",
-      "default": "true"
+      "default": "true",
+      "has_default": true
     },
     {
       "path": "review.flaky",
       "type": "bool",
-      "default": "true"
+      "default": "true",
+      "has_default": true
     },
     {
       "path": "review.sandbox_command",
@@ -1310,16 +1329,19 @@
     {
       "path": "review.sandbox_rerun",
       "type": "int",
-      "default": "0"
+      "default": "0",
+      "has_default": true
     },
     {
       "path": "review.timeout",
-      "type": "string"
+      "type": "string",
+      "has_default": true
     },
     {
       "path": "version",
       "type": "int",
-      "default": "1"
+      "default": "1",
+      "has_default": true
     }
   ],
   "mcp_tool_args": [

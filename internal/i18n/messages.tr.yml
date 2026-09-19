@@ -155,6 +155,7 @@ providers.test.unknown: "bilinmeyen sağlayıcı %q; bilinenler: %v"
 
 config.set.success: "%s ayarlandı (%s dosyasına yazıldı)"
 config.unknown_key_ignored: "⚠  Bilinmeyen yapılandırma anahtar(lar)ı yok sayılıyor: %s. Bu ayar(lar) etkisiz — düzeltin ya da kaldırın."
+config.write_refused_unknown_keys: "%s dosyasına yazma reddedildi: %s anahtar(lar)ı --ignore-unknown-config ile yok sayılarak yüklendi; dosyayı yeniden yazmak bunları sessizce silerdi. Dosyayı doğrudan düzeltin ya da sıfırdan yazmak için `commitbrief setup` çalıştırın."
 
 doctor.heading: "Doctor — %d kontrol çalıştırılıyor"
 doctor.summary: "%d kontrol: %d ok, %d uyarı, %d başarısız"

@@ -153,6 +153,32 @@ func warnUnknownConfigKeys(cat *i18n.Catalog, keys []config.UnknownKey) {
 	fmt.Fprintln(os.Stderr, cat.T("config.unknown_key_ignored", strings.Join(named, ", ")))
 }
 
+// refuseUnknownKeysWrite builds the error a write path (config set,
+// providers use) returns instead of rewriting a file that was loaded with
+// --ignore-unknown-config and still carries unknown keys.
+//
+// Why refuse rather than warn-and-write (Wave 0 review turu 2, item 6): both
+// commands decode the file into a typed config.Config and then serialize the
+// WHOLE struct back out. A key the schema doesn't know has nowhere to land
+// in that struct, so it is silently dropped by the decode — writing the
+// struct back out would permanently destroy the user's original value (a
+// mistyped guard.secret_patterns[0].pattern came back as regex: ""), which
+// is strictly worse than the pre-hatch behavior of erroring with the file
+// untouched. Read paths (review, list, guard, diff, ...) never rewrite the
+// file, so they keep using the lenient load without this check.
+//
+// setup is the one write path that does NOT call this: it rewrites the file
+// from scratch by design (see newSetupCmd's RunE) and is itself the
+// recovery route for a config broken enough to need the escape hatch, so
+// refusing it would relock the exact user it exists to rescue.
+func refuseUnknownKeysWrite(cat *i18n.Catalog, path string, found []config.UnknownKey) error {
+	names := make([]string, 0, len(found))
+	for _, k := range found {
+		names = append(names, fmt.Sprintf("%q", k.Path))
+	}
+	return errors.New(cat.T("config.write_refused_unknown_keys", path, strings.Join(names, ", ")))
+}
+
 func infof(format string, args ...any) {
 	if global.quiet {
 		return

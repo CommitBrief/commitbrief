@@ -161,6 +161,14 @@ config.set.success: "Set %s (written to %s)"
 # names every key that was ignored, with the file it came from. The key list
 # is built Go-side (internal/cli/context.go) like guard.secret_patterns.invalid.
 config.unknown_key_ignored: "⚠  Ignoring unknown configuration key(s): %s. The setting(s) have no effect — fix or remove them."
+# Wave 0 review turu 2, item 6: a write path (config set, providers use)
+# decodes the file into a typed Config and rewrites the whole thing, which
+# silently drops any key the schema doesn't know — so writing back a file
+# loaded under --ignore-unknown-config would destroy the user's original
+# value instead of preserving it. This refuses the write instead; `setup` is
+# the deliberate exception (it rewrites from scratch by design) and does not
+# use this message.
+config.write_refused_unknown_keys: "refusing to write %s: unknown key(s) %s were ignored via --ignore-unknown-config; rewriting the file would silently drop them. Fix the file directly, or run `commitbrief setup` to rewrite it from scratch."
 
 doctor.heading: "Doctor — running %d checks"
 doctor.summary: "%d checks: %d ok, %d warning, %d failed"

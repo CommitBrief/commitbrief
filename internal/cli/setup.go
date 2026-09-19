@@ -49,7 +49,7 @@ the chosen name already shadows a command on your PATH you are warned first.`,
 			if err != nil {
 				return err
 			}
-			opts := setup.RunOptions{Local: local, Catalog: ctx.Catalog}
+			opts := setup.RunOptions{Local: local, Catalog: ctx.Catalog, IgnoreUnknownKeys: global.ignoreUnknownConfig}
 			if local {
 				opts.RepoRoot = ctx.RepoRoot
 			}

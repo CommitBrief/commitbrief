@@ -127,9 +127,22 @@ func newProvidersUseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfg, err := config.LoadFile(path)
+			// LoadFileWith (not the strict LoadFile) so --ignore-unknown-config
+			// actually reaches this write path too; resolveContext above
+			// already warned about any offender in this same file. But this
+			// command does not get to silently keep going the way a read path
+			// would: it is about to decode into a typed config.Config and
+			// serialize the WHOLE thing back out, and a key the schema
+			// doesn't know has nowhere to land in that struct. Writing it
+			// back would permanently drop the user's original value, so a
+			// non-empty `found` here refuses the write instead (see
+			// refuseUnknownKeysWrite).
+			cfg, found, err := config.LoadFileWith(path, config.LoadOptions{IgnoreUnknownKeys: global.ignoreUnknownConfig})
 			if err != nil {
 				return err
+			}
+			if len(found) > 0 {
+				return refuseUnknownKeysWrite(app.Catalog, path, found)
 			}
 			if cfg == nil {
 				cfg = config.Default()

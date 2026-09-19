@@ -153,6 +153,27 @@ type RunOptions struct {
 	// The CLI layer always passes app.Catalog; see UC-16 in
 	// PATCH_ROADMAP.
 	Catalog *i18n.Catalog
+
+	// IgnoreUnknownKeys mirrors `commitbrief --ignore-unknown-config`: when
+	// set, loading the existing config at the target path tolerates a key
+	// the schema doesn't define instead of failing the wizard outright.
+	// setup is the tool's own repair path for a broken config file, so it
+	// must never be the one command the escape hatch can't reach — the CLI
+	// layer has already warned about the offending key via resolveContext
+	// before Run is called, so this load stays silent about it.
+	//
+	// Unlike `config set` / `providers use` (internal/cli/config.go,
+	// providers.go), Run does NOT refuse to write when the load reports an
+	// ignored key (Wave 0 review turu 2, item 6). Those two commands refuse
+	// because they decode the file into a typed config.Config and rewrite
+	// the WHOLE thing, so an unknown key has nowhere to land and is
+	// silently destroyed by the round-trip. Run has exactly the same
+	// decode-and-rewrite shape, but it is the deliberate exception: it is
+	// the tool's own from-scratch recovery path for a config broken enough
+	// to need this flag, has no claim to preserving content it never
+	// understood in the first place, and refusing it here would relock the
+	// exact user the escape hatch exists to rescue.
+	IgnoreUnknownKeys bool
 }
 
 // Apply produces a Config from collected choices, layered on top of the
@@ -215,7 +236,13 @@ func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	base, err := config.LoadFile(targetPath)
+	// The returned findings are intentionally discarded (not gated on, unlike
+	// config set / providers use): setup rewrites the file from scratch by
+	// design and is itself the recovery route for a config broken enough to
+	// need IgnoreUnknownKeys, so refusing to proceed here would relock the
+	// exact user this flag exists to rescue. See the doc comment on
+	// RunOptions.IgnoreUnknownKeys.
+	base, _, err := config.LoadFileWith(targetPath, config.LoadOptions{IgnoreUnknownKeys: opts.IgnoreUnknownKeys})
 	if err != nil {
 		return nil, fmt.Errorf("setup: read existing config %s: %w", targetPath, err)
 	}
