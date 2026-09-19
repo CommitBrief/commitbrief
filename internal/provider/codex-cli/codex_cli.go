@@ -32,11 +32,16 @@ import (
 // Name is what users type. Matches the directory suffix convention.
 const Name = "codex-cli"
 
+// binaryName is the executable clireview resolves on PATH. It is a
+// constant so the Spec below and Metadata() cannot drift apart.
+const binaryName = "codex"
+
 func init() {
+	provider.RegisterMetadata(Metadata())
 	provider.Register(Name, func(_ config.ProviderConfig) (provider.Provider, error) {
 		return clireview.New(clireview.Spec{
 			Name:   Name,
-			Binary: "codex",
+			Binary: binaryName,
 			// `codex exec "<prompt>"` is Codex CLI's non-interactive
 			// (headless) invocation: it runs the prompt to completion and
 			// prints the result to stdout, no REPL.

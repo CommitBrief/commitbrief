@@ -182,6 +182,7 @@ func statusCode(err error) int {
 
 func init() {
 	provider.Register(Name, New)
+	provider.RegisterMetadata(Metadata())
 }
 
 var _ provider.Provider = (*Client)(nil)
