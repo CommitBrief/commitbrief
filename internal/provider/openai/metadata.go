@@ -2,14 +2,16 @@
 
 package openai
 
-import "github.com/CommitBrief/commitbrief/internal/provider"
+import (
+	"github.com/CommitBrief/commitbrief/internal/config"
+	"github.com/CommitBrief/commitbrief/internal/provider"
+)
 
-// apiKeyEnv is the environment variable internal/config reads this
-// provider's credential from. It is spelled out here rather than imported
-// because internal/config does not depend on the provider packages, and a
-// reader of the generated inventory needs the name even when the variable
-// is unset.
-const apiKeyEnv = "OPENAI_API_KEY"
+// apiKeyEnv aliases the constant internal/config actually reads this
+// provider's credential from (internal/config/env.go), so a rename there
+// cannot silently leave this package — and the generated inventory it
+// feeds — pointing at a dead variable name.
+const apiKeyEnv = config.OpenAIAPIKeyEnv
 
 // Metadata describes openai without needing a credential, so documentation
 // can list every model, context window and price for a reader who has never
