@@ -65,3 +65,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/spdx-check.sh
+
+  docs-check:
+    # ADR-0039: fail loudly when a doc drifts from the code-derived CLI
+    # surface inventory (providers/commands/flags/config keys/MCP tool
+    # args) or from README.md's own generated regions. Needs setup-go
+    # (unlike the i18n/spdx jobs above) because the script does `go run`.
+    name: Docs drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - run: bash scripts/docs-check.sh
