@@ -1,0 +1,1446 @@
+{
+  "schema": 1,
+  "providers": [
+    {
+      "name": "anthropic",
+      "kind": "api",
+      "default_model": "claude-opus-4-8",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "models": [
+        {
+          "id": "claude-opus-4-8",
+          "default": true,
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 5,
+            "output_per_1m": 25,
+            "cached_input_per_1m": 0.5
+          }
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 3,
+            "output_per_1m": 15,
+            "cached_input_per_1m": 0.3
+          }
+        },
+        {
+          "id": "claude-haiku-4-5-20251001",
+          "context_window": 200000,
+          "pricing": {
+            "input_per_1m": 1,
+            "output_per_1m": 5,
+            "cached_input_per_1m": 0.1
+          }
+        }
+      ]
+    },
+    {
+      "name": "claude-cli",
+      "kind": "cli",
+      "default_model": "",
+      "binary": "claude"
+    },
+    {
+      "name": "codex-cli",
+      "kind": "cli",
+      "default_model": "",
+      "binary": "codex"
+    },
+    {
+      "name": "cohere",
+      "kind": "api",
+      "default_model": "command-r-plus",
+      "api_key_env": "COHERE_API_KEY",
+      "default_base_url": "https://api.cohere.ai/compatibility/v1",
+      "models": [
+        {
+          "id": "command-r-plus",
+          "default": true,
+          "context_window": 128000,
+          "pricing": {
+            "input_per_1m": 2.5,
+            "output_per_1m": 10
+          }
+        },
+        {
+          "id": "command-r",
+          "context_window": 128000,
+          "pricing": {
+            "input_per_1m": 0.15,
+            "output_per_1m": 0.6
+          }
+        },
+        {
+          "id": "command-a-03-2025",
+          "context_window": 256000,
+          "pricing": {
+            "input_per_1m": 2.5,
+            "output_per_1m": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "deepseek",
+      "kind": "api",
+      "default_model": "deepseek-chat",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "default_base_url": "https://api.deepseek.com",
+      "models": [
+        {
+          "id": "deepseek-chat",
+          "default": true,
+          "context_window": 64000,
+          "pricing": {
+            "input_per_1m": 0.27,
+            "output_per_1m": 1.1,
+            "cached_input_per_1m": 0.07
+          }
+        },
+        {
+          "id": "deepseek-reasoner",
+          "context_window": 64000,
+          "pricing": {
+            "input_per_1m": 0.55,
+            "output_per_1m": 2.19,
+            "cached_input_per_1m": 0.14
+          }
+        }
+      ]
+    },
+    {
+      "name": "gemini",
+      "kind": "api",
+      "default_model": "gemini-3.5-flash",
+      "api_key_env": "GEMINI_API_KEY",
+      "models": [
+        {
+          "id": "gemini-3.1-pro-preview",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 2,
+            "output_per_1m": 12,
+            "cached_input_per_1m": 0.5
+          }
+        },
+        {
+          "id": "gemini-3.5-flash",
+          "default": true,
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 1.5,
+            "output_per_1m": 9,
+            "cached_input_per_1m": 0.375
+          }
+        },
+        {
+          "id": "gemini-3.1-flash-lite",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 0.25,
+            "output_per_1m": 1.5,
+            "cached_input_per_1m": 0.0625
+          }
+        }
+      ]
+    },
+    {
+      "name": "gemini-cli",
+      "kind": "cli",
+      "default_model": "",
+      "binary": "gemini"
+    },
+    {
+      "name": "mistral",
+      "kind": "api",
+      "default_model": "mistral-large-latest",
+      "api_key_env": "MISTRAL_API_KEY",
+      "default_base_url": "https://api.mistral.ai/v1",
+      "models": [
+        {
+          "id": "mistral-large-latest",
+          "default": true,
+          "context_window": 128000,
+          "pricing": {
+            "input_per_1m": 2,
+            "output_per_1m": 6
+          }
+        },
+        {
+          "id": "mistral-small-latest",
+          "context_window": 32000,
+          "pricing": {
+            "input_per_1m": 0.2,
+            "output_per_1m": 0.6
+          }
+        },
+        {
+          "id": "codestral-latest",
+          "context_window": 256000,
+          "pricing": {
+            "input_per_1m": 0.3,
+            "output_per_1m": 0.9
+          }
+        }
+      ]
+    },
+    {
+      "name": "ollama",
+      "kind": "local",
+      "default_model": "qwen2.5-coder:14b",
+      "default_base_url": "http://localhost:11434",
+      "models": [
+        {
+          "id": "qwen2.5-coder:14b",
+          "default": true,
+          "context_window": 32768,
+          "pricing": {
+            "input_per_1m": 0,
+            "output_per_1m": 0
+          }
+        },
+        {
+          "id": "qwen2.5-coder:7b",
+          "context_window": 32768,
+          "pricing": {
+            "input_per_1m": 0,
+            "output_per_1m": 0
+          }
+        },
+        {
+          "id": "llama3.3:latest",
+          "context_window": 128000,
+          "pricing": {
+            "input_per_1m": 0,
+            "output_per_1m": 0
+          }
+        },
+        {
+          "id": "llama3.2:latest",
+          "context_window": 128000,
+          "pricing": {
+            "input_per_1m": 0,
+            "output_per_1m": 0
+          }
+        },
+        {
+          "id": "deepseek-coder-v2:latest",
+          "context_window": 8192,
+          "pricing": {
+            "input_per_1m": 0,
+            "output_per_1m": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "openai",
+      "kind": "api",
+      "default_model": "gpt-5.4-mini",
+      "api_key_env": "OPENAI_API_KEY",
+      "models": [
+        {
+          "id": "gpt-5.4-mini",
+          "default": true,
+          "context_window": 400000,
+          "pricing": {
+            "input_per_1m": 0.75,
+            "output_per_1m": 4.5,
+            "cached_input_per_1m": 0.075
+          }
+        },
+        {
+          "id": "gpt-5.5",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 5,
+            "output_per_1m": 30,
+            "cached_input_per_1m": 0.5
+          }
+        },
+        {
+          "id": "gpt-5.5-pro",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 30,
+            "output_per_1m": 180
+          }
+        },
+        {
+          "id": "gpt-4o",
+          "context_window": 128000,
+          "pricing": {
+            "input_per_1m": 2.5,
+            "output_per_1m": 10,
+            "cached_input_per_1m": 1.25
+          }
+        },
+        {
+          "id": "gpt-4o-mini",
+          "context_window": 128000,
+          "pricing": {
+            "input_per_1m": 0.15,
+            "output_per_1m": 0.6,
+            "cached_input_per_1m": 0.075
+          }
+        }
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "path": "commitbrief",
+      "short": "Local LLM-powered code review of git diffs"
+    },
+    {
+      "path": "commitbrief cache",
+      "short": "Inspect and manage the local response cache"
+    },
+    {
+      "path": "commitbrief cache clear",
+      "short": "Remove cached LLM responses for this repo"
+    },
+    {
+      "path": "commitbrief cache inspect",
+      "short": "Show metadata for a single cache entry by key"
+    },
+    {
+      "path": "commitbrief cache prune",
+      "short": "Drop old/excess cache entries (keep newest N + entries within age window)"
+    },
+    {
+      "path": "commitbrief cache stats",
+      "short": "Show cache entry count, size, age range, and per-provider breakdown"
+    },
+    {
+      "path": "commitbrief commit",
+      "short": "Generate a commit message from staged changes and commit"
+    },
+    {
+      "path": "commitbrief compress",
+      "short": "Shrink COMMITBRIEF.md losslessly via the configured provider"
+    },
+    {
+      "path": "commitbrief config",
+      "short": "Show, get, or set individual configuration values"
+    },
+    {
+      "path": "commitbrief config get",
+      "short": "Print a single configuration value by dotted path"
+    },
+    {
+      "path": "commitbrief config set",
+      "short": "Write a single configuration value by dotted path"
+    },
+    {
+      "path": "commitbrief config show",
+      "short": "Print the merged configuration (API keys masked)"
+    },
+    {
+      "path": "commitbrief diff",
+      "short": "Run a review against an arbitrary git diff (passthrough)"
+    },
+    {
+      "path": "commitbrief doctor",
+      "short": "Run a health check across the configured pipeline"
+    },
+    {
+      "path": "commitbrief dry-run",
+      "short": "Build prompt and report what would be sent; no API call"
+    },
+    {
+      "path": "commitbrief guard",
+      "short": "Gate a review against a declarative policy (.commitbrief/policy.yml)"
+    },
+    {
+      "path": "commitbrief init",
+      "short": "Write COMMITBRIEF.md and a per-user OUTPUT.md template"
+    },
+    {
+      "path": "commitbrief install-hook",
+      "short": "Install (or uninstall) a git hook that runs commitbrief on commit"
+    },
+    {
+      "path": "commitbrief leaks",
+      "short": "Scan the working tree and git history for committed credentials"
+    },
+    {
+      "path": "commitbrief list",
+      "short": "Print the command reference"
+    },
+    {
+      "path": "commitbrief map",
+      "short": "Draw the commit graph, highlighting what a filter selected"
+    },
+    {
+      "path": "commitbrief mcp",
+      "short": "Run an MCP (Model Context Protocol) server over stdio"
+    },
+    {
+      "path": "commitbrief providers",
+      "short": "List, switch, and test configured LLM providers"
+    },
+    {
+      "path": "commitbrief providers list",
+      "short": "Show configured providers (active marker, model, API key status)"
+    },
+    {
+      "path": "commitbrief providers test",
+      "short": "Ping a configured provider to verify the API key and reachability"
+    },
+    {
+      "path": "commitbrief providers use",
+      "short": "Switch the active default provider (no API keys changed)"
+    },
+    {
+      "path": "commitbrief remote",
+      "short": "Drive GitHub operations (PR review) through the gh CLI"
+    },
+    {
+      "path": "commitbrief remote pr",
+      "short": "Review a GitHub pull request and post findings as inline comments"
+    },
+    {
+      "path": "commitbrief setup",
+      "short": "Interactive provider + API key wizard"
+    },
+    {
+      "path": "commitbrief summary",
+      "short": "Summarize a set of changes in plain language (read-only)"
+    },
+    {
+      "path": "commitbrief upgrade",
+      "short": "Check for a newer CommitBrief and install it"
+    }
+  ],
+  "flags": [
+    {
+      "command": "commitbrief",
+      "name": "allow-secrets",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "bypass the pre-send secret scanner (use with care)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "author",
+      "type": "stringSlice",
+      "default": "[]",
+      "usage": "review only commits authored by these people (repeatable; matches name or email, case-insensitive). Switches the scope to a commit walk",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "cli",
+      "type": "string",
+      "usage": "use a locally-installed CLI tool (claude|gemini|codex) as the review backend; shorthand for --provider \u003cname\u003e-cli",
+      "scope": "global",
+      "mutex_groups": [
+        "provider cli",
+        "cli json",
+        "cli markdown"
+      ]
+    },
+    {
+      "command": "commitbrief",
+      "name": "color",
+      "type": "string",
+      "default": "auto",
+      "usage": "color output: auto, always, never",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "committer",
+      "type": "stringSlice",
+      "default": "[]",
+      "usage": "review only commits committed by these people (repeatable; matches name or email, case-insensitive)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "compact",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "one-line per finding (dense review output)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "copy",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "copy findings (severity, path, title, description) to the system clipboard via OSC 52 + native tool",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "dir",
+      "shorthand": "d",
+      "type": "stringSlice",
+      "default": "[]",
+      "usage": "review only files under these directories or matching dir globs (e.g. `internal/**`; repeatable, one pattern per flag); combines with the active scope flag",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "end-date",
+      "type": "string",
+      "usage": "review only commits on or before this date (YYYY-MM-DD, inclusive)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "exclude-dir",
+      "type": "stringSlice",
+      "default": "[]",
+      "usage": "skip files under these directories or matching dir globs (repeatable, one pattern per flag); applied after --dir so an exclusion wins",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "exclude-file",
+      "type": "stringSlice",
+      "default": "[]",
+      "usage": "skip these files or globs (repeatable, one pattern per flag); same matching rules as --file, applied after it so an exclusion wins",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "fail-on",
+      "type": "string",
+      "usage": "exit 1 if any finding meets/exceeds severity (critical|high|medium|low|info|any|none)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "file",
+      "shorthand": "f",
+      "type": "stringSlice",
+      "default": "[]",
+      "usage": "review only these files or globs (e.g. `*.go`, `internal/**/*.ts`; repeatable, one pattern per flag — patterns can't be comma-joined); combines with the active scope flag",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "gen-man",
+      "type": "string",
+      "usage": "generate man pages into \u003cdir\u003e and exit (hidden)",
+      "scope": "global",
+      "hidden": true
+    },
+    {
+      "command": "commitbrief",
+      "name": "gen-surface",
+      "type": "string",
+      "usage": "write the CLI surface inventory to \u003cfile\u003e and exit (hidden)",
+      "scope": "global",
+      "hidden": true
+    },
+    {
+      "command": "commitbrief",
+      "name": "ignore-unknown-config",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "continue when config.yml holds a key the schema doesn't define, instead of failing; every ignored key is still named in a warning on stderr (the setting has no effect — fix the key)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "json",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "emit machine-readable JSON output",
+      "scope": "global",
+      "mutex_groups": [
+        "cli json"
+      ]
+    },
+    {
+      "command": "commitbrief",
+      "name": "lang",
+      "type": "string",
+      "usage": "AI output language (e.g. tr, fr); the CLI interface localizes for en/tr only, output for any recognized language. Resolution: --lang → repo config → user config → English",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "markdown",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "emit plain markdown (no ANSI)",
+      "scope": "global",
+      "mutex_groups": [
+        "cli markdown"
+      ]
+    },
+    {
+      "command": "commitbrief",
+      "name": "max-commits",
+      "type": "int",
+      "default": "0",
+      "usage": "cap how many matching commits enter the review (0 = 200); only meaningful with another commit filter",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "merges",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "include merge commits in a commit-filtered review (excluded by default); only meaningful with another commit filter",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "min-severity",
+      "type": "string",
+      "usage": "hide findings below this severity in the rendered output (critical|high|medium|low|info); --json and --fail-on still see the full set",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "model",
+      "type": "string",
+      "usage": "override configured model",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "no-architecture",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "skip architecture-aware review (do not read architecture.json into the prompt) for this run (ADR-0030)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "no-baseline",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "ignore the signal-control baseline for this run (show everything, even baselined findings)",
+      "scope": "global",
+      "mutex_groups": [
+        "update-baseline no-baseline"
+      ]
+    },
+    {
+      "command": "commitbrief",
+      "name": "no-cache",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "bypass cache (read and write)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "no-cost-check",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "skip the pre-send cost estimate prompt",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "no-flaky",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "skip the deterministic flaky-test detector (ADR-0022)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "output",
+      "shorthand": "o",
+      "type": "string",
+      "usage": "write output to file instead of stdout",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "provider",
+      "type": "string",
+      "usage": "override configured provider",
+      "scope": "global",
+      "mutex_groups": [
+        "provider cli"
+      ]
+    },
+    {
+      "command": "commitbrief",
+      "name": "quiet",
+      "shorthand": "q",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "suppress info messages on stderr",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "sandbox-rerun",
+      "type": "int",
+      "default": "0",
+      "no_opt_def_val": "5",
+      "usage": "confirm flagged flaky tests by re-running each in isolation N times (ADR-0022); mixed pass+fail = confirmed flaky, all-fail = real failure, all-pass = transient. 0 = off; bare --sandbox-rerun uses N=5. Requires a bound rerun executor",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "show-prompt",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "print the exact system + user prompt that would be sent, then exit (no provider call, no cost)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "start-date",
+      "type": "string",
+      "usage": "review only commits on or after this date (YYYY-MM-DD, inclusive)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "suggest-commit",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "after the review, suggest a Conventional Commit message for the staged diff (requires --staged; prints to stdout; not with --json/--markdown/--output)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "text",
+      "type": "string",
+      "usage": "review only commits whose message contains this text, plus commits unique to a branch whose name contains it (case-insensitive)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "timeout",
+      "type": "string",
+      "usage": "bound the whole run to this `duration` — 90s, 10m, 1h30m, or a bare number of seconds (600). Covers diff, provider call, render, and time spent at a confirmation prompt. Also RAISES the provider's own cap (claude/gemini/codex-cli 5m, ollama 5m, Anthropic SDK 10m), which a deadline alone cannot do. Unset or 0 keeps those built-ins. Resolution: --timeout → review.timeout → built-in",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "update-baseline",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "rewrite .commitbrief/baseline.json from the current findings (accepts them all) instead of filtering this run; user-private, gitignored (ADR-0027)",
+      "scope": "global",
+      "mutex_groups": [
+        "update-baseline no-baseline"
+      ]
+    },
+    {
+      "command": "commitbrief",
+      "name": "verbose",
+      "shorthand": "v",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "show token/cost/latency footer",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "with-context",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "let the CLI provider read project files beyond the diff to ground the review (CLI providers only; the host CLI's agent reads your repo — see --help)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "yes",
+      "shorthand": "y",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "auto-confirm prompts (pre-send guard, init overwrite)",
+      "scope": "global"
+    },
+    {
+      "command": "commitbrief",
+      "name": "staged",
+      "shorthand": "s",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review staged changes (default)",
+      "scope": "command",
+      "mutex_groups": [
+        "staged unstaged"
+      ]
+    },
+    {
+      "command": "commitbrief",
+      "name": "unstaged",
+      "shorthand": "u",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review unstaged changes",
+      "scope": "command",
+      "mutex_groups": [
+        "staged unstaged"
+      ]
+    },
+    {
+      "command": "commitbrief cache inspect",
+      "name": "show-content",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "also print the cached review body (omitted by default)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief cache prune",
+      "name": "keep-last",
+      "type": "int",
+      "default": "500",
+      "usage": "keep only the N newest entries (per the provider/model filter); 0 means keep nothing",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief cache prune",
+      "name": "model",
+      "type": "string",
+      "usage": "only consider entries written for this model (matched against the model recorded in each entry)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief cache prune",
+      "name": "older-than",
+      "type": "string",
+      "default": "7d",
+      "usage": "delete entries older than this age. Units: d (day), w (week), m (month, 30d), y (year, 365d)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief cache prune",
+      "name": "provider",
+      "type": "string",
+      "usage": "only consider entries written for this provider (e.g. anthropic, openai, gemini, ollama)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief commit",
+      "name": "generate",
+      "shorthand": "g",
+      "type": "int",
+      "default": "0",
+      "usage": "offer N alternative messages to choose from (default 1, or commit.generate config)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief commit",
+      "name": "type",
+      "shorthand": "t",
+      "type": "string",
+      "usage": "commit message format: plain|conventional|conventional+body|gitmoji|subject+body (default \"plain\", or commit.type config)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief compress",
+      "name": "dry-run",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "show the result summary; do not write or back up anything",
+      "scope": "command",
+      "mutex_groups": [
+        "dry-run out"
+      ]
+    },
+    {
+      "command": "commitbrief compress",
+      "name": "level",
+      "type": "string",
+      "default": "balanced",
+      "usage": "compression level: light | balanced | aggressive",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief compress",
+      "name": "out",
+      "type": "string",
+      "usage": "write result to this path instead of replacing COMMITBRIEF.md",
+      "scope": "command",
+      "mutex_groups": [
+        "dry-run out"
+      ]
+    },
+    {
+      "command": "commitbrief config set",
+      "name": "local",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "write to repo .commitbrief/config.yml instead of user-level",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief doctor",
+      "name": "quiet",
+      "shorthand": "q",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "only print warning and failed checks",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief dry-run",
+      "name": "staged",
+      "shorthand": "s",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review staged changes (default)",
+      "scope": "command",
+      "mutex_groups": [
+        "staged unstaged"
+      ]
+    },
+    {
+      "command": "commitbrief dry-run",
+      "name": "unstaged",
+      "shorthand": "u",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review unstaged changes",
+      "scope": "command",
+      "mutex_groups": [
+        "staged unstaged"
+      ]
+    },
+    {
+      "command": "commitbrief guard",
+      "name": "diff",
+      "type": "stringSlice",
+      "default": "[]",
+      "usage": "run-mode: review an arbitrary `git diff` range (e.g. main...HEAD); repeatable",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief guard",
+      "name": "from-json",
+      "type": "string",
+      "usage": "evaluate a prior schema-v1 review JSON (a file path, or - for stdin) instead of running a review",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief guard",
+      "name": "policy",
+      "type": "string",
+      "default": ".commitbrief/policy.yml",
+      "usage": "path to the policy file",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief guard",
+      "name": "unstaged",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "run-mode: review the unstaged working tree instead of the staged index",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief init",
+      "name": "force",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "overwrite existing COMMITBRIEF.md / OUTPUT.md (alias of --yes for init)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief install-hook",
+      "name": "hook",
+      "type": "string",
+      "default": "pre-commit",
+      "usage": "git hook name (pre-commit | commit-msg | pre-push)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief install-hook",
+      "name": "uninstall",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "remove a previously installed hook (only one this command wrote)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief leaks",
+      "name": "no-history",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "skip the commit-history half",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief leaks",
+      "name": "no-worktree",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "skip the working-tree half",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief leaks",
+      "name": "patterns",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "list the effective pattern set (built-ins + configured) and exit",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief map",
+      "name": "all",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "walk every branch, not just the given range (commit graph only)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief map",
+      "name": "branches",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "show a branch topology summary instead of the commit graph",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief providers use",
+      "name": "local",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "write to repo .commitbrief/config.yml instead of user-level",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief remote pr",
+      "name": "no-post",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief remote pr",
+      "name": "repo",
+      "type": "string",
+      "usage": "target repository owner/repo (overrides git context)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief remote pr",
+      "name": "request-changes-on",
+      "type": "string",
+      "usage": "opt in to a request-changes verdict at/above this severity (critical|high|medium|low); omitted, the verdict is never request-changes (comment / approve only)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief setup",
+      "name": "alias",
+      "type": "string",
+      "no_opt_def_val": "\u003cprompt\u003e",
+      "usage": "install a shell alias for commitbrief (default cbr); skips the provider wizard. Use --alias for an interactive prompt or --alias=\u003cname\u003e to set it directly",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief setup",
+      "name": "local",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "save to repo .commitbrief/config.yml instead of user-level",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief summary",
+      "name": "staged",
+      "shorthand": "s",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review staged changes (default)",
+      "scope": "command",
+      "mutex_groups": [
+        "staged unstaged"
+      ]
+    },
+    {
+      "command": "commitbrief summary",
+      "name": "unstaged",
+      "shorthand": "u",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review unstaged changes",
+      "scope": "command",
+      "mutex_groups": [
+        "staged unstaged"
+      ]
+    },
+    {
+      "command": "commitbrief upgrade",
+      "name": "check",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "only report whether a newer version exists; install nothing",
+      "scope": "command"
+    }
+  ],
+  "config_keys": [
+    {
+      "path": "cache",
+      "type": "object"
+    },
+    {
+      "path": "cache.enabled",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "path": "cache.max_size_mb",
+      "type": "int",
+      "default": "0"
+    },
+    {
+      "path": "cache.ttl_days",
+      "type": "int",
+      "default": "7"
+    },
+    {
+      "path": "command",
+      "type": "object"
+    },
+    {
+      "path": "command.default",
+      "type": "string"
+    },
+    {
+      "path": "commit",
+      "type": "object"
+    },
+    {
+      "path": "commit.generate",
+      "type": "int",
+      "default": "1"
+    },
+    {
+      "path": "commit.type",
+      "type": "string",
+      "default": "plain"
+    },
+    {
+      "path": "cost",
+      "type": "object"
+    },
+    {
+      "path": "cost.warn_threshold_usd",
+      "type": "float",
+      "default": "0.5"
+    },
+    {
+      "path": "guard",
+      "type": "object"
+    },
+    {
+      "path": "guard.injection_scan",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "path": "guard.secret_patterns",
+      "type": "[]object"
+    },
+    {
+      "path": "guard.secret_patterns[].name",
+      "type": "string"
+    },
+    {
+      "path": "guard.secret_patterns[].regex",
+      "type": "string"
+    },
+    {
+      "path": "guard.secret_scan",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "path": "guard.token_preflight",
+      "type": "bool",
+      "default": "false"
+    },
+    {
+      "path": "output",
+      "type": "object"
+    },
+    {
+      "path": "output.color",
+      "type": "string",
+      "default": "auto"
+    },
+    {
+      "path": "output.lang",
+      "type": "string",
+      "default": "en"
+    },
+    {
+      "path": "output.stream",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "path": "provider",
+      "type": "string",
+      "default": "anthropic"
+    },
+    {
+      "path": "providers",
+      "type": "map[string]object"
+    },
+    {
+      "path": "providers.\u003cname\u003e",
+      "type": "object",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.api_key",
+      "type": "string",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.base_url",
+      "type": "string",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.model",
+      "type": "string",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.pricing",
+      "type": "map[string]object",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.pricing.\u003cmodel\u003e",
+      "type": "object",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.pricing.\u003cmodel\u003e.cached_input_per_1m",
+      "type": "float",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.pricing.\u003cmodel\u003e.input_per_1m",
+      "type": "float",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.pricing.\u003cmodel\u003e.output_per_1m",
+      "type": "float",
+      "free_form": true
+    },
+    {
+      "path": "review",
+      "type": "object"
+    },
+    {
+      "path": "review.architecture",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "path": "review.architecture_file",
+      "type": "string"
+    },
+    {
+      "path": "review.baseline",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "path": "review.flaky",
+      "type": "bool",
+      "default": "true"
+    },
+    {
+      "path": "review.sandbox_command",
+      "type": "[]string"
+    },
+    {
+      "path": "review.sandbox_rerun",
+      "type": "int",
+      "default": "0"
+    },
+    {
+      "path": "review.timeout",
+      "type": "string"
+    },
+    {
+      "path": "version",
+      "type": "int",
+      "default": "1"
+    }
+  ],
+  "mcp_tool_args": [
+    {
+      "name": "author",
+      "type": "array",
+      "items": "string",
+      "description": "Review only commits authored by these people (matches name or email, case-insensitive). Selects a commit set instead of a staged/unstaged diff."
+    },
+    {
+      "name": "committer",
+      "type": "array",
+      "items": "string",
+      "description": "Review only commits committed by these people (matches name or email, case-insensitive)."
+    },
+    {
+      "name": "diff",
+      "type": "array",
+      "items": "string",
+      "description": "Arbitrary `git diff` arguments to review a range instead of staged/unstaged changes, e.g. [\"HEAD~3\",\"HEAD\"] or [\"main...feature\"]. Forwarded verbatim to git."
+    },
+    {
+      "name": "dir",
+      "type": "array",
+      "items": "string",
+      "description": "Review only files under these directories. A plain value is a \u003cdir\u003e/ prefix; a glob value is matched gitignore-style."
+    },
+    {
+      "name": "end_date",
+      "type": "string",
+      "description": "Review only commits on or before this date, YYYY-MM-DD, inclusive."
+    },
+    {
+      "name": "exclude_dir",
+      "type": "array",
+      "items": "string",
+      "description": "Skip files under these directories or matching dir globs. Applied after `dir` so an exclusion wins."
+    },
+    {
+      "name": "exclude_file",
+      "type": "array",
+      "items": "string",
+      "description": "Skip these files or globs. Same matching rules as `file`, applied after it so an exclusion wins."
+    },
+    {
+      "name": "fail_on",
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info",
+        "any",
+        "none"
+      ],
+      "description": "Report a gate failure (failed=true in the summary) when a finding meets/exceeds this severity. Findings are still returned regardless."
+    },
+    {
+      "name": "file",
+      "type": "array",
+      "items": "string",
+      "description": "Review only these files. A plain value is an exact path; a value containing */?/[ is a gitignore-style glob (e.g. \"*.go\", \"internal/**/*.ts\")."
+    },
+    {
+      "name": "max_commits",
+      "type": "integer",
+      "description": "Cap how many matching commits enter the review (0 = the built-in default). Only meaningful alongside another commit filter."
+    },
+    {
+      "name": "merges",
+      "type": "boolean",
+      "description": "Include merge commits in a commit-filtered review (excluded by default). Only meaningful alongside another commit filter."
+    },
+    {
+      "name": "min_severity",
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info",
+        "none"
+      ],
+      "description": "Hide findings below this severity in the returned set (display filter; the gate still sees the full set)."
+    },
+    {
+      "name": "model",
+      "type": "string",
+      "description": "Override the configured model for this review."
+    },
+    {
+      "name": "no_flaky",
+      "type": "boolean",
+      "description": "Skip the deterministic flaky-test detector (ADR-0022)."
+    },
+    {
+      "name": "provider",
+      "type": "string",
+      "description": "Override the configured provider for this review (e.g. \"anthropic\", \"openai\")."
+    },
+    {
+      "name": "staged",
+      "type": "boolean",
+      "description": "Review the staged diff (default true). Set false together with unstaged=true to review the working tree."
+    },
+    {
+      "name": "start_date",
+      "type": "string",
+      "description": "Review only commits on or after this date, YYYY-MM-DD, inclusive."
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "description": "Review only commits whose message contains this text, plus commits unique to a branch whose name contains it (case-insensitive)."
+    },
+    {
+      "name": "unstaged",
+      "type": "boolean",
+      "description": "Review the unstaged (working-tree) diff instead of the staged diff. Mutually exclusive with staged."
+    }
+  ]
+}

@@ -77,6 +77,7 @@ type globalFlags struct {
 	maxCommits int      // --max-commits; 0 → git.DefaultMaxCommits
 	merges     bool     // --merges; include merge commits (default: excluded)
 	genMan     string   // hidden: --gen-man <dir> writes man pages and exits
+	genSurface string   // hidden: --gen-surface <file> writes the surface inventory and exits
 }
 
 var global globalFlags
@@ -97,6 +98,13 @@ func newRootCmd() *cobra.Command {
 		// even attached to a subcommand) short-circuits to man-page emission
 		// instead of running a review. os.Exit(0) is the deliberate end-state.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if global.genSurface != "" {
+				if err := writeSurface(cmd.Root(), global.genSurface); err != nil {
+					return fmt.Errorf("gen-surface: %w", err)
+				}
+				fmt.Fprintf(os.Stderr, "wrote surface inventory to %s\n", global.genSurface)
+				os.Exit(0)
+			}
 			if global.genMan == "" {
 				return nil
 			}
@@ -175,7 +183,10 @@ func newRootCmd() *cobra.Command {
 
 	// Hidden: drives scripts/manpage.sh; not part of the user-visible surface.
 	flags.StringVar(&global.genMan, "gen-man", "", "generate man pages into <dir> and exit (hidden)")
+	// Hidden: drives scripts/docs-gen.sh; not part of the user-visible surface.
+	flags.StringVar(&global.genSurface, "gen-surface", "", "write the CLI surface inventory to <file> and exit (hidden)")
 	_ = cmd.PersistentFlags().MarkHidden("gen-man")
+	_ = cmd.PersistentFlags().MarkHidden("gen-surface")
 
 	// Review-scope flags live on root so `commitbrief --staged` works without
 	// a subcommand. They are re-bound on `dry-run` (see newDryRunCmd) since
