@@ -10,6 +10,7 @@ import (
 
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/provider"
 )
 
 // tr returns the catalog string for key, falling back to fallback
@@ -36,50 +37,50 @@ type ProviderSpec struct {
 	APIKeyHelp string
 }
 
-// DefaultSpecs lists the providers shown in the wizard. The Models slice
-// is the user-facing static list; for Ollama (NeedsURL=true) the models
-// are discovered dynamically via OllamaModels.
-var DefaultSpecs = []ProviderSpec{
+// specUI is the wizard's own half of a provider spec: the presentation
+// text and the shape of the prompts. None of it is a provider fact, so
+// none of it belongs in the provider metadata registry — a label like
+// "Ollama (local, no API key needed)" or a console URL is copy written
+// for this screen.
+//
+// The slice order is the order the user sees, and it is deliberately not
+// the registry's (which sorts alphabetically): the three providers most
+// people configure lead, and the keyless local option closes the list.
+var specUI = []ProviderSpec{
 	{
 		Name:       "anthropic",
 		Label:      "Anthropic (Claude)",
 		NeedsKey:   true,
-		Models:     []string{"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"},
 		APIKeyHelp: "Get an API key from https://console.anthropic.com/",
 	},
 	{
 		Name:       "openai",
 		Label:      "OpenAI (GPT)",
 		NeedsKey:   true,
-		Models:     []string{"gpt-5.4-mini", "gpt-5.5", "gpt-5.5-pro", "gpt-4o", "gpt-4o-mini"},
 		APIKeyHelp: "Get an API key from https://platform.openai.com/",
 	},
 	{
 		Name:       "gemini",
 		Label:      "Google Gemini",
 		NeedsKey:   true,
-		Models:     []string{"gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"},
 		APIKeyHelp: "Get an API key from https://aistudio.google.com/",
 	},
 	{
 		Name:       "deepseek",
 		Label:      "DeepSeek",
 		NeedsKey:   true,
-		Models:     []string{"deepseek-chat", "deepseek-reasoner"},
 		APIKeyHelp: "Get an API key from https://platform.deepseek.com/",
 	},
 	{
 		Name:       "mistral",
 		Label:      "Mistral",
 		NeedsKey:   true,
-		Models:     []string{"mistral-large-latest", "mistral-small-latest", "codestral-latest"},
 		APIKeyHelp: "Get an API key from https://console.mistral.ai/",
 	},
 	{
 		Name:       "cohere",
 		Label:      "Cohere",
 		NeedsKey:   true,
-		Models:     []string{"command-r-plus", "command-r", "command-a-03-2025"},
 		APIKeyHelp: "Get an API key from https://dashboard.cohere.com/",
 	},
 	{
@@ -89,13 +90,44 @@ var DefaultSpecs = []ProviderSpec{
 	},
 }
 
-func FindSpec(name string) *ProviderSpec {
-	for i := range DefaultSpecs {
-		if DefaultSpecs[i].Name == name {
-			return &DefaultSpecs[i]
+// Specs returns the providers the wizard offers, with each one's model list
+// read from the provider metadata registry at call time.
+//
+// It is a function rather than a package-level var for two reasons. The
+// registry is populated by init() in the provider packages that
+// cmd/commitbrief/main.go blank-imports, so a var initialised at package
+// load could observe it half-built; and building fresh means the wizard
+// can never show a model list that has drifted from the provider's own
+// supportedModels table, which is what the hand-copied literals this
+// replaced kept doing (gemini's order had already diverged).
+//
+// Ollama is the one provider with no static list: it serves whatever the
+// user has pulled, so selectModel asks the daemon through OllamaModels and
+// never reads Models. Copying the registry's handful of suggestions in
+// would present them as the supported set.
+func Specs() []ProviderSpec {
+	out := make([]ProviderSpec, 0, len(specUI))
+	for _, spec := range specUI {
+		if !spec.NeedsURL {
+			if md, ok := provider.MetadataFor(spec.Name); ok {
+				models := make([]string, 0, len(md.Models))
+				for _, m := range md.Models {
+					models = append(models, m.ID)
+				}
+				spec.Models = models
+			}
 		}
+		out = append(out, spec)
 	}
-	return nil
+	return out
+}
+
+// FindSpec looks up one provider's wizard spec, or nil when the wizard
+// does not offer that provider. The returned pointer addresses a fresh
+// copy, so mutating it changes nothing for the next caller.
+func FindSpec(name string) *ProviderSpec {
+	specs := Specs()
+	return findSpecIn(specs, name)
 }
 
 type Choices struct {
@@ -111,7 +143,7 @@ type RunOptions struct {
 	RepoRoot   string
 	GlobalPath string
 
-	// Specs overrides DefaultSpecs (test injection).
+	// Specs overrides the Specs() default list (test injection).
 	Specs []ProviderSpec
 
 	// Catalog drives prompt titles, validation messages, and the
@@ -173,7 +205,7 @@ func Apply(base *config.Config, choices Choices) *config.Config {
 func Run(ctx context.Context, opts RunOptions) (*config.Config, error) {
 	specs := opts.Specs
 	if specs == nil {
-		specs = DefaultSpecs
+		specs = Specs()
 	}
 
 	// Resolve the target write path up front so we can load any existing

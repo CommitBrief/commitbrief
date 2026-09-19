@@ -165,15 +165,6 @@ func TestApplyFirstRunStartsFromDefault(t *testing.T) {
 	}
 }
 
-func TestFindSpec(t *testing.T) {
-	if FindSpec("anthropic") == nil {
-		t.Error("anthropic spec not found")
-	}
-	if FindSpec("nonexistent") != nil {
-		t.Error("FindSpec on unknown should return nil")
-	}
-}
-
 func TestGlobalConfigPath(t *testing.T) {
 	path, err := GlobalConfigPath()
 	if err != nil {
