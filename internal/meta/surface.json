@@ -1464,5 +1464,52 @@
       "type": "boolean",
       "description": "Review the unstaged (working-tree) diff instead of the staged diff. Mutually exclusive with staged."
     }
+  ],
+  "env_vars": [
+    {
+      "name": "ANTHROPIC_API_KEY",
+      "effect": "Anthropic API credential — overrides `providers.anthropic.api_key` in config.",
+      "config_key": "providers.anthropic.api_key"
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "effect": "OpenAI API credential — overrides `providers.openai.api_key` in config.",
+      "config_key": "providers.openai.api_key"
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "effect": "Google Gemini API credential — overrides `providers.gemini.api_key` in config.",
+      "config_key": "providers.gemini.api_key"
+    },
+    {
+      "name": "DEEPSEEK_API_KEY",
+      "effect": "DeepSeek API credential — overrides `providers.deepseek.api_key` in config.",
+      "config_key": "providers.deepseek.api_key"
+    },
+    {
+      "name": "MISTRAL_API_KEY",
+      "effect": "Mistral API credential — overrides `providers.mistral.api_key` in config.",
+      "config_key": "providers.mistral.api_key"
+    },
+    {
+      "name": "COHERE_API_KEY",
+      "effect": "Cohere API credential — overrides `providers.cohere.api_key` in config.",
+      "config_key": "providers.cohere.api_key"
+    },
+    {
+      "name": "OLLAMA_HOST",
+      "effect": "Ollama base URL — overrides `providers.ollama.base_url` in config UNCONDITIONALLY, even if you set base_url explicitly.",
+      "config_key": "providers.ollama.base_url"
+    },
+    {
+      "name": "COMMITBRIEF_PROVIDER",
+      "effect": "Selects the active provider for this run — overrides `provider` in config.",
+      "config_key": "provider"
+    },
+    {
+      "name": "COMMITBRIEF_MODEL",
+      "effect": "Selects the active provider's model for this run — overrides `providers.\u003cname\u003e.model` in config.",
+      "config_key": "providers.\u003cname\u003e.model"
+    }
   ]
 }
