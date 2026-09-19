@@ -303,7 +303,7 @@ func TestApplySandboxRerun_RunningNoticeIgnoresQuiet(t *testing.T) {
 
 func TestConfigGetSet_SandboxRerun(t *testing.T) {
 	cfg := config.Default()
-	if err := configFieldSet(cfg, "review.sandbox_rerun", "5"); err != nil {
+	if _, err := configFieldSet(cfg, "review.sandbox_rerun", "5"); err != nil {
 		t.Fatalf("set review.sandbox_rerun: %v", err)
 	}
 	if cfg.Review.SandboxRerun != 5 {
@@ -316,10 +316,10 @@ func TestConfigGetSet_SandboxRerun(t *testing.T) {
 	if got != "5" {
 		t.Errorf("get = %q, want \"5\"", got)
 	}
-	if err := configFieldSet(cfg, "review.sandbox_rerun", "-1"); err == nil {
+	if _, err := configFieldSet(cfg, "review.sandbox_rerun", "-1"); err == nil {
 		t.Errorf("negative sandbox_rerun should be rejected")
 	}
-	if err := configFieldSet(cfg, "review.sandbox_rerun", "notanint"); err == nil {
+	if _, err := configFieldSet(cfg, "review.sandbox_rerun", "notanint"); err == nil {
 		t.Errorf("non-integer sandbox_rerun should be rejected")
 	}
 }

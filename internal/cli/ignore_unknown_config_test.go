@@ -166,96 +166,73 @@ func TestIgnoreUnknownConfigStillAppliesTheRestOfTheConfig(t *testing.T) {
 	}
 }
 
-// Wave 0 review turu 2, item 6/7: `config set` and `providers use` decode
-// the target file into a typed config.Config and rewrite the WHOLE thing.
-// An unknown key has nowhere to land in that struct, so a naive
-// --ignore-unknown-config (load leniently, write back the typed struct)
-// would silently destroy the user's original value — a mistyped
-// guard.secret_patterns[0].pattern coming back as regex: "". Both commands
-// must refuse to write instead: name the key, exit non-zero, and leave the
-// file's bytes untouched. The byte-for-byte comparison is deliberate — an
-// assertion that only checks "exited non-zero" would still pass if the file
-// had already been clobbered before the command decided to fail.
+// Faz 06 (06-config-set-write-path.md) replaced the decode-into-typed-
+// Config-then-marshal-the-whole-thing write path with a raw YAML patch that
+// only ever touches the one changed key. That removes the reason Faz 05
+// added a refuse-to-write gate here (review turu 2, item 6/7): a naive
+// --ignore-unknown-config write used to silently destroy an unknown key's
+// value (guard.secret_patterns[0].pattern coming back as regex: "") because
+// the typed struct had nowhere to put it. A patch can't drop it — it never
+// decodes the offending key at all — so `config set` and `providers use`
+// now succeed under --ignore-unknown-config and leave the unknown key's
+// line byte-for-byte untouched while still changing only the field asked
+// for. The load-time warning (config.unknown_key_ignored) still fires; only
+// the refusal is gone.
 
-func TestConfigSetRefusesToWriteWhenUnknownKeyIgnored(t *testing.T) {
+func TestConfigSetPatchesThroughAnIgnoredUnknownKey(t *testing.T) {
 	e := newCLIEnv(t)
 	writeRawUserConfig(t, e.homeDir, unknownKeyUserConfig)
 	configPath := filepath.Join(e.homeDir, ".commitbrief", "config.yml")
 
-	before, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	var err error
 	stderr := captureStderr(t, func() {
 		err = e.run("config", "set", "output.lang", "tr", "--ignore-unknown-config")
 	})
-	if err == nil {
-		t.Fatal("config set --ignore-unknown-config must refuse to write when the file carries an unknown key")
+	if err != nil {
+		t.Fatalf("config set --ignore-unknown-config must succeed once the write path can't lose the unknown key; got: %v", err)
 	}
-	// Review turu 3, item 11: the old strict LoadFile path ALSO returns a
-	// non-nil error naming this exact key (it fails validation before ever
-	// writing), so those two assertions alone pass under either behavior —
-	// a `go test -overlay` revert of the refusal code confirmed this test
-	// stayed green with refuseUnknownKeysWrite deleted entirely. Pinning on
-	// "refusing to write" (from config.write_refused_unknown_keys, the
-	// message only the NEW refusal path emits) is what makes this test
-	// actually fail if that code regresses.
-	if !strings.Contains(err.Error(), "refusing to write") {
-		t.Errorf("must be the refusal path (config.write_refused_unknown_keys), not the strict loader's own error; got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "guard.secret_patterns[0].pattern") {
-		t.Errorf("refusal must name the key that would be lost; got: %v", err)
-	}
-	// The load-time warning still fires (it comes from resolveContext,
-	// before the refusal); the point of this test is what happens next.
+	// The load-time warning (resolveContext) still fires — --ignore-unknown-
+	// config silences the failure, not the visibility that a key is inert.
 	if !strings.Contains(stderr, "guard.secret_patterns[0].pattern") {
-		t.Errorf("expected the usual ignore-warning on stderr too; stderr was:\n%s", stderr)
+		t.Errorf("expected the usual ignore-warning on stderr; stderr was:\n%s", stderr)
 	}
 
 	after, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(before, after) {
-		t.Errorf("config set must leave the file untouched on refusal.\nbefore:\n%s\nafter:\n%s", before, after)
+	if !strings.Contains(string(after), "pattern: 'acme_[A-Za-z0-9]{32}'") {
+		t.Errorf("the unknown key's line must survive the patch verbatim; file:\n%s", after)
+	}
+	if !strings.Contains(string(after), "lang: tr") {
+		t.Errorf("output.lang must have been updated; file:\n%s", after)
 	}
 }
 
-func TestProvidersUseRefusesToWriteWhenUnknownKeyIgnored(t *testing.T) {
+func TestProvidersUsePatchesThroughAnIgnoredUnknownKey(t *testing.T) {
 	e := newCLIEnv(t)
 	writeRawUserConfig(t, e.homeDir, unknownKeyUserConfig)
 	configPath := filepath.Join(e.homeDir, ".commitbrief", "config.yml")
 
-	before, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	var err error
 	_ = captureStderr(t, func() {
 		// "mock" is registered by newCLIEnv via registerMockOnce; a
 		// production binary would use a real provider name here instead.
 		err = e.run("providers", "use", "mock", "--ignore-unknown-config")
 	})
-	if err == nil {
-		t.Fatal("providers use --ignore-unknown-config must refuse to write when the file carries an unknown key")
-	}
-	// Same reasoning as TestConfigSetRefusesToWriteWhenUnknownKeyIgnored
-	// (review turu 3, item 11): without this, the old strict LoadFile's own
-	// validation error satisfies every other assertion here too.
-	if !strings.Contains(err.Error(), "refusing to write") {
-		t.Errorf("must be the refusal path (config.write_refused_unknown_keys), not the strict loader's own error; got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "guard.secret_patterns[0].pattern") {
-		t.Errorf("refusal must name the key that would be lost; got: %v", err)
+	if err != nil {
+		t.Fatalf("providers use --ignore-unknown-config must succeed once the write path can't lose the unknown key; got: %v", err)
 	}
 
 	after, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(before, after) {
-		t.Errorf("providers use must leave the file untouched on refusal.\nbefore:\n%s\nafter:\n%s", before, after)
+	if !strings.Contains(string(after), "pattern: 'acme_[A-Za-z0-9]{32}'") {
+		t.Errorf("the unknown key's line must survive the patch verbatim; file:\n%s", after)
+	}
+	if !strings.Contains(string(after), "provider: mock") {
+		t.Errorf("provider must have been switched to mock; file:\n%s", after)
 	}
 }
 
