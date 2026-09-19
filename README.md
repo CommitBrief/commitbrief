@@ -302,7 +302,9 @@ sandbox-rerun confirmation of flagged flaky tests; see below),
 `--no-architecture` (skip
 architecture-aware review; see below), `--update-baseline` /
 `--no-baseline` (signal-control baseline; see below), `--color`,
-`--timeout <duration>` (bound the whole run; see below). See
+`--timeout <duration>` (bound the whole run; see below),
+`--ignore-unknown-config` (continue past a config key the schema
+doesn't define instead of failing; see "Configuration" below). See
 `commitbrief --help`.
 
 ### Timeouts (`--timeout`, `review.timeout`)
@@ -997,6 +999,42 @@ these stay hand-written here rather than inside the generated region:
   contacting the provider; `0` or negative disables the check. The default
   (`0.5`) is an "occasional dev review" budget — raise it for scheduled
   jobs, or pass `--no-cost-check` per run.
+
+### Config strictness
+
+A key `config.yml` has no field for — a typo like `regexp:` for
+`regex:`, or a setting from a future version — is now a **hard error**
+naming the offending file, the exact dotted key, the allowed siblings
+at that level, and (when it's a plausible typo) a "did you mean"
+suggestion. Before this, an unknown key was silently discarded during
+load and simply had no effect — which is how a single `config set` on
+a partial file could leave `guard.secret_scan` at its zero value
+without anyone noticing (see the CHANGELOG).
+
+A top-level key meant to hold only a YAML anchor (for `<<:` merging)
+is exempt when prefixed `x-` (the same convention docker-compose and
+OpenAPI use), e.g.:
+
+```yaml
+x-defaults: &defaults
+  ttl_days: 3
+cache:
+  <<: *defaults
+  enabled: true
+```
+
+`--ignore-unknown-config` downgrades the failure back to a warning for
+one run — every ignored key is still named on stderr, and it still has
+no effect, so this is a stopgap for "my config broke on upgrade and I
+need to run something *now*", not a way to silence the check
+permanently. Fix or remove the offending key instead.
+
+`config set` and `providers use` write by patching the existing YAML
+document in place rather than decoding it into `Config` and
+re-marshalling the whole thing: comments, key order, anchors/aliases,
+and any key the typed schema doesn't know about (including one an
+`--ignore-unknown-config` run just skipped) all survive a write
+untouched.
 
 ### Default command (`command.default`)
 

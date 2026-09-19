@@ -60,6 +60,11 @@ import (
 //     quotes; `base_url: !!str http://x` → `base_url: http://y`, dropping
 //     the tag) — everything else in the document, flow-style collections
 //     included, keeps its original style;
+//   - an inline comment's spacing before `#` is normalized to a single
+//     space on ANY line in the document, not just the one being patched
+//     (`provider: mock  # note` → `provider: mock # note`) — this is
+//     yaml.v3's encoder, not something PatchField's own logic touches; the
+//     comment's content and every other line are untouched, nothing is lost;
 //   - a merge key (`<<:`) that happens to be the ONLY nested block-mapping
 //     structure under an unknown/`x-` key can still push detectIndent to
 //     its 4-space fallback instead of matching the file's real indent
