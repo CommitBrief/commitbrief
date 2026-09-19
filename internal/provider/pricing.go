@@ -2,13 +2,16 @@
 
 package provider
 
+// Pricing's json tags mirror config.ModelPricing's yaml tags so a reader
+// moving between the generated surface inventory and their own config file
+// meets one vocabulary rather than two spellings of the same three numbers.
 type Pricing struct {
-	InputPer1M  float64
-	OutputPer1M float64
+	InputPer1M  float64 `json:"input_per_1m"`
+	OutputPer1M float64 `json:"output_per_1m"`
 
 	// CachedInputPer1M is the per-1M-token price for cached input tokens.
 	// Zero means "same as InputPer1M" (no cache discount or not supported).
-	CachedInputPer1M float64
+	CachedInputPer1M float64 `json:"cached_input_per_1m,omitempty"`
 }
 
 func (p Pricing) Cost(u Usage) float64 {
