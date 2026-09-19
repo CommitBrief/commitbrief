@@ -1007,9 +1007,16 @@ A key `config.yml` has no field for — a typo like `regexp:` for
 naming the offending file, the exact dotted key, the allowed siblings
 at that level, and (when it's a plausible typo) a "did you mean"
 suggestion. Before this, an unknown key was silently discarded during
-load and simply had no effect — which is how a single `config set` on
-a partial file could leave `guard.secret_scan` at its zero value
-without anyone noticing (see the CHANGELOG).
+load and simply had no effect.
+
+That's a separate bug from the one this release also fixes in `config
+set`/`providers use`'s write path (see the CHANGELOG) — writing to a
+config file with fields it didn't mention used to reset every one of
+them to its zero value, `guard.secret_scan: false` included, with no
+unknown key needed to trigger it. Neither bug causes the other; they
+share a root cause: nothing in the old pipeline distinguished "this
+key isn't set", "this key is set to its zero value", and "this isn't
+a real key at all."
 
 A top-level key meant to hold only a YAML anchor (for `<<:` merging)
 is exempt when prefixed `x-` (the same convention docker-compose and

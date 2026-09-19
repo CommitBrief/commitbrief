@@ -12,25 +12,36 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ### Fixed
 - **`config set` / `providers use` no longer silently disables the secret
-  scanner.** In every previously shipped version (v1.16.0 and earlier),
-  writing to a config file that was missing some fields — a very common
-  shape, since `setup` only seeds the fields it touches — decoded that file
-  into a full `Config` struct and re-marshalled the whole thing. Every field
-  the file didn't mention round-tripped through its Go zero value instead of
-  its documented default: `guard.secret_scan: false`, `guard.injection_scan:
-  false`, `cache.enabled: false`, `review.flaky: false`,
-  `cost.warn_threshold_usd: 0`. A single `commitbrief config set
-  provider openai` on a partial config could turn the secret scanner off
-  with no warning and no indication anything had changed. This was verified
-  against the `main` binary of prior releases, not inferred from the code.
-  **If you've run `config set` or `providers use` against a hand-trimmed or
-  partial config file, check `commitbrief config show` (or your
-  `~/.commitbrief/config.yml` / `./.commitbrief/config.yml` directly) for
-  any of the five keys above sitting at an unexpected value.** `config set`
-  and `providers use` now patch the existing YAML document in place instead
-  of decoding-and-re-marshalling it, so a write only ever touches the one
-  key it was asked to change — comments, key order, YAML anchors/aliases,
-  and any key the schema doesn't know about all survive untouched.
+  scanner — or anything else your config file doesn't explicitly mention.**
+  In every previously shipped version (v1.16.0 and earlier), writing to a
+  config file that was missing some fields — a very common shape, since
+  `setup` only seeds the fields it touches — decoded that file into a full
+  `Config` struct and re-marshalled the whole thing. **Every field the file
+  didn't mention round-tripped through its Go zero value instead of its
+  documented default, not only the ones below** — booleans to `false`,
+  numbers to `0`, strings to `""`. Verified against a prior release's `main`
+  binary (`32b1bc1`): starting from a one-line `provider: openai` config,
+  a single `commitbrief config set provider openai` left `version: 0`,
+  `output.lang: ""`, `output.stream: false`, `output.color: ""`,
+  `commit.type: ""`, `commit.generate: 0`, `cost.warn_threshold_usd: 0`,
+  `cache.enabled: false`, `cache.ttl_days: 0`, `guard.secret_scan: false`,
+  and `guard.injection_scan: false` — and, easy to miss because they don't
+  share a struct with `guard`, also `review.flaky: false`,
+  `review.baseline: false`, and `review.architecture: false`. That single
+  command silently turned off the secret scanner, the signal-control
+  baseline, *and* architecture-aware review at once, with no warning and no
+  indication anything had changed.
+  **This list is what one specific starting file reproduced, not a
+  guaranteed complete inventory for every config shape — if you've run
+  `config set` or `providers use` against a hand-trimmed or partial config
+  file on an older version, don't just check the keys named above: run
+  `commitbrief config show` and review every value in the file, or run
+  `commitbrief setup` again to get a config that states every field
+  explicitly.** `config set` and `providers use` now patch the existing
+  YAML document in place instead of decoding-and-re-marshalling it, so a
+  write only ever touches the one key it was asked to change — comments,
+  key order, YAML anchors/aliases, and any key the schema doesn't know
+  about all survive untouched.
 - `scripts/spdx-check.sh` now reads file lists with a plain `while read`
   loop instead of `mapfile`, a bash-4-only builtin. macOS ships bash 3.2, so
   `make check` failed with `mapfile: command not found` (exit 127) before
