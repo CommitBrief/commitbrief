@@ -58,6 +58,20 @@ func newCLIEnv(t *testing.T) *cliEnv {
 	t.Setenv("LANG", "en_US.UTF-8")
 	t.Setenv("NO_COLOR", "1") // glamour/ansi-free output in tests
 
+	// config.ApplyEnv reads these from the PROCESS environment, which a
+	// temporary HOME does not isolate. A developer with GEMINI_API_KEY or
+	// OPENAI_API_KEY exported in their shell would otherwise have those
+	// providers silently configured into every CLI test, so doctor grew two
+	// extra "unknown provider" warnings (only mock is linked into the test
+	// binary) and the run behaved differently on their machine than in CI.
+	for _, k := range []string{
+		"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+		"DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "COHERE_API_KEY",
+		"OLLAMA_HOST", "COMMITBRIEF_PROVIDER", "COMMITBRIEF_MODEL",
+	} {
+		t.Setenv(k, "")
+	}
+
 	repo := t.TempDir()
 	initTestRepo(t, repo)
 	writeUserConfig(t, home, "mock")
