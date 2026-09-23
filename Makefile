@@ -69,10 +69,10 @@ i18n-check: ## Flag i18n catalog keys with no Go source reference (UC-25)
 spdx-check: ## Fail if any Go source file is missing the SPDX header (ADR-0012)
 	bash scripts/spdx-check.sh
 
-docs-gen: ## Regenerate internal/meta/surface.json and README.md's generated regions (ADR-0039)
+docs-gen: ## Regenerate internal/meta/surface.json from code (ADR-0039, narrowed by ADR-0041)
 	bash scripts/docs-gen.sh
 
-docs-check: ## Fail if generated docs drift from code or from surface.json (ADR-0039)
+docs-check: ## Fail if internal/meta/surface.json drifts from code (ADR-0039, narrowed by ADR-0041)
 	bash scripts/docs-check.sh
 
 security-check: ## Run gosec with the documented exclusion set

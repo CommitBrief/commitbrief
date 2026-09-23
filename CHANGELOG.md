@@ -10,6 +10,26 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-09-23
+
+### Changed
+- **README.md cut from 1250 lines to a front door** (tagline, Why, Install,
+  Quick start, provider list, docs map, Stability, Contributing, License).
+  commitbrief.com is now the documentation source of truth; reference
+  material that used to live in the README (command surface, configuration,
+  filtering, MCP server, policy gate, credential audit, and more) has a home
+  under `commitbrief.com/docs`.
+- `docs-check` re-scoped to two layers: code -> `internal/meta/surface.json`
+  drift (unchanged), plus a new README.md leak-lint pass that fails the
+  build on internal maintainer traces (ADR/OQ/D-NN ids) and prose version
+  traces such as "Since v1.17.0" or "(v1.7.0)".
+
+### Removed
+- The Markdown-rendering engine that used to splice the surface inventory
+  into README's generated regions (`internal/meta/blocks.go`, `docs.go`)
+  and its `TestDocsInSync`/`TestRegions*`/`TestApply*`/`TestVerify*` tests;
+  `--gen-surface` and `surface.json` itself are unchanged.
+
 ## [1.17.0] - 2026-09-19
 
 ### Added
@@ -2168,7 +2188,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.17.1...HEAD
+[1.17.1]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/CommitBrief/commitbrief/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/CommitBrief/commitbrief/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/CommitBrief/commitbrief/compare/v1.14.0...v1.15.0
