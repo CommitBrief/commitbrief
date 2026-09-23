@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-09-23
+
 ### Docs
 - **README.md cut from 1250 lines to a front door** (tagline, Why, Install,
   Quick start, provider list, docs map, Stability, Contributing, License).
@@ -2180,7 +2182,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.17.1...HEAD
+[1.17.1]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/CommitBrief/commitbrief/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/CommitBrief/commitbrief/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/CommitBrief/commitbrief/compare/v1.14.0...v1.15.0
