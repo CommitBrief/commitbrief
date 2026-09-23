@@ -67,10 +67,12 @@ jobs:
       - run: bash scripts/spdx-check.sh
 
   docs-check:
-    # ADR-0039: fail loudly when a doc drifts from the code-derived CLI
-    # surface inventory (providers/commands/flags/config keys/MCP tool
-    # args) or from README.md's own generated regions. Needs setup-go
-    # (unlike the i18n/spdx jobs above) because the script does `go run`.
+    # ADR-0039, narrowed by ADR-0041: fail loudly when the committed
+    # internal/meta/surface.json drifts from the code-derived CLI surface
+    # inventory (providers/commands/flags/config keys/MCP tool args).
+    # README.md is no longer generated (ADR-0041) and is not checked here.
+    # Needs setup-go (unlike the i18n/spdx jobs above) because the script
+    # does `go run`.
     name: Docs drift check
     runs-on: ubuntu-latest
     steps:

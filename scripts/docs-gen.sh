@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# docs-gen.sh — regenerate the generated-docs artifacts (ADR-0039).
+# docs-gen.sh — regenerate the code-derived surface inventory (ADR-0039,
+# narrowed by ADR-0041).
 #
-# Two writes, always in this order, because the second reads the first:
+# One write: internal/meta/surface.json — the code-derived CLI surface
+# inventory (providers, commands, flags, config keys, MCP review tool args),
+# rebuilt from the CURRENT binary via the hidden --gen-surface flag.
 #
-#   1. internal/meta/surface.json — the code-derived CLI surface inventory
-#      (providers, commands, flags, config keys, MCP review tool args),
-#      rebuilt from the CURRENT binary via the hidden --gen-surface flag.
-#   2. README.md's four `<!-- commitbrief:gen NAME -->` … `<!-- commitbrief:end
-#      NAME -->` regions, rewritten from the surface.json just written in
-#      step 1 (internal/meta's TestDocsInSync, run with -update).
+# README.md is no longer generated from this artifact (ADR-0041): it is a
+# hand-written front door, and the Markdown-rendering engine that used to
+# splice surface.json into README.md's `<!-- commitbrief:gen NAME -->` …
+# `<!-- commitbrief:end NAME -->` regions (internal/meta/blocks.go, docs.go)
+# was deleted, not weakened. commitbrief.com is the documentation source of
+# truth going forward.
 #
 # Invoked by `make docs-gen`, by `go generate ./internal/meta` (see the
 # //go:generate directive in internal/meta/doc.go), and manually after any
@@ -24,8 +27,5 @@ SURFACE=internal/meta/surface.json
 
 echo "==> regenerating $SURFACE"
 go run ./cmd/commitbrief --gen-surface "$SURFACE"
-
-echo "==> regenerating README.md's generated regions"
-go test ./internal/meta -run '^TestDocsInSync$' -update
 
 echo "docs-gen: done"

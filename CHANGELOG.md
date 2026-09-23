@@ -10,6 +10,18 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Docs
+- **README.md cut from 1250 lines to a front door** (tagline, Why, Install,
+  Quick start, provider list, docs map, Stability, Contributing, License).
+  commitbrief.com is now the documentation source of truth; reference
+  material that used to live in the README (command surface, configuration,
+  filtering, MCP server, policy gate, credential audit, and more) has a home
+  under `commitbrief.com/docs`.
+- `docs-check` narrowed to a single layer: code -> `internal/meta/surface.json`.
+  The Markdown-rendering engine that used to splice that inventory into
+  README's generated regions (`internal/meta/blocks.go`, `docs.go`) is
+  removed; `--gen-surface` and `surface.json` itself are unchanged.
+
 ## [1.17.0] - 2026-09-19
 
 ### Added

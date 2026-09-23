@@ -5,8 +5,13 @@ package meta
 import (
 	"bytes"
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -471,5 +476,173 @@ func TestBuildParsesMCPToolArgs(t *testing.T) {
 	}
 	if got := Build(newTestTree(), json.RawMessage("{not json")).MCPToolArgs; len(got) != 0 {
 		t.Errorf("broken schema produced %+v, want empty", got)
+	}
+}
+
+// ---------------------------------------------------------------------
+// envVars <-> ApplyEnv coverage
+//
+// Moved from blocks_test.go (ADR-0041 §3 "Moved, not deleted"): the
+// generated-README renderer that consumed this pairing is gone, but the
+// pairing itself is still a real inventory guarantee — envVars() must keep
+// documenting exactly what internal/config's ApplyEnv actually reads — so
+// the coverage check stays, now against surface.go's envVars() directly.
+// ---------------------------------------------------------------------
+
+// applyEnvVarNames parses internal/config/env.go's ApplyEnv function and
+// returns the literal name of every environment variable it reads via
+// os.Getenv, resolving a bare identifier argument (AnthropicAPIKeyEnv, …)
+// against that same file's own const declarations.
+//
+// Parsing the source rather than hand-copying the list here is the point:
+// a hand-copied list would drift exactly the way README's old table did
+// (silently missing DEEPSEEK_API_KEY/MISTRAL_API_KEY/COHERE_API_KEY), and
+// nothing would fail. This fails the moment ApplyEnv reads one more
+// variable than envVars() documents.
+func applyEnvVarNames(t *testing.T) []string {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "../config/env.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse internal/config/env.go: %v", err)
+	}
+
+	consts := map[string]string{}
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range vs.Names {
+				if i >= len(vs.Values) {
+					continue
+				}
+				lit, ok := vs.Values[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				v, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					continue
+				}
+				consts[name.Name] = v
+			}
+		}
+	}
+
+	var applyEnv *ast.FuncDecl
+	for _, decl := range f.Decls {
+		if fd, ok := decl.(*ast.FuncDecl); ok && fd.Name.Name == "ApplyEnv" {
+			applyEnv = fd
+			break
+		}
+	}
+	if applyEnv == nil {
+		t.Fatal("internal/config/env.go: func ApplyEnv not found — did it get renamed?")
+	}
+
+	var names []string
+	ast.Inspect(applyEnv.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Getenv" {
+			return true
+		}
+		if pkgIdent, ok := sel.X.(*ast.Ident); !ok || pkgIdent.Name != "os" {
+			return true
+		}
+		if len(call.Args) != 1 {
+			t.Fatalf("os.Getenv call with %d args, want 1", len(call.Args))
+			return false
+		}
+		switch arg := call.Args[0].(type) {
+		case *ast.BasicLit:
+			v, err := strconv.Unquote(arg.Value)
+			if err != nil {
+				t.Fatalf("unquote os.Getenv argument %s: %v", arg.Value, err)
+			}
+			names = append(names, v)
+		case *ast.Ident:
+			v, ok := consts[arg.Name]
+			if !ok {
+				t.Fatalf("os.Getenv(%s): %s is not a string constant declared in env.go", arg.Name, arg.Name)
+			}
+			names = append(names, v)
+		default:
+			t.Fatalf("os.Getenv called with an argument shape this test does not understand (%T); "+
+				"extend applyEnvVarNames before trusting TestEnvVarsCoverApplyEnv again", arg)
+		}
+		return true
+	})
+	return names
+}
+
+func TestEnvVarsCoverApplyEnv(t *testing.T) {
+	want := applyEnvVarNames(t)
+	if len(want) == 0 {
+		t.Fatal("parsed zero os.Getenv calls out of ApplyEnv; the AST walk is broken, not ApplyEnv itself")
+	}
+
+	documented := map[string]bool{}
+	for _, v := range envVars() {
+		documented[v.Name] = true
+	}
+	for _, name := range want {
+		if !documented[name] {
+			t.Errorf("ApplyEnv reads %s but envVars() does not list it — "+
+				"a new env var would silently go undocumented in surface.json (and the site's env-var table)", name)
+		}
+	}
+
+	read := map[string]bool{}
+	for _, name := range want {
+		read[name] = true
+	}
+	for _, v := range envVars() {
+		if !read[v.Name] {
+			t.Errorf("envVars() documents %s as something ApplyEnv reads, but ApplyEnv does not read it", v.Name)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------
+// MCP tool args row count vs. the real schema
+//
+// Moved from docs_test.go (ADR-0041 §3 "Moved, not deleted"): pins the
+// specific regression this test was written to catch — README's MCP table
+// was hand-written and stuck at 8 rows while the real tool schema already
+// had 19 arguments. The generated-README renderer is gone, but surface.json
+// (produced by --gen-surface, untouched by this phase) is still the
+// artifact whose row count must track the real schema.
+// ---------------------------------------------------------------------
+
+func loadRealSurface(t *testing.T) Surface {
+	t.Helper()
+	data, err := os.ReadFile("surface.json")
+	if err != nil {
+		t.Fatalf("read surface.json: %v (run `go run ./cmd/commitbrief --gen-surface internal/meta/surface.json` first)", err)
+	}
+	var s Surface
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("unmarshal surface.json: %v", err)
+	}
+	return s
+}
+
+func TestMCPToolArgsRowCountMatchesRealSchema(t *testing.T) {
+	s := loadRealSurface(t)
+	if len(s.MCPToolArgs) != 19 {
+		t.Errorf("surface.json has %d MCP tool args, want 19 — "+
+			"either the schema changed (update this test) or surface.json is stale (regenerate it)",
+			len(s.MCPToolArgs))
 	}
 }
