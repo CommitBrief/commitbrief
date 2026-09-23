@@ -128,8 +128,9 @@ The v1.0.0 line is an **API freeze**. CLI flag surface, the JSON
 schema v1 (`{schema, content, findings, summary, meta}` — emitted by
 `--json`), `COMMITBRIEF.md` and `OUTPUT.md` formats, and the public
 config keys all follow strict semver from v1.0.0 onwards — breaking
-changes ship in v2.x. The current line is `v1.0.0-rc.1`, the freeze
-checkpoint; anything locked in here is the long-term contract.
+changes ship in v2.x. The current line is `v1.17.x`; `v1.0.0` was the
+freeze checkpoint, and anything locked in there is the long-term
+contract.
 
 Upgrading from v0.x? See the [migration guide in
 CHANGELOG.md](CHANGELOG.md#migration-guide-v0x--v10) — the scope
