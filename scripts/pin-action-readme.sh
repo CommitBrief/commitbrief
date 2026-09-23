@@ -15,7 +15,9 @@
 #
 # Idempotent: running it twice with the same tag produces zero further diff,
 # because the replacement value is itself a valid vX.Y.Z match for the next
-# run's pattern.
+# run's pattern. Also refuses to move the pin backwards (e.g. a re-run
+# against an older tag, or a backport tag pushed after a newer release) —
+# it silently no-ops instead of opening a downgrade PR.
 #
 # Usage: pin-action-readme.sh <path-to-README.md> <new-tag>
 #   e.g. pin-action-readme.sh commitbrief-action/README.md v1.18.0
@@ -34,19 +36,30 @@ tag=$2
 
 [ -f "$readme" ] || { echo "pin-action-readme: no such file: $readme" >&2; exit 1; }
 
-case "$tag" in
-  v[0-9]*.[0-9]*.[0-9]*) ;;
-  *)
-    echo "pin-action-readme: tag '$tag' doesn't look like vX.Y.Z" >&2
-    exit 1
-    ;;
-esac
+# Strict — vX.Y.Z only, nothing else. This also doubles as an injection
+# guard: the tag is later spliced into a sed replacement unescaped, so a
+# value containing sed metacharacters (`&`, `/`, `\`) must never pass here.
+if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "pin-action-readme: tag '$tag' doesn't look like vX.Y.Z" >&2
+  exit 1
+fi
 
 # A literal backtick, kept in a variable so it can be safely interpolated
 # into a double-quoted sed script below without tripping bash's own
 # command-substitution parsing of unescaped backticks.
 bt='`'
 semver='v[0-9]+\.[0-9]+\.[0-9]+'
+
+# Refuse to downgrade: if README already pins a version and it's the same
+# tag or newer than the one we were asked to pin, there's nothing to do.
+current=$(grep -m1 -oE "version: ${semver}" "$readme" | sed -E 's/^version: //') || true
+if [ -n "${current:-}" ] && [ "$tag" != "$current" ]; then
+  newer=$(printf '%s\n%s\n' "$current" "$tag" | sort -V | tail -1)
+  if [ "$newer" != "$tag" ]; then
+    echo "pin-action-readme: new tag $tag is not newer than the current pin $current; skipping" >&2
+    exit 0
+  fi
+fi
 
 sed -E -i.bak \
   -e "s/version: ${semver}/version: ${tag}/g" \
