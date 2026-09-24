@@ -3,6 +3,8 @@
 package setup
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/CommitBrief/commitbrief/internal/provider"
@@ -140,5 +142,133 @@ func TestFindSpec(t *testing.T) {
 	}
 	if got := FindSpec("no-such-provider"); got != nil {
 		t.Errorf("FindSpec(\"no-such-provider\") = %+v, want nil", got)
+	}
+}
+
+// TestModelLabelsShowPriceAndSignal checks every static model entry in the
+// picker: it must carry a cost signal ($ per 1M tokens, from the provider
+// catalog) and a quality signal. No benchmark results ship with the binary,
+// so the quality signal is the honest "not measured"; the provider's
+// DefaultModel additionally carries the "default" marker, and only it does.
+func TestModelLabelsShowPriceAndSignal(t *testing.T) {
+	checked := 0
+	for _, spec := range Specs() {
+		if !spec.NeedsKey {
+			continue
+		}
+		md, ok := provider.MetadataFor(spec.Name)
+		if !ok {
+			t.Fatalf("no metadata for %q", spec.Name)
+		}
+		for _, m := range spec.Models {
+			label := modelLabel(m, md, true, nil)
+			checked++
+			if !strings.HasPrefix(label, m+" · ") {
+				t.Errorf("%s/%s: label %q does not start with the model ID", spec.Name, m, label)
+			}
+			if !strings.Contains(label, "$") || !strings.Contains(label, "/1M in") || !strings.Contains(label, "/1M out") {
+				t.Errorf("%s/%s: label %q has no list price", spec.Name, m, label)
+			}
+			if !strings.Contains(label, "not measured") {
+				t.Errorf("%s/%s: label %q has no quality signal", spec.Name, m, label)
+			}
+			if strings.Contains(strings.ReplaceAll(label, "not measured", ""), "measured") {
+				t.Errorf("%s/%s: label %q claims a measurement", spec.Name, m, label)
+			}
+			isDefault := strings.HasSuffix(label, " · default")
+			if want := m == md.DefaultModel; isDefault != want {
+				t.Errorf("%s/%s: default marker = %v, want %v (label %q)", spec.Name, m, isDefault, want, label)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no static models checked; the test passed vacuously")
+	}
+}
+
+// TestModelLabelFormatsPrice pins the exact label shape with a synthetic
+// catalog entry, independent of any real model name or price.
+func TestModelLabelFormatsPrice(t *testing.T) {
+	md := provider.Metadata{
+		DefaultModel: "m-default",
+		Models: []provider.ModelInfo{
+			{ID: "m-default", Pricing: provider.Pricing{InputPer1M: 3, OutputPer1M: 15}},
+			{ID: "m-cheap", Pricing: provider.Pricing{InputPer1M: 0.15, OutputPer1M: 0.6}},
+		},
+	}
+	cases := map[string]string{
+		"m-default":  "m-default · $3/1M in · $15/1M out · not measured · default",
+		"m-cheap":    "m-cheap · $0.15/1M in · $0.6/1M out · not measured",
+		"m-uncosted": "m-uncosted · local",
+	}
+	for m, want := range cases {
+		if got := modelLabel(m, md, true, nil); got != want {
+			t.Errorf("modelLabel(%q) = %q, want %q", m, got, want)
+		}
+	}
+	if got := modelLabel("qwen2.5-coder:14b", provider.Metadata{}, false, nil); got != "qwen2.5-coder:14b · local" {
+		t.Errorf("discovered model label = %q, want %q", got, "qwen2.5-coder:14b · local")
+	}
+}
+
+// TestModelSelectPreselectsDefaultModel is the ADR-0043 Enter fix: for the
+// static lists the picker must open on the provider's DefaultModel, not on
+// whichever model the catalog lists first. The expected value is read from
+// the registry so a DefaultModel change does not break this test.
+func TestModelSelectPreselectsDefaultModel(t *testing.T) {
+	for _, name := range []string{"anthropic", "openai", "gemini"} {
+		spec := FindSpec(name)
+		if spec == nil {
+			t.Fatalf("FindSpec(%q) = nil", name)
+		}
+		md, ok := provider.MetadataFor(name)
+		if !ok || md.DefaultModel == "" {
+			t.Fatalf("%s: no DefaultModel in metadata", name)
+		}
+		if !slices.Contains(spec.Models, md.DefaultModel) {
+			t.Fatalf("%s: DefaultModel %q is not in the static model list", name, md.DefaultModel)
+		}
+		var choices Choices
+		sel := newModelSelect(spec, spec.Models, &choices, nil)
+		if choices.Model != md.DefaultModel {
+			t.Errorf("%s: choices.Model = %q, want DefaultModel %q", name, choices.Model, md.DefaultModel)
+		}
+		if got, _ := sel.GetValue().(string); got != md.DefaultModel {
+			t.Errorf("%s: select value = %q, want DefaultModel %q", name, got, md.DefaultModel)
+		}
+	}
+}
+
+// TestModelSelectKeepsExplicitChoice guards the "only when empty" half of
+// the preselect: a model already in choices is not overwritten.
+func TestModelSelectKeepsExplicitChoice(t *testing.T) {
+	spec := FindSpec("anthropic")
+	if spec == nil || len(spec.Models) < 2 {
+		t.Skip("anthropic spec needs at least two models")
+	}
+	md, _ := provider.MetadataFor("anthropic")
+	pick := spec.Models[0]
+	if pick == md.DefaultModel {
+		pick = spec.Models[1]
+	}
+	choices := Choices{Model: pick}
+	newModelSelect(spec, spec.Models, &choices, nil)
+	if choices.Model != pick {
+		t.Errorf("choices.Model = %q, want the explicit %q", choices.Model, pick)
+	}
+}
+
+// TestModelSelectDiscoveredListHasNoDefault: ollama's list is discovered at
+// runtime, so no default is injected and Enter keeps huh's behaviour of
+// picking the first discovered entry.
+func TestModelSelectDiscoveredListHasNoDefault(t *testing.T) {
+	spec := FindSpec("ollama")
+	if spec == nil {
+		t.Fatal("FindSpec(\"ollama\") = nil")
+	}
+	var choices Choices
+	sel := newModelSelect(spec, []string{"llama3:8b", "qwen2.5-coder:14b"}, &choices, nil)
+	if got, _ := sel.GetValue().(string); got != "llama3:8b" {
+		t.Errorf("select value = %q, want the first discovered model", got)
 	}
 }
