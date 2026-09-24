@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/format.test.ts", "line": 4, "reason": "New unit test only; asserts existing, already-correct behavior."}
+  ]
+}

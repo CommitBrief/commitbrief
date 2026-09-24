@@ -1,0 +1,8 @@
+{
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "internal/pricing/discount.go", "line": 12, "reason": "Extracted helper clampDiscount is a pure refactor of the inline clamp; behavior is unchanged."},
+    {"file": "internal/pricing/discount.go", "line": 17, "reason": "Call site now delegates to the extracted helper; result is identical to the inlined version it replaces."}
+  ]
+}

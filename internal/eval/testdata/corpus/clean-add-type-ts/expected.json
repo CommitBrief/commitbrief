@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/format.ts", "line": 1, "reason": "New parameter/return type annotations on an existing function; behavior unchanged."}
+  ]
+}

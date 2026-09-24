@@ -1,0 +1,11 @@
+diff --git a/src/cache.js b/src/cache.js
+index 4040401..4040402 100644
+--- a/src/cache.js
++++ b/src/cache.js
+@@ -1,5 +1,5 @@
+-// Entries expire after 30 seconds.
++// Entries expire after 60 seconds.
+ const TTL_MS = 60_000;
+ 
+ function isExpired(entry, now) {
+   return now - entry.storedAt > TTL_MS;

@@ -2,7 +2,7 @@ diff --git a/internal/store/user.go b/internal/store/user.go
 index 1111111..2222222 100644
 --- a/internal/store/user.go
 +++ b/internal/store/user.go
-@@ -9,4 +9,15 @@ import (
+@@ -9,5 +9,16 @@ import (
  	"database/sql"
  )
 

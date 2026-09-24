@@ -1,0 +1,8 @@
+{
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "internal/httpclient/client.go", "line": 8, "reason": "New named constant holds the same literal value the code used before."},
+    {"file": "internal/httpclient/client.go", "line": 13, "reason": "Call site now references the constant instead of the literal; value unchanged."}
+  ]
+}

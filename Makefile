@@ -30,8 +30,8 @@ test-live: ## Run live provider tests (real API keys required)
 eval: ## Deterministic review-quality + static flaky eval (CI-safe; ADR-0018/0022)
 	$(GO) test ./internal/eval/ -run 'TestEvalMockCorpus|TestEvalFlakyCorpus' -v
 
-eval-live: ## Live-provider review-quality eval (uses COMMITBRIEF_EVAL_PROVIDER or ~/.commitbrief/config.yml)
-	$(GO) test -tags=live -count=1 -timeout=20m ./internal/eval/ -run '^TestEvalLive$$' -v
+eval-live: ## Live-provider review-quality eval (uses COMMITBRIEF_EVAL_PROVIDER or ~/.commitbrief/config.yml; COMMITBRIEF_EVAL_RUNS=k repeats the corpus, COMMITBRIEF_EVAL_OUT=path writes an ADR-0043 results row — both read from the shell env, so `VAR=val make eval-live` passes them through as-is; the recall/FPR thresholds are fixed by ADR-0043 §2, not env-configurable)
+	$(GO) test -tags=live -count=1 -timeout=90m ./internal/eval/ -run '^TestEvalLive$$' -v
 
 eval-dump: ## Diagnostic: print every finding a live provider produces per fixture (match/EXTRA)
 	$(GO) test -tags=live -count=1 -timeout=20m ./internal/eval/ -run '^TestEvalLiveDump$$' -v

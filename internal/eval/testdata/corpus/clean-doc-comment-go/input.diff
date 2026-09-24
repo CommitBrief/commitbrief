@@ -1,0 +1,17 @@
+diff --git a/internal/queue/queue.go b/internal/queue/queue.go
+index 3333333..4444444 100644
+--- a/internal/queue/queue.go
++++ b/internal/queue/queue.go
+@@ -1,3 +1,4 @@
++// Package queue implements a simple bounded FIFO job queue.
+ package queue
+ 
+ import "errors"
+@@ -6,6 +7,7 @@ type Queue struct {
+ 	cap   int
+ }
+ 
++// Enqueue appends item to the queue, returning an error if it is full.
+ func (q *Queue) Enqueue(item any) error {
+ 	if len(q.items) >= q.cap {
+ 		return errors.New("queue: full")

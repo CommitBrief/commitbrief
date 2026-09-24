@@ -2,7 +2,7 @@ diff --git a/internal/store/list.go b/internal/store/list.go
 index 1111111..2222222 100644
 --- a/internal/store/list.go
 +++ b/internal/store/list.go
-@@ -7,6 +7,14 @@ package store
+@@ -7,4 +7,14 @@ package store
 
  func ListNames(db *sql.DB) ([]string, error) {
 -	return nil, nil
