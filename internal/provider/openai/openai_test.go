@@ -23,6 +23,9 @@ func TestModelsList(t *testing.T) {
 		ModelGPT55:     true,
 		ModelGPT54Mini: true,
 		ModelGPT55Pro:  true,
+		ModelGPT6Astra: true,
+		ModelGPT6Sol:   true,
+		ModelGPT6Luna:  true,
 	}
 	if len(got) != len(want) {
 		t.Errorf("Models() length = %d, want %d", len(got), len(want))
@@ -31,6 +34,17 @@ func TestModelsList(t *testing.T) {
 		if !want[m] {
 			t.Errorf("unexpected model %q", m)
 		}
+	}
+}
+
+// TestModelsWizardDefaultOrder locks Models()[0]: the setup wizard reads
+// spec.Models (not DefaultModel) for its picker, so the first element is
+// what an Enter keypress selects (internal/setup/wizard.go). New models
+// must be appended, never inserted before it.
+func TestModelsWizardDefaultOrder(t *testing.T) {
+	got := Models()[0]
+	if got != ModelGPT54Mini {
+		t.Errorf("Models()[0] = %q, want %q (wizard's implicit default)", got, ModelGPT54Mini)
 	}
 }
 
@@ -75,6 +89,102 @@ func TestPricingLookup(t *testing.T) {
 	zero := pricingFor("unknown-model")
 	if zero.InputPer1M != 0 {
 		t.Errorf("unknown model should yield zero pricing, got %+v", zero)
+	}
+}
+
+// TestModelCapabilitiesTable locks usesResponsesAPI, defaultMaxTokensFor and
+// pricingFor (non-zero) for every catalog model, including the gpt-6 family
+// added alongside gpt-5.5-pro.
+func TestModelCapabilitiesTable(t *testing.T) {
+	cases := []struct {
+		model             string
+		wantResponsesAPI  bool
+		wantMaxTokens     int64
+		wantPricingIsZero bool
+	}{
+		{ModelGPT4o, false, defaultMaxTokens, false},
+		{ModelGPT4oMini, false, defaultMaxTokens, false},
+		{ModelGPT55, false, defaultReasoningMaxTokens, false},
+		{ModelGPT54Mini, false, defaultReasoningMaxTokens, false},
+		{ModelGPT55Pro, true, defaultReasoningMaxTokens, false},
+		{ModelGPT6Astra, true, defaultReasoningMaxTokens, false},
+		{ModelGPT6Sol, true, defaultReasoningMaxTokens, false},
+		{ModelGPT6Luna, true, defaultReasoningMaxTokens, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.model, func(t *testing.T) {
+			if got := usesResponsesAPI(tc.model); got != tc.wantResponsesAPI {
+				t.Errorf("usesResponsesAPI(%s) = %v, want %v", tc.model, got, tc.wantResponsesAPI)
+			}
+			if got := defaultMaxTokensFor(tc.model); got != tc.wantMaxTokens {
+				t.Errorf("defaultMaxTokensFor(%s) = %d, want %d", tc.model, got, tc.wantMaxTokens)
+			}
+			p := pricingFor(tc.model)
+			isZero := p.InputPer1M == 0 && p.OutputPer1M == 0
+			if isZero != tc.wantPricingIsZero {
+				t.Errorf("pricingFor(%s) = %+v, want zero=%v", tc.model, p, tc.wantPricingIsZero)
+			}
+		})
+	}
+}
+
+// TestPricingTableExactValues locks the exact per-1M-token rates in
+// pricingTable against an independent transcription, so a typo'd digit
+// (rather than a missing/zero rate, which TestModelCapabilitiesTable already
+// catches) fails a test instead of silently shipping.
+func TestPricingTableExactValues(t *testing.T) {
+	want := map[string]provider.Pricing{
+		ModelGPT4o: {
+			InputPer1M:       2.50,
+			OutputPer1M:      10.00,
+			CachedInputPer1M: 1.25,
+		},
+		ModelGPT4oMini: {
+			InputPer1M:       0.15,
+			OutputPer1M:      0.60,
+			CachedInputPer1M: 0.075,
+		},
+		ModelGPT55: {
+			InputPer1M:       5.00,
+			OutputPer1M:      30.00,
+			CachedInputPer1M: 0.50,
+		},
+		ModelGPT54Mini: {
+			InputPer1M:       0.75,
+			OutputPer1M:      4.50,
+			CachedInputPer1M: 0.075,
+		},
+		ModelGPT55Pro: {
+			InputPer1M:       30.00,
+			OutputPer1M:      180.00,
+			CachedInputPer1M: 0,
+		},
+		ModelGPT6Astra: {
+			InputPer1M:       10.00,
+			OutputPer1M:      50.00,
+			CachedInputPer1M: 1.00,
+		},
+		ModelGPT6Sol: {
+			InputPer1M:       2.00,
+			OutputPer1M:      10.00,
+			CachedInputPer1M: 0.20,
+		},
+		ModelGPT6Luna: {
+			InputPer1M:       0.10,
+			OutputPer1M:      0.50,
+			CachedInputPer1M: 0.01,
+		},
+	}
+	for _, model := range Models() {
+		t.Run(model, func(t *testing.T) {
+			w, ok := want[model]
+			if !ok {
+				t.Fatalf("no expected pricing recorded for %s in this test", model)
+			}
+			if got := pricingFor(model); got != w {
+				t.Errorf("pricingFor(%s) = %+v, want %+v", model, got, w)
+			}
+		})
 	}
 }
 

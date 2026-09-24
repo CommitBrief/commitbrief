@@ -10,6 +10,9 @@ var contextWindows = map[string]int{
 	ModelGPT55:     1_050_000,
 	ModelGPT54Mini: 400_000,
 	ModelGPT55Pro:  1_050_000,
+	ModelGPT6Astra: 1_050_000,
+	ModelGPT6Sol:   1_050_000,
+	ModelGPT6Luna:  1_050_000,
 }
 
 func contextWindowFor(model string) int {

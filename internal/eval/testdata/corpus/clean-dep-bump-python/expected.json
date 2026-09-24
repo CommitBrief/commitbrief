@@ -1,0 +1,7 @@
+{
+  "language": "python",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "requirements.txt", "line": 3, "reason": "Routine patch bump of pydantic (2.8.1 → 2.8.2); no breaking changes and no known advisories for the target version."}
+  ]
+}

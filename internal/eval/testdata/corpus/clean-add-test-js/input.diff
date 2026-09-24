@@ -1,0 +1,15 @@
+diff --git a/test/slugify.test.js b/test/slugify.test.js
+new file mode 100644
+index 0000000..2020201
+--- /dev/null
++++ b/test/slugify.test.js
+@@ -0,0 +1,9 @@
++const { slugify } = require("../src/slugify");
++
++test("lowercases and hyphenates", () => {
++  expect(slugify("Hello World")).toBe("hello-world");
++});
++
++test("strips punctuation", () => {
++  expect(slugify("Hi, there!")).toBe("hi-there");
++});

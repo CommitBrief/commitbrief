@@ -1,0 +1,31 @@
+diff --git a/internal/strutil/truncate_test.go b/internal/strutil/truncate_test.go
+new file mode 100644
+index 0000000..5555555
+--- /dev/null
++++ b/internal/strutil/truncate_test.go
+@@ -0,0 +1,25 @@
++package strutil
++
++import "testing"
++
++func TestTruncate(t *testing.T) {
++	cases := []struct {
++		name string
++		in   string
++		max  int
++		want string
++	}{
++		{"shorter than max", "hi", 5, "hi"},
++		{"exact max", "hello", 5, "hello"},
++		{"longer than max", "hello world", 5, "hello"},
++		{"zero max", "hello", 0, ""},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			got := Truncate(tc.in, tc.max)
++			if got != tc.want {
++				t.Errorf("Truncate(%q, %d) = %q, want %q", tc.in, tc.max, got, tc.want)
++			}
++		})
++	}
++}

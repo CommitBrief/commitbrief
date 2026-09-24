@@ -9,6 +9,21 @@ import "github.com/CommitBrief/commitbrief/internal/provider"
 // should be refreshed when a model price changes. Cached input is the
 // "prompt cache read" rate per Anthropic's ephemeral cache discount.
 var pricingTable = map[string]provider.Pricing{
+	ModelOpus55: {
+		InputPer1M:       4.00,
+		OutputPer1M:      20.00,
+		CachedInputPer1M: 0.20,
+	},
+	ModelSonnet5: {
+		InputPer1M:       2.00,
+		OutputPer1M:      10.00,
+		CachedInputPer1M: 0.20,
+	},
+	ModelFable51: {
+		InputPer1M:       10.00,
+		OutputPer1M:      50.00,
+		CachedInputPer1M: 0.25,
+	},
 	ModelOpus48: {
 		InputPer1M:       5.00,
 		OutputPer1M:      25.00,

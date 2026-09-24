@@ -208,6 +208,66 @@ func TestTryStructuredReviewRepairTruncatedJSON(t *testing.T) {
 	}
 }
 
+// TestTryStructuredReviewRepairTruncatedJSONHighProviderDefault reproduces
+// re-review 1's MAJOR: a model whose own default max_tokens sits above
+// repairMaxTokens (e.g. Anthropic's Opus 5.5 / Fable 5.1 / Sonnet 5 at
+// 16000, or OpenAI's reasoning models at defaultReasoningMaxTokens) gets
+// truncated at that higher ceiling. The repair retry must never drop below
+// whatever ceiling produced the truncation — repairMaxTokens (8192) alone
+// would silently halve the retry's budget and make a second truncation
+// near-certain.
+func TestTryStructuredReviewRepairTruncatedJSONHighProviderDefault(t *testing.T) {
+	truncated := `{"findings":[{"severity":"info","file":"a.go",`
+	validJSON := `{"findings":[]}`
+	m := &switchingMock{
+		responses: []string{truncated, validJSON},
+		// A first response truncated by a 16000-token provider default
+		// reports OutputTokens at (or near) that ceiling.
+		usage: provider.Usage{InputTokens: 20, OutputTokens: 16000},
+	}
+
+	out, err := tryStructuredReview(context.Background(), m, provider.Request{SystemPrompt: "BASE", UserPrompt: "DIFF"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Format != cache.FormatJSON {
+		t.Errorf("format = %q, want recovery to %q", out.Format, cache.FormatJSON)
+	}
+	repair := m.reqs[1]
+	const wantCeiling = 32000 // 2 * 16000, well above repairMaxTokens
+	if repair.MaxTokens != wantCeiling {
+		t.Errorf("repair MaxTokens = %d, want %d (must never drop below the ceiling that produced the truncation)", repair.MaxTokens, wantCeiling)
+	}
+	if repair.MaxTokens < repairMaxTokens {
+		t.Errorf("repair MaxTokens = %d, fell below the repairMaxTokens floor %d", repair.MaxTokens, repairMaxTokens)
+	}
+}
+
+// TestRepairCeiling locks repairCeiling's contract directly: floor at
+// repairMaxTokens, never below 2x the truncated response's own output
+// tokens, and never below an explicit caller-set req.MaxTokens.
+func TestRepairCeiling(t *testing.T) {
+	cases := []struct {
+		name             string
+		reqMaxTokens     int
+		prevOutputTokens int
+		want             int
+	}{
+		{"small truncation uses the repairMaxTokens floor", 0, 100, repairMaxTokens},
+		{"raised provider default doubles instead of dropping to the floor", 0, 16000, 32000},
+		{"explicit caller MaxTokens is not lowered by a smaller truncation", 20000, 5000, 20000},
+		{"doubled truncation output can exceed an explicit caller MaxTokens", 10000, 16000, 32000},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := repairCeiling(tc.reqMaxTokens, tc.prevOutputTokens)
+			if got != tc.want {
+				t.Errorf("repairCeiling(%d, %d) = %d, want %d", tc.reqMaxTokens, tc.prevOutputTokens, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestTryStructuredReviewBubblesFirstCallError(t *testing.T) {
 	// Errors on the first call short-circuit before any retry — the caller
 	// gets the provider error verbatim, no fallback content.

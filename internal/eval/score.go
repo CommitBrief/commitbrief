@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/render"
 )
 
@@ -46,6 +47,43 @@ type FixtureScore struct {
 	// its category, giving a per-category recall breakdown (ADR-0018 §2).
 	CaughtByCategory map[string]int
 	MissedByCategory map[string]int
+
+	// Usage is the token usage the provider reported for this fixture's
+	// Review call. Zero on the mock tier (the mock provider's usage is a
+	// fixed stub, never billed) and on a fixture whose Review call itself
+	// failed (no response was ever returned to report usage from). Still
+	// populated on a fixture that errored only because its response body
+	// couldn't be parsed as findings — the provider did report usage for
+	// that call, and RunFixture/RunCorpus carry it through rather than
+	// discarding it (review 2026-09-24, MINOR).
+	Usage provider.Usage
+
+	// CleanAlarm reports whether this run raised at least one produced
+	// finding of severity low-or-higher on a clean-control fixture —
+	// ADR-0043 §3's fpr numerator for a single fixture run. info findings
+	// don't count (the severity rubric defines info as "no action
+	// required"); they still show up in Precision. Always false for a
+	// fixture that planted a defect.
+	CleanAlarm bool
+
+	// Errored marks a fixture whose review call failed after the harness's
+	// own retries, or whose output could not be parsed (ADR-0043 §3). Such
+	// a run is scored as a miss for every expected finding and, for a
+	// clean fixture, as a CleanAlarm — see ErrorScore.
+	Errored bool
+
+	// ErrorMsg is the last attempt's error text when Errored is true (empty
+	// otherwise). RunCorpus previously swallowed this after exhausting
+	// retries — a run's log looked identical whether a model genuinely
+	// missed every finding or every call to it failed. Carrying the message
+	// through lets the caller log it instead (review 2026-09-24, MAJOR).
+	ErrorMsg string
+}
+
+// IsBuggy reports whether this fixture had at least one planted defect —
+// the same "expected == 0 means clean" rule Recall/Precision already use.
+func (s FixtureScore) IsBuggy() bool {
+	return s.TruePositives+s.FalseNegatives > 0
 }
 
 // Precision = TP / (TP + FP). A run that produced no findings is vacuously
@@ -68,9 +106,9 @@ func (s FixtureScore) Recall() float64 {
 	return float64(s.TruePositives) / float64(expected)
 }
 
-// FalsePositiveRate = silence violations ÷ silence anchors. Returns 0 when
-// the fixture defines no anchors.
-func (s FixtureScore) FalsePositiveRate() float64 {
+// SilenceViolationRate = silence violations ÷ silence anchors. Returns 0
+// when the fixture defines no anchors.
+func (s FixtureScore) SilenceViolationRate() float64 {
 	if s.SilenceAnchors == 0 {
 		return 0
 	}
@@ -177,6 +215,42 @@ func Score(produced []render.Finding, fx Fixture) FixtureScore {
 		}
 	}
 
+	// ADR-0043 §3's fpr: a clean fixture (no planted defect) that draws at
+	// least one low-or-higher finding is an alarm. info is excluded from
+	// the numerator — it still counts toward Precision above.
+	if len(fx.Expected) == 0 {
+		for _, f := range produced {
+			if severityRank(f.Severity) >= severityRank(render.SeverityLow) {
+				score.CleanAlarm = true
+				break
+			}
+		}
+	}
+
+	return score
+}
+
+// ErrorScore produces the FixtureScore for a fixture whose review call
+// failed after the harness's own retries, or whose output could not be
+// parsed (ADR-0043 §3). It counts as a miss for every expected finding of a
+// buggy fixture, and as a CleanAlarm for a clean fixture — an errored model
+// is not silently dropped from the corpus it failed on.
+func ErrorScore(fx Fixture) FixtureScore {
+	score := FixtureScore{
+		Fixture:          fx.Name,
+		HeldOut:          fx.HeldOut,
+		SilenceAnchors:   len(fx.MustStaySilentOn),
+		CaughtByCategory: map[string]int{},
+		MissedByCategory: map[string]int{},
+		Errored:          true,
+	}
+	for _, exp := range fx.Expected {
+		score.FalseNegatives++
+		score.MissedByCategory[exp.Category]++
+	}
+	if len(fx.Expected) == 0 {
+		score.CleanAlarm = true
+	}
 	return score
 }
 
@@ -217,14 +291,113 @@ func (sc Scorecard) Recall() float64 {
 	return float64(tp) / float64(tp+fn)
 }
 
-// FalsePositiveRate is the corpus-wide silence violations ÷ silence anchors.
-func (sc Scorecard) FalsePositiveRate() float64 {
+// SilenceViolationRate is the corpus-wide silence violations ÷ silence
+// anchors.
+func (sc Scorecard) SilenceViolationRate() float64 {
 	_, _, _, sv, sa := sc.totals()
 	if sa == 0 {
 		return 0
 	}
 	return float64(sv) / float64(sa)
 }
+
+// RecallN is Recall's denominator (TP + FN, i.e. every planted defect the
+// run was scored against) — the n a reported recall figure should always
+// be printed alongside, since "87% recall" is meaningless without it.
+func (sc Scorecard) RecallN() int {
+	tp, fn, _, _, _ := sc.totals()
+	return tp + fn
+}
+
+// PrecisionN is Precision's denominator (TP + FP, every produced finding
+// the run was scored against).
+func (sc Scorecard) PrecisionN() int {
+	tp, _, fp, _, _ := sc.totals()
+	return tp + fp
+}
+
+// SilenceViolationRateN is SilenceViolationRate's denominator (total silence
+// anchors in the scored fixtures).
+func (sc Scorecard) SilenceViolationRateN() int {
+	_, _, _, _, sa := sc.totals()
+	return sa
+}
+
+// NBuggy is the number of fixtures in the scorecard that planted at least
+// one defect (mirrors Recall's own "expected == 0 means clean" rule).
+func (sc Scorecard) NBuggy() int {
+	n := 0
+	for _, f := range sc.Fixtures {
+		if f.IsBuggy() {
+			n++
+		}
+	}
+	return n
+}
+
+// NClean is the number of clean-control fixtures (no planted defect) in
+// the scorecard.
+func (sc Scorecard) NClean() int {
+	return len(sc.Fixtures) - sc.NBuggy()
+}
+
+// NExpected is the total number of planted defects (expected findings)
+// across every fixture in the scorecard.
+func (sc Scorecard) NExpected() int {
+	n := 0
+	for _, f := range sc.Fixtures {
+		n += f.TruePositives + f.FalseNegatives
+	}
+	return n
+}
+
+// CleanAlarms is the count of clean-control fixtures on which this run
+// raised at least one low-or-higher finding — ADR-0043 §3's fpr numerator
+// for a single Scorecard. Pool across k runs by summing CleanAlarms() and
+// dividing by (runs × NClean()), not by averaging each run's own rate.
+func (sc Scorecard) CleanAlarms() int {
+	n := 0
+	for _, f := range sc.Fixtures {
+		if f.CleanAlarm {
+			n++
+		}
+	}
+	return n
+}
+
+// Errors is the count of fixtures in the scorecard whose run errored after
+// retries (ADR-0043 §3) — a provider failure or an unparseable response,
+// recorded rather than aborting the corpus.
+func (sc Scorecard) Errors() int {
+	n := 0
+	for _, f := range sc.Fixtures {
+		if f.Errored {
+			n++
+		}
+	}
+	return n
+}
+
+// TotalUsage sums the provider usage reported across every fixture in the
+// scorecard — the basis for a cost-per-review figure.
+func (sc Scorecard) TotalUsage() provider.Usage {
+	var u provider.Usage
+	for _, f := range sc.Fixtures {
+		u.InputTokens += f.Usage.InputTokens
+		u.OutputTokens += f.Usage.OutputTokens
+		u.CachedInputTokens += f.Usage.CachedInputTokens
+	}
+	return u
+}
+
+// Scorecard.USDPerReview was removed (review 2026-09-24, BLOCKER follow-up):
+// it priced usage via provider.Pricing.Cost, which applies a cache-hit
+// discount — the same bug fixed in results.go's BuildRow by
+// uncachedInputOutputCost. It had no callers (BuildRow computes the
+// ADR-0043 §4 usd_per_review field directly from TotalUsage), so rather
+// than keep two cost formulas in this package that could drift apart
+// again, it's gone; call uncachedInputOutputCost(pricing, sc.TotalUsage())
+// directly if a scorecard-level figure is needed again.
 
 // slice returns a Scorecard containing only the fixtures whose HeldOut flag
 // equals heldOut, preserving provider/model.

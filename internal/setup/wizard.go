@@ -5,6 +5,9 @@ package setup
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 
@@ -394,17 +397,82 @@ func selectModel(ctx context.Context, spec *ProviderSpec, choices *Choices, cat 
 		}
 		models = discovered
 	}
+	form := huh.NewForm(huh.NewGroup(newModelSelect(spec, models, choices, cat)))
+	return form.RunWithContext(ctx)
+}
+
+// newModelSelect builds the model picker. It is split out of selectModel so
+// tests can inspect the options and the preselected value without driving a
+// terminal (huh cannot run headlessly; see LoadRunConfig).
+//
+// For a static model list (every NeedsKey provider) an empty choices.Model is
+// first set to the provider's DefaultModel, so pressing Enter accepts the
+// default rather than whichever model the catalog happens to list first
+// (ADR-0043). Discovered lists (ollama) keep huh's first-entry behaviour:
+// there is no default we could name for whatever the user has pulled.
+func newModelSelect(spec *ProviderSpec, models []string, choices *Choices, cat *i18n.Catalog) *huh.Select[string] {
+	var md provider.Metadata
+	var haveMD bool
+	if !spec.NeedsURL {
+		md, haveMD = provider.MetadataFor(spec.Name)
+	}
+	if haveMD && choices.Model == "" && slices.Contains(models, md.DefaultModel) {
+		choices.Model = md.DefaultModel
+	}
 	options := make([]huh.Option[string], 0, len(models))
 	for _, m := range models {
-		options = append(options, huh.NewOption(m, m))
+		options = append(options, huh.NewOption(modelLabel(m, md, haveMD, cat), m))
 	}
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().
-			Title(tr(cat, "setup.model.prompt", "Pick a model:")).
-			Options(options...).
-			Value(&choices.Model),
-	))
-	return form.RunWithContext(ctx)
+	return huh.NewSelect[string]().
+		Title(tr(cat, "setup.model.prompt", "Pick a model:")).
+		Options(options...).
+		Value(&choices.Model)
+}
+
+// modelLabel renders one picker entry. Only the label carries price and
+// signal; the option value stays the bare model ID so the config the wizard
+// writes is unchanged.
+//
+// A cataloged model shows its list price per 1M input/output tokens from the
+// provider metadata and "not measured": no benchmark results ship with the
+// binary yet, so the wizard makes no quality claim it cannot back. A model
+// with no price is marked "local" instead of showing a misleading $0. The
+// only such model today is a discovered ollama one: static lists come from
+// md.Models, so every static entry has a catalog row. The boundary is
+// deliberate — a zero-priced API model (e.g. a free preview) added to the
+// catalog would be mislabeled "local", which TestModelLabelsShowPriceAndSignal
+// catches by requiring a "$" on every static label; give such a model its
+// own label then instead of relaxing the test.
+func modelLabel(model string, md provider.Metadata, haveMD bool, cat *i18n.Catalog) string {
+	const sep = " · "
+	var pricing provider.Pricing
+	if haveMD {
+		for _, mi := range md.Models {
+			if mi.ID == model {
+				pricing = mi.Pricing
+				break
+			}
+		}
+	}
+	var b strings.Builder
+	b.WriteString(model)
+	if pricing.InputPer1M == 0 && pricing.OutputPer1M == 0 {
+		b.WriteString(sep + tr(cat, "setup.model.local", "local"))
+	} else {
+		b.WriteString(sep + "$" + formatPrice(pricing.InputPer1M) + "/1M " + tr(cat, "setup.model.price_in", "in"))
+		b.WriteString(sep + "$" + formatPrice(pricing.OutputPer1M) + "/1M " + tr(cat, "setup.model.price_out", "out"))
+		b.WriteString(sep + tr(cat, "setup.model.not_measured", "not measured"))
+	}
+	if haveMD && model == md.DefaultModel {
+		b.WriteString(sep + tr(cat, "setup.model.default", "default"))
+	}
+	return b.String()
+}
+
+// formatPrice prints a USD-per-1M figure with no trailing zeros ("3",
+// "0.15", "1.25") so the label stays as short as the catalog's numbers.
+func formatPrice(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
 // notEmptyFor builds a validator closure that emits a localised error

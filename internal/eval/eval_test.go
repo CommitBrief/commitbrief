@@ -4,13 +4,19 @@ package eval
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/CommitBrief/commitbrief/internal/lang"
 	"github.com/CommitBrief/commitbrief/internal/provider/mock"
 	"github.com/CommitBrief/commitbrief/internal/render"
+	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
 // Corpus composition the published docs cite (README "Measured review
@@ -18,10 +24,10 @@ import (
 // locked here so a fixture added or annotated without updating the numbers
 // fails CI instead of silently drifting the published figures.
 const (
-	wantFixtures       = 23
+	wantFixtures       = 40
 	wantPlantedDefects = 23
-	wantCleanControls  = 3
-	wantHeldOut        = 6
+	wantCleanControls  = 20
+	wantHeldOut        = 8
 )
 
 // TestCorpusComposition pins the counts the docs advertise (drift guard
@@ -147,10 +153,36 @@ func TestEvalMockCorpus(t *testing.T) {
 	if got := sc.Precision(); got != 1 {
 		t.Errorf("aggregate precision = %v, want 1", got)
 	}
-	if got := sc.FalsePositiveRate(); got != 0 {
-		t.Errorf("aggregate false-positive rate = %v, want 0", got)
+	if got := sc.SilenceViolationRate(); got != 0 {
+		t.Errorf("aggregate silence violation rate = %v, want 0", got)
 	}
-	t.Logf("deterministic corpus: %d fixtures, all ideal-mock-perfect", len(fixtures))
+	// n_clean/n_buggy and the language distribution are logged so a corpus
+	// change (fixture added/removed, language rebalanced) is visible in the
+	// test log without cross-referencing TestCorpusComposition or grepping
+	// testdata — the log line previously only said "40 fixtures", which
+	// couldn't tell a clean/buggy imbalance or a language skew apart from a
+	// healthy corpus (review 2026-09-24, MINOR).
+	var nClean, nBuggy int
+	langCounts := map[string]int{}
+	for _, fx := range fixtures {
+		if len(fx.Expected) == 0 {
+			nClean++
+		} else {
+			nBuggy++
+		}
+		langCounts[fx.Language]++
+	}
+	langs := make([]string, 0, len(langCounts))
+	for l := range langCounts {
+		langs = append(langs, l)
+	}
+	sort.Strings(langs)
+	dist := make([]string, 0, len(langs))
+	for _, l := range langs {
+		dist = append(dist, fmt.Sprintf("%s=%d", l, langCounts[l]))
+	}
+	t.Logf("deterministic corpus: %d fixtures (n_clean=%d n_buggy=%d), all ideal-mock-perfect, languages: %s",
+		len(fixtures), nClean, nBuggy, strings.Join(dist, " "))
 }
 
 func TestLoadCorpusSorted(t *testing.T) {
@@ -318,4 +350,201 @@ func TestScoreMatching(t *testing.T) {
 			t.Errorf("clean diff: got recall=%v precision=%v, want 1/1", got.Recall(), got.Precision())
 		}
 	})
+}
+
+// TestCleanAlarm pins ADR-0043 §3's fpr numerator: a clean-control fixture
+// (no planted defect) only counts as an alarm when a produced finding is
+// low severity or higher. An info-only finding is real signal for
+// Precision but must never trip CleanAlarm — the severity rubric defines
+// info as "no action required," so scoring it as an alarm would penalize a
+// model for correctly staying quiet.
+func TestCleanAlarm(t *testing.T) {
+	clean := Fixture{Name: "clean-control"} // no Expected findings
+
+	t.Run("info-only finding does not alarm", func(t *testing.T) {
+		got := Score([]render.Finding{
+			{Severity: render.SeverityInfo, File: "pkg/a.go", Line: 10},
+		}, clean)
+		if got.CleanAlarm {
+			t.Error("CleanAlarm = true, want false for an info-only finding on a clean fixture")
+		}
+	})
+
+	t.Run("no findings does not alarm", func(t *testing.T) {
+		got := Score(nil, clean)
+		if got.CleanAlarm {
+			t.Error("CleanAlarm = true, want false when nothing was produced")
+		}
+	})
+
+	t.Run("low severity finding alarms", func(t *testing.T) {
+		got := Score([]render.Finding{
+			{Severity: render.SeverityLow, File: "pkg/a.go", Line: 10},
+		}, clean)
+		if !got.CleanAlarm {
+			t.Error("CleanAlarm = false, want true for a low-severity finding on a clean fixture")
+		}
+	})
+
+	t.Run("high severity finding alarms", func(t *testing.T) {
+		got := Score([]render.Finding{
+			{Severity: render.SeverityHigh, File: "pkg/a.go", Line: 10},
+		}, clean)
+		if !got.CleanAlarm {
+			t.Error("CleanAlarm = false, want true for a high-severity finding on a clean fixture")
+		}
+	})
+
+	t.Run("buggy fixture never alarms even with low severity findings", func(t *testing.T) {
+		buggy := Fixture{
+			Name:     "buggy",
+			Expected: []ExpectedFinding{{ID: "a", File: "pkg/a.go", Line: 10, Category: "bug"}},
+		}
+		got := Score([]render.Finding{
+			{Severity: render.SeverityLow, File: "pkg/z.go", Line: 999},
+		}, buggy)
+		if got.CleanAlarm {
+			t.Error("CleanAlarm = true, want false — fixture planted a defect, so it is not a clean control")
+		}
+	})
+}
+
+// TestPromptSHA256 pins PromptSHA256's formula (ADR-0043 §4): a stable,
+// deterministic fingerprint of the (system, user-template) pair that
+// changes whenever either text changes, independent of any fixture's diff.
+func TestPromptSHA256(t *testing.T) {
+	got := PromptSHA256()
+	if len(got) != 64 {
+		t.Fatalf("PromptSHA256() = %q (len %d), want a 64-char lowercase hex SHA-256", got, len(got))
+	}
+	for _, r := range got {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			t.Fatalf("PromptSHA256() = %q, want lowercase hex only", got)
+		}
+	}
+
+	// Determinism: calling it twice with no state change yields the same
+	// hash — a results row's prompt_sha256 must be reproducible across
+	// invocations, not just within one.
+	again := PromptSHA256()
+	if got != again {
+		t.Errorf("PromptSHA256() not deterministic: %q vs %q", got, again)
+	}
+
+	// Independent of any fixture's diff — buildRequest for two fixtures
+	// with different diffs must not change the prompt fingerprint, since it
+	// hashes the template before diff substitution.
+	system, userTpl := rules.Build(rules.Default(), lang.English(), "")
+	h := sha256.New()
+	h.Write([]byte(system))
+	h.Write([]byte{0})
+	h.Write([]byte(userTpl))
+	want := hex.EncodeToString(h.Sum(nil))
+	if got != want {
+		t.Errorf("PromptSHA256() = %q, want %q (recomputed from the same rules.Build inputs)", got, want)
+	}
+}
+
+// TestBuildRequestNumberedDiff pins the production/eval prompt-parity fix:
+// the review.go pipeline numbers every diff line (`<n>| `) before it reaches
+// the model, and the eval harness must send the same numbered form via
+// numberedFixtureDiff — not the raw fixture diff — or the corpus measures a
+// prompt the CLI never actually ships.
+func TestBuildRequestNumberedDiff(t *testing.T) {
+	fx := Fixture{
+		Name: "numbered",
+		Diff: "diff --git a/pkg/a.go b/pkg/a.go\n" +
+			"--- a/pkg/a.go\n" +
+			"+++ b/pkg/a.go\n" +
+			"@@ -1,2 +1,2 @@\n" +
+			"-old line\n" +
+			"+new line\n" +
+			" context line\n",
+	}
+
+	req := buildRequest(fx, "test-model")
+
+	if strings.Contains(req.UserPrompt, "+new line\n") && !strings.Contains(req.UserPrompt, "|") {
+		t.Fatalf("user prompt looks like the raw diff (no numbering) — numberedFixtureDiff was not applied:\n%s", req.UserPrompt)
+	}
+	if !strings.Contains(req.UserPrompt, "| +new line") {
+		t.Errorf("user prompt missing a numbered `| +new line` line — want the same `<n>| ` prefix review.go's pipeline sends:\n%s", req.UserPrompt)
+	}
+	if !strings.Contains(req.UserPrompt, "| -old line") {
+		t.Errorf("user prompt missing a numbered `| -old line` line:\n%s", req.UserPrompt)
+	}
+
+	// Cross-check against numberedFixtureDiff directly, so this test fails
+	// loudly if buildRequest ever stops routing through it.
+	want := numberedFixtureDiff(fx)
+	if !strings.Contains(req.UserPrompt, want) {
+		t.Error("buildRequest's UserPrompt does not contain numberedFixtureDiff's output verbatim")
+	}
+}
+
+// TestNumberedFixtureDiffDropsGoSum pins numberedFixtureDiff's filtering
+// step (runner.go:48, via builtinIgnoreMatcher): a fixture diff touching
+// go.sum alongside a real source file must have the go.sum hunk stripped
+// before numbering, the same way review.go's production pipeline excludes
+// it — otherwise the corpus measures a prompt the CLI never actually ships
+// (re-review 1, MINOR-C).
+func TestNumberedFixtureDiffDropsGoSum(t *testing.T) {
+	fx := Fixture{
+		Name: "go-sum-filtered",
+		Diff: "diff --git a/pkg/a.go b/pkg/a.go\n" +
+			"--- a/pkg/a.go\n" +
+			"+++ b/pkg/a.go\n" +
+			"@@ -1,2 +1,2 @@\n" +
+			"-old line\n" +
+			"+new line\n" +
+			" context line\n" +
+			"diff --git a/go.sum b/go.sum\n" +
+			"--- a/go.sum\n" +
+			"+++ b/go.sum\n" +
+			"@@ -1,1 +1,1 @@\n" +
+			"-h1:oldhash=\n" +
+			"+h1:newhash=\n",
+	}
+
+	got := numberedFixtureDiff(fx)
+
+	if strings.Contains(got, "go.sum") {
+		t.Errorf("numberedFixtureDiff kept the go.sum hunk, want it filtered out by the built-in ignore matcher:\n%s", got)
+	}
+	if !strings.Contains(got, "new line") {
+		t.Errorf("numberedFixtureDiff dropped the real pkg/a.go hunk along with go.sum:\n%s", got)
+	}
+}
+
+// TestRunCorpusRecordsProviderError pins RunCorpus's error path
+// (runner.go:222-234): when a fixture's review call fails on every attempt,
+// the resulting Scorecard's FixtureScore must be marked Errored with a
+// non-empty ErrorMsg rather than silently looking like a model that missed
+// every finding (re-review 1, MINOR-C).
+func TestRunCorpusRecordsProviderError(t *testing.T) {
+	m := mock.New()
+	m.ReviewErr = errors.New("boom: mock review failure")
+
+	fx := Fixture{
+		Name:     "will-error",
+		Expected: []ExpectedFinding{{ID: "a", File: "pkg/a.go", Line: 10, Category: "bug"}},
+	}
+
+	sc, err := RunCorpus(context.Background(), m, "", []Fixture{fx})
+	if err != nil {
+		t.Fatalf("RunCorpus: %v", err)
+	}
+	if len(sc.Fixtures) != 1 {
+		t.Fatalf("len(Fixtures) = %d, want 1", len(sc.Fixtures))
+	}
+	fs := sc.Fixtures[0]
+	if !fs.Errored {
+		t.Error("Errored = false, want true after every attempt failed")
+	}
+	if fs.ErrorMsg == "" {
+		t.Error("ErrorMsg is empty, want the provider's error text")
+	}
+	if !strings.Contains(fs.ErrorMsg, "boom") {
+		t.Errorf("ErrorMsg = %q, want it to contain the underlying provider error", fs.ErrorMsg)
+	}
 }

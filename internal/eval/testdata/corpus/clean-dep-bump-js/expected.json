@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "package.json", "line": 6, "reason": "Routine patch bump of zod (3.23.7 → 3.23.8); no breaking changes and no known advisories for the target version."}
+  ]
+}

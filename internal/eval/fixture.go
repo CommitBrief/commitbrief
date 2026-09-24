@@ -3,6 +3,8 @@
 package eval
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -174,4 +176,71 @@ func LoadCorpus(root string) ([]Fixture, error) {
 	}
 	sort.Slice(fixtures, func(i, j int) bool { return fixtures[i].Name < fixtures[j].Name })
 	return fixtures, nil
+}
+
+// LanguageDistribution counts fixtures per answer-key language. Every
+// reported ratio (recall/precision/fpr) must carry its language mix
+// alongside n, so a results row and a `make eval` summary both build this
+// from the same fixture slice they scored. A fixture whose expected.json
+// omits "language" is counted under "unknown" rather than silently
+// dropped — a gap in the corpus metadata should be visible, not hidden.
+func LanguageDistribution(fixtures []Fixture) map[string]int {
+	out := map[string]int{}
+	for _, fx := range fixtures {
+		lang := fx.Language
+		if lang == "" {
+			lang = "unknown"
+		}
+		out[lang]++
+	}
+	return out
+}
+
+// CorpusFingerprint returns a stable SHA-256 fingerprint of the corpus
+// rooted at root (ADR-0043 §4): for every fixture directory in
+// directory-name order (the same order LoadCorpus returns), the fixture's
+// name plus the raw bytes of its input.diff and expected.json.
+// README.md and mock_response.json are deliberately excluded — one
+// documents a fixture, the other only drives the mock tier, and neither is
+// part of what a live measurement is graded against, so editing either
+// must not change the fingerprint a results row is keyed to. Reads files
+// directly rather than going through LoadFixture so the fingerprint covers
+// the exact on-disk expected.json bytes, not the struct JSON round-tripped
+// back through it.
+func CorpusFingerprint(root string) (string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", fmt.Errorf("eval: fingerprint corpus %q: %w", root, err)
+	}
+	var names []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, statErr := os.Stat(filepath.Join(root, entry.Name(), "input.diff")); statErr != nil {
+			continue // not a fixture directory
+		}
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+
+	h := sha256.New()
+	for _, name := range names {
+		dir := filepath.Join(root, name)
+		diffBytes, err := os.ReadFile(filepath.Join(dir, "input.diff"))
+		if err != nil {
+			return "", fmt.Errorf("eval: fingerprint fixture %q: read input.diff: %w", name, err)
+		}
+		keyBytes, err := os.ReadFile(filepath.Join(dir, "expected.json"))
+		if err != nil {
+			return "", fmt.Errorf("eval: fingerprint fixture %q: read expected.json: %w", name, err)
+		}
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		h.Write(diffBytes)
+		h.Write([]byte{0})
+		h.Write(keyBytes)
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
