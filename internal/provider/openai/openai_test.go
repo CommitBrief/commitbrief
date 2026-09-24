@@ -23,6 +23,9 @@ func TestModelsList(t *testing.T) {
 		ModelGPT55:     true,
 		ModelGPT54Mini: true,
 		ModelGPT55Pro:  true,
+		ModelGPT6Astra: true,
+		ModelGPT6Sol:   true,
+		ModelGPT6Luna:  true,
 	}
 	if len(got) != len(want) {
 		t.Errorf("Models() length = %d, want %d", len(got), len(want))

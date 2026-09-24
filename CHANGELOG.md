@@ -10,6 +10,22 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **Anthropic**: cataloged `claude-opus-5-5`, `claude-sonnet-5`, and
+  `claude-fable-5-1` alongside the existing Opus 4.8 / Sonnet 4.6 / Haiku
+  4.5 models, with pricing and 1M-token context windows sourced from
+  Anthropic's official pricing and model docs.
+- **OpenAI**: cataloged `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` —
+  Responses-API-only reasoning models with a 1,050,000-token context
+  window — alongside the existing GPT-4o / GPT-5.5 family.
+- **Gemini**: cataloged `gemini-3.8-flash` and `gemini-3.5-flash-lite`
+  alongside the existing Pro 3.1 / Flash 3.5 / Flash-Lite 3.1 models.
+
+### Changed
+- **Gemini**: corrected `CachedInputPer1M` for all cataloged models to
+  the officially published "Context caching" read price (previously an
+  unsourced ~0.25x-of-input approximation for the pre-existing models).
+
 ## [1.17.1] - 2026-09-23
 
 ### Changed

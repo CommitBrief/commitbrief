@@ -18,8 +18,8 @@ import (
 
 func TestModelsList(t *testing.T) {
 	got := Models()
-	if len(got) != 3 {
-		t.Errorf("Models() length = %d, want 3", len(got))
+	if len(got) != 5 {
+		t.Errorf("Models() length = %d, want 5", len(got))
 	}
 }
 

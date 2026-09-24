@@ -40,6 +40,21 @@ var pricingTable = map[string]provider.Pricing{
 		OutputPer1M:      180.00,
 		CachedInputPer1M: 0,
 	},
+	ModelGPT6Astra: {
+		InputPer1M:       10.00,
+		OutputPer1M:      50.00,
+		CachedInputPer1M: 1.00,
+	},
+	ModelGPT6Sol: {
+		InputPer1M:       2.00,
+		OutputPer1M:      10.00,
+		CachedInputPer1M: 0.20,
+	},
+	ModelGPT6Luna: {
+		InputPer1M:       0.10,
+		OutputPer1M:      0.50,
+		CachedInputPer1M: 0.01,
+	},
 }
 
 func pricingFor(model string) provider.Pricing {

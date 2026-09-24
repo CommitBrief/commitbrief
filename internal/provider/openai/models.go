@@ -10,6 +10,9 @@ const (
 	ModelGPT55     = "gpt-5.5"
 	ModelGPT54Mini = "gpt-5.4-mini"
 	ModelGPT55Pro  = "gpt-5.5-pro"
+	ModelGPT6Astra = "gpt-6-astra"
+	ModelGPT6Sol   = "gpt-6-sol"
+	ModelGPT6Luna  = "gpt-6-luna"
 
 	DefaultModel = ModelGPT54Mini
 )
@@ -18,15 +21,22 @@ var supportedModels = []string{
 	ModelGPT54Mini,
 	ModelGPT55,
 	ModelGPT55Pro,
+	ModelGPT6Astra,
+	ModelGPT6Sol,
+	ModelGPT6Luna,
 	ModelGPT4o,
 	ModelGPT4oMini,
 }
 
 // responsesAPIModels are served only through the Responses API rather than
-// Chat Completions (gpt-5.5-pro operates exclusively there per OpenAI's
-// model docs). Review/TestConnection route these calls differently.
+// Chat Completions (gpt-5.5-pro and the gpt-6 family operate exclusively
+// there per OpenAI's model docs). Review/TestConnection route these calls
+// differently.
 var responsesAPIModels = map[string]bool{
-	ModelGPT55Pro: true,
+	ModelGPT55Pro:  true,
+	ModelGPT6Astra: true,
+	ModelGPT6Sol:   true,
+	ModelGPT6Luna:  true,
 }
 
 // usesResponsesAPI reports whether the model must be driven through the
@@ -42,6 +52,9 @@ var reasoningModels = map[string]bool{
 	ModelGPT55:     true,
 	ModelGPT54Mini: true,
 	ModelGPT55Pro:  true,
+	ModelGPT6Astra: true,
+	ModelGPT6Sol:   true,
+	ModelGPT6Luna:  true,
 }
 
 // defaultMaxTokensFor returns the output-token ceiling to use when the

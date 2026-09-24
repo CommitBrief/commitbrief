@@ -18,10 +18,13 @@ import (
 
 func TestModelsList(t *testing.T) {
 	got := Models()
-	if len(got) != 3 {
-		t.Errorf("Models() length = %d, want 3", len(got))
+	if len(got) != 6 {
+		t.Errorf("Models() length = %d, want 6", len(got))
 	}
 	want := map[string]bool{
+		ModelOpus55:   true,
+		ModelSonnet5:  true,
+		ModelFable51:  true,
 		ModelOpus48:   true,
 		ModelSonnet46: true,
 		ModelHaiku45:  true,

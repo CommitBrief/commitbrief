@@ -34,6 +34,33 @@
             "output_per_1m": 5,
             "cached_input_per_1m": 0.1
           }
+        },
+        {
+          "id": "claude-opus-5-5",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 4,
+            "output_per_1m": 20,
+            "cached_input_per_1m": 0.2
+          }
+        },
+        {
+          "id": "claude-sonnet-5",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 2,
+            "output_per_1m": 10,
+            "cached_input_per_1m": 0.2
+          }
+        },
+        {
+          "id": "claude-fable-5-1",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 10,
+            "output_per_1m": 50,
+            "cached_input_per_1m": 0.25
+          }
         }
       ]
     },
@@ -123,7 +150,7 @@
           "pricing": {
             "input_per_1m": 2,
             "output_per_1m": 12,
-            "cached_input_per_1m": 0.5
+            "cached_input_per_1m": 0.2
           }
         },
         {
@@ -133,7 +160,7 @@
           "pricing": {
             "input_per_1m": 1.5,
             "output_per_1m": 9,
-            "cached_input_per_1m": 0.375
+            "cached_input_per_1m": 0.15
           }
         },
         {
@@ -142,7 +169,25 @@
           "pricing": {
             "input_per_1m": 0.25,
             "output_per_1m": 1.5,
-            "cached_input_per_1m": 0.0625
+            "cached_input_per_1m": 0.025
+          }
+        },
+        {
+          "id": "gemini-3.8-flash",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 0.75,
+            "output_per_1m": 3.75,
+            "cached_input_per_1m": 0.075
+          }
+        },
+        {
+          "id": "gemini-3.5-flash-lite",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 0.3,
+            "output_per_1m": 2.5,
+            "cached_input_per_1m": 0.03
           }
         }
       ]
@@ -267,6 +312,33 @@
           "pricing": {
             "input_per_1m": 30,
             "output_per_1m": 180
+          }
+        },
+        {
+          "id": "gpt-6-astra",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 10,
+            "output_per_1m": 50,
+            "cached_input_per_1m": 1
+          }
+        },
+        {
+          "id": "gpt-6-sol",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 2,
+            "output_per_1m": 10,
+            "cached_input_per_1m": 0.2
+          }
+        },
+        {
+          "id": "gpt-6-luna",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 0.1,
+            "output_per_1m": 0.5,
+            "cached_input_per_1m": 0.01
           }
         },
         {

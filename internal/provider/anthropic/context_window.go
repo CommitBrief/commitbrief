@@ -5,6 +5,9 @@ package anthropic
 const defaultContextWindow = 200_000
 
 var contextWindows = map[string]int{
+	ModelOpus55:   1_000_000,
+	ModelSonnet5:  1_000_000,
+	ModelFable51:  1_000_000,
 	ModelOpus48:   1_000_000,
 	ModelSonnet46: 1_000_000,
 	ModelHaiku45:  200_000,
