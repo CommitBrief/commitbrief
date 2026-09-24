@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-24
+
 ### Added
 - **Anthropic**: cataloged `claude-opus-5-5`, `claude-sonnet-5`, and
   `claude-fable-5-1` alongside the existing Opus 4.8 / Sonnet 4.6 / Haiku
@@ -2262,7 +2264,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/CommitBrief/commitbrief/compare/v1.17.1...v1.18.0
 [1.17.1]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/CommitBrief/commitbrief/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/CommitBrief/commitbrief/compare/v1.15.0...v1.16.0
