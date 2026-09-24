@@ -128,6 +128,66 @@ func TestModelCapabilitiesTable(t *testing.T) {
 	}
 }
 
+// TestPricingTableExactValues locks the exact per-1M-token rates in
+// pricingTable against an independent transcription, so a typo'd digit
+// (rather than a missing/zero rate, which TestModelCapabilitiesTable already
+// catches) fails a test instead of silently shipping.
+func TestPricingTableExactValues(t *testing.T) {
+	want := map[string]provider.Pricing{
+		ModelGPT4o: {
+			InputPer1M:       2.50,
+			OutputPer1M:      10.00,
+			CachedInputPer1M: 1.25,
+		},
+		ModelGPT4oMini: {
+			InputPer1M:       0.15,
+			OutputPer1M:      0.60,
+			CachedInputPer1M: 0.075,
+		},
+		ModelGPT55: {
+			InputPer1M:       5.00,
+			OutputPer1M:      30.00,
+			CachedInputPer1M: 0.50,
+		},
+		ModelGPT54Mini: {
+			InputPer1M:       0.75,
+			OutputPer1M:      4.50,
+			CachedInputPer1M: 0.075,
+		},
+		ModelGPT55Pro: {
+			InputPer1M:       30.00,
+			OutputPer1M:      180.00,
+			CachedInputPer1M: 0,
+		},
+		ModelGPT6Astra: {
+			InputPer1M:       10.00,
+			OutputPer1M:      50.00,
+			CachedInputPer1M: 1.00,
+		},
+		ModelGPT6Sol: {
+			InputPer1M:       2.00,
+			OutputPer1M:      10.00,
+			CachedInputPer1M: 0.20,
+		},
+		ModelGPT6Luna: {
+			InputPer1M:       0.10,
+			OutputPer1M:      0.50,
+			CachedInputPer1M: 0.01,
+		},
+	}
+	for _, model := range Models() {
+		t.Run(model, func(t *testing.T) {
+			w, ok := want[model]
+			if !ok {
+				t.Fatalf("no expected pricing recorded for %s in this test", model)
+			}
+			if got := pricingFor(model); got != w {
+				t.Errorf("pricingFor(%s) = %+v, want %+v", model, got, w)
+			}
+		})
+	}
+}
+
 func TestNewMissingAPIKey(t *testing.T) {
 	_, err := New(config.ProviderConfig{})
 	if !errors.Is(err, provider.ErrUnauthorized) {

@@ -51,23 +51,28 @@ func supportsForcedToolChoice(model string) bool {
 	return !noForcedToolChoiceModels[model]
 }
 
-// extendedThinkingDefaultMaxTokensModels get a higher default max_tokens
-// than the historical 4096 when the caller specifies none. Thinking tokens
-// count toward max_tokens on these models (adaptive thinking is on by
-// default and cannot be fully disabled on Opus 5.5 above effort "high" —
-// same source as noForcedToolChoiceModels), so a low ceiling can truncate
-// or starve the visible response. 16000 mirrors the max_tokens Anthropic's
-// own adaptive-thinking examples use.
-var extendedThinkingDefaultMaxTokensModels = map[string]bool{
+// adaptiveThinkingDefaultMaxTokensModels get a higher default max_tokens
+// than the historical 4096 when the caller specifies none. Adaptive thinking
+// is on by default on these models and cannot be turned off at all on Opus
+// 5.5 and Fable 5.1 (the effort-"high" disable threshold in the same source
+// applies to Opus 5, not Opus 5.5). Thinking tokens count toward max_tokens,
+// so a low ceiling can truncate or starve the visible response. 16000
+// mirrors the max_tokens Anthropic's own adaptive-thinking examples use.
+// Same source as noForcedToolChoiceModels; deliberately a separate map since
+// it tracks a different capability — Sonnet 5 also has thinking on by
+// default (needs the raised ceiling here) but, unlike Opus 5.5/Fable 5.1,
+// still accepts a forced tool_choice (stays out of noForcedToolChoiceModels).
+var adaptiveThinkingDefaultMaxTokensModels = map[string]bool{
 	ModelOpus55:  true,
 	ModelFable51: true,
+	ModelSonnet5: true,
 }
 
 // defaultMaxTokensFor returns the output-token ceiling to use when the
 // caller did not specify one.
 func defaultMaxTokensFor(model string) int64 {
-	if extendedThinkingDefaultMaxTokensModels[model] {
-		return defaultExtendedThinkingMaxTokens
+	if adaptiveThinkingDefaultMaxTokensModels[model] {
+		return defaultAdaptiveThinkingMaxTokens
 	}
 	return defaultMaxTokens
 }

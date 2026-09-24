@@ -111,6 +111,34 @@ func TestPricingTableCoversAllModels(t *testing.T) {
 	}
 }
 
+// TestPricingTableExactValues asserts the exact $/1M rate triplet for every
+// catalog model, transcribed independently from pricing.go's own table.
+// TestPricingTableCoversAllModels alone only checks "non-zero" and "cached <
+// full", which a typo (e.g. an output rate of 5 instead of 50) sails
+// straight through — re-review 1 NIT. A future accidental edit to
+// pricingTable now has to change these expected values too.
+func TestPricingTableExactValues(t *testing.T) {
+	want := map[string]provider.Pricing{
+		ModelOpus55:   {InputPer1M: 4.00, OutputPer1M: 20.00, CachedInputPer1M: 0.20},
+		ModelSonnet5:  {InputPer1M: 2.00, OutputPer1M: 10.00, CachedInputPer1M: 0.20},
+		ModelFable51:  {InputPer1M: 10.00, OutputPer1M: 50.00, CachedInputPer1M: 0.25},
+		ModelOpus48:   {InputPer1M: 5.00, OutputPer1M: 25.00, CachedInputPer1M: 0.50},
+		ModelSonnet46: {InputPer1M: 3.00, OutputPer1M: 15.00, CachedInputPer1M: 0.30},
+		ModelHaiku45:  {InputPer1M: 1.00, OutputPer1M: 5.00, CachedInputPer1M: 0.10},
+	}
+	for _, model := range Models() {
+		t.Run(model, func(t *testing.T) {
+			w, ok := want[model]
+			if !ok {
+				t.Fatalf("no expected pricing transcribed for %s; add it here", model)
+			}
+			if got := pricingFor(model); got != w {
+				t.Errorf("pricingFor(%s) = %+v, want %+v", model, got, w)
+			}
+		})
+	}
+}
+
 func TestSystemPromptWithCacheEmpty(t *testing.T) {
 	if got := systemPromptWithCache(""); got != nil {
 		t.Errorf("empty prompt should yield nil, got %+v", got)
@@ -514,21 +542,22 @@ func TestBuildParamsFreeFormSkipsToolChoice(t *testing.T) {
 	}
 }
 
-// TestDefaultMaxTokensForExtendedThinkingModels locks the raised default
-// max_tokens ceiling for the two models whose adaptive thinking shares the
+// TestDefaultMaxTokensForAdaptiveThinkingModels locks the raised default
+// max_tokens ceiling for the three models whose adaptive thinking shares the
 // max_tokens budget with the visible response (see
-// extendedThinkingDefaultMaxTokensModels in models.go).
-func TestDefaultMaxTokensForExtendedThinkingModels(t *testing.T) {
-	if got := defaultMaxTokensFor(ModelOpus55); got != defaultExtendedThinkingMaxTokens {
-		t.Errorf("defaultMaxTokensFor(Opus55) = %d, want %d", got, defaultExtendedThinkingMaxTokens)
+// adaptiveThinkingDefaultMaxTokensModels in models.go). Sonnet 5 has
+// adaptive thinking on by default just like Opus 5.5 and Fable 5.1, even
+// though — unlike them — it still accepts a forced tool_choice.
+func TestDefaultMaxTokensForAdaptiveThinkingModels(t *testing.T) {
+	for _, model := range []string{ModelOpus55, ModelFable51, ModelSonnet5} {
+		if got := defaultMaxTokensFor(model); got != defaultAdaptiveThinkingMaxTokens {
+			t.Errorf("defaultMaxTokensFor(%s) = %d, want %d", model, got, defaultAdaptiveThinkingMaxTokens)
+		}
 	}
-	if got := defaultMaxTokensFor(ModelFable51); got != defaultExtendedThinkingMaxTokens {
-		t.Errorf("defaultMaxTokensFor(Fable51) = %d, want %d", got, defaultExtendedThinkingMaxTokens)
+	if defaultAdaptiveThinkingMaxTokens <= defaultMaxTokens {
+		t.Errorf("defaultAdaptiveThinkingMaxTokens (%d) should exceed defaultMaxTokens (%d)", defaultAdaptiveThinkingMaxTokens, defaultMaxTokens)
 	}
-	if defaultExtendedThinkingMaxTokens <= defaultMaxTokens {
-		t.Errorf("defaultExtendedThinkingMaxTokens (%d) should exceed defaultMaxTokens (%d)", defaultExtendedThinkingMaxTokens, defaultMaxTokens)
-	}
-	for _, model := range []string{ModelOpus48, ModelSonnet46, ModelHaiku45, ModelSonnet5} {
+	for _, model := range []string{ModelOpus48, ModelSonnet46, ModelHaiku45} {
 		if got := defaultMaxTokensFor(model); got != defaultMaxTokens {
 			t.Errorf("defaultMaxTokensFor(%s) = %d, want unchanged default %d", model, got, defaultMaxTokens)
 		}

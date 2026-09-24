@@ -20,15 +20,15 @@ import (
 
 const (
 	defaultMaxTokens = 4096
-	// defaultExtendedThinkingMaxTokens is the output ceiling for models in
-	// extendedThinkingDefaultMaxTokensModels (models.go) when the caller
+	// defaultAdaptiveThinkingMaxTokens is the output ceiling for models in
+	// adaptiveThinkingDefaultMaxTokensModels (models.go) when the caller
 	// specifies none. Thinking tokens are billed out of the same max_tokens
 	// budget as the visible response on these models, so the historical
 	// 4096 can leave no room for a findings JSON; 16000 mirrors the
 	// max_tokens value Anthropic's own adaptive-thinking examples use.
 	// https://platform.claude.com/docs/en/build-with-claude/extended-thinking
 	// (accessed 2026-09-24).
-	defaultExtendedThinkingMaxTokens = 16000
+	defaultAdaptiveThinkingMaxTokens = 16000
 	testPingPrompt                   = "ping"
 	testPingMaxTok                   = 8
 )

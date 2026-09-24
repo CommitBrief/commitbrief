@@ -90,6 +90,51 @@ func TestPricingTableCoversAllModels(t *testing.T) {
 	}
 }
 
+// TestPricingTableExactValues locks the exact per-1M-token rates in
+// pricingTable against an independent transcription, so a typo'd digit
+// (rather than a missing/zero rate, which TestPricingTableCoversAllModels
+// already catches) fails a test instead of silently shipping.
+func TestPricingTableExactValues(t *testing.T) {
+	want := map[string]provider.Pricing{
+		ModelPro31: {
+			InputPer1M:       2.00,
+			OutputPer1M:      12.00,
+			CachedInputPer1M: 0.20,
+		},
+		ModelFlash35: {
+			InputPer1M:       1.50,
+			OutputPer1M:      9.00,
+			CachedInputPer1M: 0.15,
+		},
+		ModelFlashLite31: {
+			InputPer1M:       0.25,
+			OutputPer1M:      1.50,
+			CachedInputPer1M: 0.025,
+		},
+		ModelFlash38: {
+			InputPer1M:       0.75,
+			OutputPer1M:      3.75,
+			CachedInputPer1M: 0.075,
+		},
+		ModelFlashLite35: {
+			InputPer1M:       0.30,
+			OutputPer1M:      2.50,
+			CachedInputPer1M: 0.03,
+		},
+	}
+	for _, model := range Models() {
+		t.Run(model, func(t *testing.T) {
+			w, ok := want[model]
+			if !ok {
+				t.Fatalf("no expected pricing recorded for %s in this test", model)
+			}
+			if got := pricingFor(model); got != w {
+				t.Errorf("pricingFor(%s) = %+v, want %+v", model, got, w)
+			}
+		})
+	}
+}
+
 func TestNewMissingAPIKey(t *testing.T) {
 	_, err := New(config.ProviderConfig{})
 	if !errors.Is(err, provider.ErrUnauthorized) {
