@@ -86,11 +86,11 @@ func TestEvalFlakyCorpus(t *testing.T) {
 	if got := sc.Precision(); got != 1 {
 		t.Errorf("flaky-slice precision = %v, want 1", got)
 	}
-	if got := sc.FalsePositiveRate(); got != 0 {
-		t.Errorf("flaky-slice false-positive rate = %v, want 0", got)
+	if got := sc.SilenceViolationRate(); got != 0 {
+		t.Errorf("flaky-slice silence violation rate = %v, want 0", got)
 	}
-	t.Logf("flaky slice: %d fixtures, precision=%.2f recall=%.2f false-positive-rate=%.2f",
-		len(fixtures), sc.Precision(), sc.Recall(), sc.FalsePositiveRate())
+	t.Logf("flaky slice: %d fixtures, precision=%.2f recall=%.2f silence-violation-rate=%.2f",
+		len(fixtures), sc.Precision(), sc.Recall(), sc.SilenceViolationRate())
 	for _, cr := range sc.CategoryRecall() {
 		t.Logf("   category %-24s recall=%d/%d", cr.Category, cr.Caught, cr.Total)
 	}

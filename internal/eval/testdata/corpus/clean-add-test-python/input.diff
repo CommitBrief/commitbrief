@@ -1,0 +1,15 @@
+diff --git a/tests/test_pricing.py b/tests/test_pricing.py
+new file mode 100644
+index 0000000..eeeeee1
+--- /dev/null
++++ b/tests/test_pricing.py
+@@ -0,0 +1,9 @@
++import pytest
++from app.pricing import apply_discount
++
++def test_apply_discount_normal():
++    assert apply_discount(100.0, 10) == pytest.approx(90.0)
++
++
++def test_apply_discount_clamps_upper_bound():
++    assert apply_discount(100.0, 150) == pytest.approx(0.0)

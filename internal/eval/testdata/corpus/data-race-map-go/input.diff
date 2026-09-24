@@ -2,7 +2,7 @@ diff --git a/internal/counter/counter.go b/internal/counter/counter.go
 index 1111111..2222222 100644
 --- a/internal/counter/counter.go
 +++ b/internal/counter/counter.go
-@@ -3,6 +3,15 @@ package counter
+@@ -3,5 +3,15 @@ package counter
  import "sync"
 
  func CountWords(docs []string) map[string]int {

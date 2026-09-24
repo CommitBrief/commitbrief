@@ -1,0 +1,19 @@
+diff --git a/src/retry.js b/src/retry.js
+index 3030301..3030302 100644
+--- a/src/retry.js
++++ b/src/retry.js
+@@ -1,10 +1,10 @@
+ async function withRetry(fn, max) {
+-  let n = 0;
+-  while (n < max) {
++  let retryCount = 0;
++  while (retryCount < max) {
+     try {
+       return await fn();
+     } catch (err) {
+-      n += 1;
+-      if (n >= max) throw err;
++      retryCount += 1;
++      if (retryCount >= max) throw err;
+     }
+   }

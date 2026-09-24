@@ -1,0 +1,19 @@
+diff --git a/src/cart.ts b/src/cart.ts
+index 7070701..7070702 100644
+--- a/src/cart.ts
++++ b/src/cart.ts
+@@ -1,12 +1,12 @@
+ interface CartItem {
+-  qty: number;
++  quantity: number;
+   unitPrice: number;
+ }
+ 
+ function lineTotal(item: CartItem): number {
+-  return item.qty * item.unitPrice;
++  return item.quantity * item.unitPrice;
+ }
+ 
+ function cartTotal(items: CartItem[]): number {
+   return items.reduce((sum, item) => sum + lineTotal(item), 0);
+ }

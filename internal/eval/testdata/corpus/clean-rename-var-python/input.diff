@@ -1,0 +1,12 @@
+diff --git a/app/invoice.py b/app/invoice.py
+index dddddd1..dddddd2 100644
+--- a/app/invoice.py
++++ b/app/invoice.py
+@@ -9,5 +9,5 @@ def line_total(item):
+ 
+ 
+ def apply_line_discount(item):
+-    d = item.discount_pct
+-    return line_total(item) * (1 - d / 100)
++    discount_pct = item.discount_pct
++    return line_total(item) * (1 - discount_pct / 100)

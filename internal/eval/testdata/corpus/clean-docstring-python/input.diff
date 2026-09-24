@@ -1,0 +1,15 @@
+diff --git a/app/orders.py b/app/orders.py
+index ffffff1..ffffff2 100644
+--- a/app/orders.py
++++ b/app/orders.py
+@@ -5,6 +5,10 @@ from dataclasses import dataclass
+ 
+ 
+ def cancel_order(order, reason):
++    """Cancel an order and record the cancellation reason.
++
++    Returns the updated order; raises ValueError if already cancelled.
++    """
+     if order.status == "cancelled":
+         raise ValueError("order already cancelled")
+     order.status = "cancelled"

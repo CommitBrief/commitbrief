@@ -1,0 +1,7 @@
+{
+  "language": "python",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "tests/test_pricing.py", "line": 4, "reason": "New unit test only; asserts existing, already-correct behavior."}
+  ]
+}

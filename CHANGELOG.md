@@ -20,11 +20,36 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   window — alongside the existing GPT-4o / GPT-5.5 family.
 - **Gemini**: cataloged `gemini-3.8-flash` and `gemini-3.5-flash-lite`
   alongside the existing Pro 3.1 / Flash 3.5 / Flash-Lite 3.1 models.
+- Eval corpus (`internal/eval/testdata/corpus/`) grown to 40 fixtures — 20
+  clean controls and 20 buggy — across Go, Python, JavaScript, and
+  TypeScript, giving `make eval-live` enough denominator to be statistically
+  meaningful (ADR-0043 §1's `n_buggy>=20`/`n_clean>=20` sufficiency floor).
+- `COMMITBRIEF_EVAL_RUNS=k` repeats the live eval corpus k times per
+  invocation and reports pooled recall/precision/fpr alongside the
+  per-run min/max spread, surfacing provider flakiness instead of hiding it
+  behind a single lucky (or unlucky) pass.
+- `COMMITBRIEF_EVAL_OUT=<path>` writes a machine-readable ADR-0043 §4
+  results row (`internal/eval/results.go`) to the given JSON file, keyed by
+  `{provider, model}` — re-measuring the same pair replaces its row, rows
+  for other pairs are kept, and a write refuses to mix rows measured
+  against a different corpus fingerprint or run count.
+- A written results row's `eligible` field is gated against the corpus's
+  sufficiency floor, ADR-0043 §2's fixed recall/fpr thresholds
+  (`recall>=0.90`, `fpr<=0.10`), and the current prompt hash. The
+  thresholds are hardcoded package constants (`internal/eval/results.go`),
+  not environment-configurable — ADR-0043 §1.5 disallows relaxing a
+  threshold for a given run.
 
 ### Changed
 - **Gemini**: corrected `CachedInputPer1M` for all cataloged models to
   the officially published "Context caching" read price (previously an
   unsourced ~0.25x-of-input approximation for the pre-existing models).
+
+### Fixed
+- The live eval harness now sends the model the same line-numbered diff
+  production review does (`internal/eval/runner.go`'s
+  `numberedFixtureDiff`), instead of the raw diff — eval measurements were
+  previously scored against a prompt the CLI never actually ships.
 
 ## [1.17.1] - 2026-09-23
 
