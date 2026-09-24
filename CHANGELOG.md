@@ -39,6 +39,11 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   thresholds are hardcoded package constants (`internal/eval/results.go`),
   not environment-configurable — ADR-0043 §1.5 disallows relaxing a
   threshold for a given run.
+- Setup wizard shows list price per model: each entry in the
+  `commitbrief setup` model picker reads
+  `<model> · $X/1M in · $Y/1M out · not measured`, with the provider's
+  default model marked `default`. Prices come from the provider catalog;
+  quality is reported as "not measured" until benchmark results ship.
 
 ### Changed
 - **Gemini**: corrected `CachedInputPer1M` for all cataloged models to
@@ -50,6 +55,10 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   production review does (`internal/eval/runner.go`'s
   `numberedFixtureDiff`), instead of the raw diff — eval measurements were
   previously scored against a prompt the CLI never actually ships.
+- `commitbrief setup`: pressing Enter on the model picker now accepts the
+  provider's default model instead of the first model in its list
+  (Anthropic, OpenAI, Gemini, DeepSeek, Mistral, Cohere; Ollama's
+  discovered list is unchanged).
 
 ## [1.17.1] - 2026-09-23
 
