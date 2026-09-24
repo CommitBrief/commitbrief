@@ -40,6 +40,12 @@ var pricingTable = map[string]provider.Pricing{
 		OutputPer1M:      180.00,
 		CachedInputPer1M: 0,
 	},
+	// The gpt-6 family (Astra/Sol/Luna) publishes tiered long-context
+	// pricing (a higher rate above a per-model input-token threshold,
+	// mirroring gpt-5.5 above). We deliberately snapshot the flat base tier
+	// for all three rather than modeling the tiers, same simplification as
+	// gpt-5.5 above; the verbose cost footer may under-report on very
+	// large inputs.
 	ModelGPT6Astra: {
 		InputPer1M:       10.00,
 		OutputPer1M:      50.00,

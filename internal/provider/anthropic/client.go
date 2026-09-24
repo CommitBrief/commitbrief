@@ -20,8 +20,17 @@ import (
 
 const (
 	defaultMaxTokens = 4096
-	testPingPrompt   = "ping"
-	testPingMaxTok   = 8
+	// defaultExtendedThinkingMaxTokens is the output ceiling for models in
+	// extendedThinkingDefaultMaxTokensModels (models.go) when the caller
+	// specifies none. Thinking tokens are billed out of the same max_tokens
+	// budget as the visible response on these models, so the historical
+	// 4096 can leave no room for a findings JSON; 16000 mirrors the
+	// max_tokens value Anthropic's own adaptive-thinking examples use.
+	// https://platform.claude.com/docs/en/build-with-claude/extended-thinking
+	// (accessed 2026-09-24).
+	defaultExtendedThinkingMaxTokens = 16000
+	testPingPrompt                   = "ping"
+	testPingMaxTok                   = 8
 )
 
 type Client struct {
@@ -145,7 +154,7 @@ func (c *Client) buildParams(req provider.Request) sdk.MessageNewParams {
 	}
 	maxTokens := int64(req.MaxTokens)
 	if maxTokens <= 0 {
-		maxTokens = defaultMaxTokens
+		maxTokens = defaultMaxTokensFor(model)
 	}
 	params := sdk.MessageNewParams{
 		Model:     sdk.Model(model),
@@ -159,7 +168,17 @@ func (c *Client) buildParams(req provider.Request) sdk.MessageNewParams {
 	// it for FreeForm (ADR-0015) so the model returns plain text.
 	if !req.FreeForm {
 		params.Tools = []sdk.ToolUnionParam{buildReportTool()}
-		params.ToolChoice = sdk.ToolChoiceParamOfTool(toolName)
+		if supportsForcedToolChoice(model) {
+			params.ToolChoice = sdk.ToolChoiceParamOfTool(toolName)
+		} else {
+			// Opus 5.5 and Fable 5.1 reject a forced tool_choice on every
+			// request (see noForcedToolChoiceModels in models.go); fall
+			// back to auto and let the model call the tool voluntarily. If
+			// it returns plain text instead, the existing ADR-0031
+			// fence-salvage/repair-retry path in the review pipeline
+			// handles it — no separate fallback here.
+			params.ToolChoice = sdk.ToolChoiceUnionParam{OfAuto: &sdk.ToolChoiceAutoParam{}}
+		}
 	}
 	return params
 }

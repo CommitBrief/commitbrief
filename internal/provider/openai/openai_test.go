@@ -37,6 +37,17 @@ func TestModelsList(t *testing.T) {
 	}
 }
 
+// TestModelsWizardDefaultOrder locks Models()[0]: the setup wizard reads
+// spec.Models (not DefaultModel) for its picker, so the first element is
+// what an Enter keypress selects (internal/setup/wizard.go). New models
+// must be appended, never inserted before it.
+func TestModelsWizardDefaultOrder(t *testing.T) {
+	got := Models()[0]
+	if got != ModelGPT54Mini {
+		t.Errorf("Models()[0] = %q, want %q (wizard's implicit default)", got, ModelGPT54Mini)
+	}
+}
+
 func TestModelsDefensiveCopy(t *testing.T) {
 	a := Models()
 	a[0] = "tampered"
@@ -78,6 +89,42 @@ func TestPricingLookup(t *testing.T) {
 	zero := pricingFor("unknown-model")
 	if zero.InputPer1M != 0 {
 		t.Errorf("unknown model should yield zero pricing, got %+v", zero)
+	}
+}
+
+// TestModelCapabilitiesTable locks usesResponsesAPI, defaultMaxTokensFor and
+// pricingFor (non-zero) for every catalog model, including the gpt-6 family
+// added alongside gpt-5.5-pro.
+func TestModelCapabilitiesTable(t *testing.T) {
+	cases := []struct {
+		model             string
+		wantResponsesAPI  bool
+		wantMaxTokens     int64
+		wantPricingIsZero bool
+	}{
+		{ModelGPT4o, false, defaultMaxTokens, false},
+		{ModelGPT4oMini, false, defaultMaxTokens, false},
+		{ModelGPT55, false, defaultReasoningMaxTokens, false},
+		{ModelGPT54Mini, false, defaultReasoningMaxTokens, false},
+		{ModelGPT55Pro, true, defaultReasoningMaxTokens, false},
+		{ModelGPT6Astra, true, defaultReasoningMaxTokens, false},
+		{ModelGPT6Sol, true, defaultReasoningMaxTokens, false},
+		{ModelGPT6Luna, true, defaultReasoningMaxTokens, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.model, func(t *testing.T) {
+			if got := usesResponsesAPI(tc.model); got != tc.wantResponsesAPI {
+				t.Errorf("usesResponsesAPI(%s) = %v, want %v", tc.model, got, tc.wantResponsesAPI)
+			}
+			if got := defaultMaxTokensFor(tc.model); got != tc.wantMaxTokens {
+				t.Errorf("defaultMaxTokensFor(%s) = %d, want %d", tc.model, got, tc.wantMaxTokens)
+			}
+			p := pricingFor(tc.model)
+			isZero := p.InputPer1M == 0 && p.OutputPer1M == 0
+			if isZero != tc.wantPricingIsZero {
+				t.Errorf("pricingFor(%s) = %+v, want zero=%v", tc.model, p, tc.wantPricingIsZero)
+			}
+		})
 	}
 }
 

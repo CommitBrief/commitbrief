@@ -31,6 +31,17 @@ func TestModelsDefensiveCopy(t *testing.T) {
 	}
 }
 
+// TestModelsWizardDefaultOrder locks Models()[0]: the setup wizard reads
+// spec.Models (not DefaultModel) for its picker, so the first element is
+// what an Enter keypress selects (internal/setup/wizard.go). New models
+// must be appended, never inserted before it.
+func TestModelsWizardDefaultOrder(t *testing.T) {
+	got := Models()[0]
+	if got != ModelPro31 {
+		t.Errorf("Models()[0] = %q, want %q (wizard's implicit default)", got, ModelPro31)
+	}
+}
+
 func TestIsModelSupported(t *testing.T) {
 	if !IsModelSupported(ModelPro31) {
 		t.Error("gemini-3.1-pro-preview should be supported")
@@ -59,6 +70,23 @@ func TestPricingLookup(t *testing.T) {
 	}
 	if pricingFor("unknown-model").InputPer1M != 0 {
 		t.Error("unknown model should yield zero pricing")
+	}
+}
+
+// TestPricingTableCoversAllModels locks non-zero pricing for every catalog
+// model, including gemini-3.8-flash and gemini-3.5-flash-lite added
+// alongside the CachedInputPer1M fix.
+func TestPricingTableCoversAllModels(t *testing.T) {
+	for _, model := range Models() {
+		t.Run(model, func(t *testing.T) {
+			p := pricingFor(model)
+			if p.InputPer1M == 0 || p.OutputPer1M == 0 {
+				t.Errorf("pricingFor(%s) missing input/output rate: %+v", model, p)
+			}
+			if p.CachedInputPer1M >= p.InputPer1M {
+				t.Errorf("pricingFor(%s): cached input should be cheaper than full input, got %+v", model, p)
+			}
+		})
 	}
 }
 

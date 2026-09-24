@@ -44,6 +44,17 @@ func TestModelsDefensiveCopy(t *testing.T) {
 	}
 }
 
+// TestModelsWizardDefaultOrder locks Models()[0]: the setup wizard reads
+// spec.Models (not DefaultModel) for its picker, so the first element is
+// what an Enter keypress selects (internal/setup/wizard.go). New models
+// must be appended, never inserted before it.
+func TestModelsWizardDefaultOrder(t *testing.T) {
+	got := Models()[0]
+	if got != ModelOpus48 {
+		t.Errorf("Models()[0] = %q, want %q (wizard's implicit default)", got, ModelOpus48)
+	}
+}
+
 func TestIsModelSupported(t *testing.T) {
 	if !IsModelSupported(ModelOpus48) {
 		t.Error("Opus 4.8 should be supported")
@@ -80,6 +91,23 @@ func TestPricingLookup(t *testing.T) {
 	zero := pricingFor("unknown-model")
 	if zero.InputPer1M != 0 {
 		t.Errorf("unknown model should yield zero pricing, got %+v", zero)
+	}
+}
+
+// TestPricingTableCoversAllModels locks non-zero pricing for every catalog
+// model, including Opus 5.5, Sonnet 5 and Fable 5.1 added alongside the
+// tool_choice fix.
+func TestPricingTableCoversAllModels(t *testing.T) {
+	for _, model := range Models() {
+		t.Run(model, func(t *testing.T) {
+			p := pricingFor(model)
+			if p.InputPer1M == 0 || p.OutputPer1M == 0 {
+				t.Errorf("pricingFor(%s) missing input/output rate: %+v", model, p)
+			}
+			if p.CachedInputPer1M >= p.InputPer1M {
+				t.Errorf("pricingFor(%s): cached input should be cheaper than full input, got %+v", model, p)
+			}
+		})
 	}
 }
 
@@ -393,3 +421,116 @@ func TestSetTimeoutDrivesTheRequestOption(t *testing.T) {
 }
 
 var _ provider.TimeoutSetter = (*Client)(nil)
+
+// TestBuildParamsToolChoiceByModel locks the model-specific tool_choice
+// split introduced for Opus 5.5 and Fable 5.1 (see noForcedToolChoiceModels
+// in models.go): those two never get a forced tool_choice, every other
+// Anthropic model still does.
+func TestBuildParamsToolChoiceByModel(t *testing.T) {
+	p, err := New(config.ProviderConfig{APIKey: "sk-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := p.(*Client)
+
+	forced := []string{ModelOpus48, ModelSonnet46, ModelHaiku45, ModelSonnet5}
+	auto := []string{ModelOpus55, ModelFable51}
+
+	for _, model := range forced {
+		t.Run(model+"/forced", func(t *testing.T) {
+			params := c.buildParams(provider.Request{Model: model, UserPrompt: "x"})
+			raw, err := json.Marshal(params)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			tc, ok := decoded["tool_choice"].(map[string]any)
+			if !ok {
+				t.Fatalf("tool_choice missing or wrong shape for %s: %v", model, decoded["tool_choice"])
+			}
+			if tc["type"] != "tool" {
+				t.Errorf("%s: tool_choice.type = %v, want \"tool\"", model, tc["type"])
+			}
+			if tc["name"] != toolName {
+				t.Errorf("%s: tool_choice.name = %v, want %q", model, tc["name"], toolName)
+			}
+		})
+	}
+
+	for _, model := range auto {
+		t.Run(model+"/auto", func(t *testing.T) {
+			params := c.buildParams(provider.Request{Model: model, UserPrompt: "x"})
+			raw, err := json.Marshal(params)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			tc, ok := decoded["tool_choice"].(map[string]any)
+			if !ok {
+				t.Fatalf("tool_choice missing or wrong shape for %s: %v", model, decoded["tool_choice"])
+			}
+			if tc["type"] != "auto" {
+				t.Errorf("%s: tool_choice.type = %v, want \"auto\" (forced tool_choice is rejected on this model)", model, tc["type"])
+			}
+			if _, hasName := tc["name"]; hasName {
+				t.Errorf("%s: tool_choice should not carry a tool name when auto", model)
+			}
+		})
+	}
+}
+
+// TestBuildParamsFreeFormSkipsToolChoice confirms FreeForm requests (ADR-0015)
+// never set Tools/ToolChoice regardless of model, on both branches of the
+// new split.
+func TestBuildParamsFreeFormSkipsToolChoice(t *testing.T) {
+	p, err := New(config.ProviderConfig{APIKey: "sk-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := p.(*Client)
+
+	for _, model := range []string{ModelOpus48, ModelOpus55, ModelFable51} {
+		params := c.buildParams(provider.Request{Model: model, UserPrompt: "x", FreeForm: true})
+		if len(params.Tools) != 0 {
+			t.Errorf("%s: FreeForm request should not set Tools", model)
+		}
+		raw, err := json.Marshal(params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if _, has := decoded["tool_choice"]; has {
+			t.Errorf("%s: FreeForm request should not set tool_choice", model)
+		}
+	}
+}
+
+// TestDefaultMaxTokensForExtendedThinkingModels locks the raised default
+// max_tokens ceiling for the two models whose adaptive thinking shares the
+// max_tokens budget with the visible response (see
+// extendedThinkingDefaultMaxTokensModels in models.go).
+func TestDefaultMaxTokensForExtendedThinkingModels(t *testing.T) {
+	if got := defaultMaxTokensFor(ModelOpus55); got != defaultExtendedThinkingMaxTokens {
+		t.Errorf("defaultMaxTokensFor(Opus55) = %d, want %d", got, defaultExtendedThinkingMaxTokens)
+	}
+	if got := defaultMaxTokensFor(ModelFable51); got != defaultExtendedThinkingMaxTokens {
+		t.Errorf("defaultMaxTokensFor(Fable51) = %d, want %d", got, defaultExtendedThinkingMaxTokens)
+	}
+	if defaultExtendedThinkingMaxTokens <= defaultMaxTokens {
+		t.Errorf("defaultExtendedThinkingMaxTokens (%d) should exceed defaultMaxTokens (%d)", defaultExtendedThinkingMaxTokens, defaultMaxTokens)
+	}
+	for _, model := range []string{ModelOpus48, ModelSonnet46, ModelHaiku45, ModelSonnet5} {
+		if got := defaultMaxTokensFor(model); got != defaultMaxTokens {
+			t.Errorf("defaultMaxTokensFor(%s) = %d, want unchanged default %d", model, got, defaultMaxTokens)
+		}
+	}
+}
