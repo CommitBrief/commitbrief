@@ -41,17 +41,30 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   threshold for a given run.
 
 ### Changed
-- **Default models (behavior change).** A fresh config — and any config
-  that leaves `providers.<name>.model` unset — now reviews with
-  `claude-opus-5-5` on `anthropic` (was `claude-opus-4-8`) and
-  `gemini-3.8-flash` on `gemini` (was `gemini-3.5-flash`). The `openai`
-  default stays `gpt-5.4-mini`. The defaults were picked on list price so
-  that a typical staged diff (about 8,500 input tokens) estimates well
-  under the default `cost.warn_threshold_usd` of $0.50 — about $0.064 on
-  Anthropic and $0.012 on Gemini — and the first review after `setup` does
-  not hit the cost prompt. They were not picked from a live quality
-  measurement. Configs that pin a model explicitly are unaffected; pin
-  `claude-opus-4-8` or `gemini-3.5-flash` to keep the old behavior.
+- **Default models (behavior change).** A fresh config, and any config
+  that leaves `providers.<name>.model` unset, now reviews with a different
+  model on two providers. No default below was chosen from a quality
+  measurement, and none carries a quality claim. Configs that pin a model
+  explicitly are unaffected; pin the old model to keep the old behavior.
+  - `gemini`: `gemini-3.8-flash` (was `gemini-3.5-flash`). Chosen by list
+    price under an interim rule that applies until a live measurement
+    exists: the cheapest model in the vendor's current mid tier whose
+    typical-diff estimate stays under the default
+    `cost.warn_threshold_usd` of $0.50. Not measured. Tier source: Google
+    positions Flash between Flash-Lite and Pro
+    (https://ai.google.dev/gemini-api/docs/models, accessed 2026-09-24). A
+    typical staged diff (about 8,500 input tokens) estimates at about
+    $0.012, rising to about $0.024 when Google's scheduled price increase
+    takes effect on 2027-01-01.
+  - `anthropic`: `claude-opus-5-5` (was `claude-opus-4-8`). A maintainer
+    choice of the current flagship, not the interim rule's pick (the rule
+    would have picked the mid-tier `claude-sonnet-5`). Not measured. A
+    typical staged diff estimates at about $0.064, but the model thinks by
+    default and the cost estimate does not count thinking tokens, so the
+    billed amount can be higher: in the worst case (output up to the
+    16,000-token ceiling plus one JSON repair retry) a single review can
+    reach about $0.88 without the cost prompt appearing.
+  - `openai`: unchanged, `gpt-5.4-mini`.
 - **Gemini**: corrected `CachedInputPer1M` for all cataloged models to
   the officially published "Context caching" read price (previously an
   unsourced ~0.25x-of-input approximation for the pre-existing models).
