@@ -2,7 +2,7 @@ diff --git a/internal/scan/scan.go b/internal/scan/scan.go
 index 1111111..2222222 100644
 --- a/internal/scan/scan.go
 +++ b/internal/scan/scan.go
-@@ -1,5 +1,10 @@
+@@ -1,2 +1,8 @@
  package scan
 
 +// Touch reads every byte of s.

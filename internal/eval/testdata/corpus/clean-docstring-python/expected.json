@@ -1,0 +1,7 @@
+{
+  "language": "python",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "app/orders.py", "line": 8, "reason": "New docstring describing existing behavior accurately; no code change."}
+  ]
+}

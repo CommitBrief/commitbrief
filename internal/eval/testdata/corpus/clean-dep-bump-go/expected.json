@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "go.mod", "line": 9, "reason": "Routine minor bump of golang.org/x/time (v0.5.0 → v0.6.0); no breaking changes and no known advisories for the target version."}
+  ]
+}

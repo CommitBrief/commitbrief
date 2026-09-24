@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+index 5050501..5050502 100644
+--- a/package.json
++++ b/package.json
+@@ -3,6 +3,6 @@
+   "version": "1.4.2",
+   "dependencies": {
+     "express": "4.21.2",
+-    "zod": "3.23.7"
++    "zod": "3.23.8"
+   }
+ }

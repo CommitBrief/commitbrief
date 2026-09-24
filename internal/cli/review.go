@@ -864,11 +864,33 @@ type structuredOutcome struct {
 	DegradeReason string
 }
 
-// repairMaxTokens is the raised output ceiling used on the truncation-repair
-// branch: a truncated first response is often max_tokens exhaustion (providers
-// default to 4096 when req.MaxTokens is 0), so the "complete the JSON" retry
-// gets more room. Not a cache-key input.
+// repairMaxTokens is the floor for the raised output ceiling used on the
+// truncation-repair branch: a truncated first response is often max_tokens
+// exhaustion, so the "complete the JSON" retry gets more room. It is only a
+// floor, not the ceiling itself — see repairCeiling. Not a cache-key input.
 const repairMaxTokens = 8192
+
+// repairCeiling computes the output-token ceiling for the truncation-repair
+// retry (render.ParseErrMalformedJSON branch). repairMaxTokens alone assumes
+// every provider still defaults to the historical 4096 when req.MaxTokens is
+// unset — that no longer holds for models with a raised provider default
+// (e.g. Anthropic's Opus 5.5 / Fable 5.1 / Sonnet 5, whose adaptive thinking
+// shares the max_tokens budget; OpenAI's reasoning models). A first attempt
+// truncated by such a model returns OutputTokens at (or near) that higher
+// ceiling, so doubling it is a provider-agnostic proxy for "whatever ceiling
+// actually produced this truncation" — the retry ceiling can never end up
+// below it. reqMaxTokens keeps an explicit caller-set MaxTokens from being
+// lowered by the repair branch.
+func repairCeiling(reqMaxTokens, prevOutputTokens int) int {
+	ceiling := repairMaxTokens
+	if reqMaxTokens > ceiling {
+		ceiling = reqMaxTokens
+	}
+	if doubled := prevOutputTokens * 2; doubled > ceiling {
+		ceiling = doubled
+	}
+	return ceiling
+}
 
 // tryStructuredReview runs Review and, on parse failure, retries once with a
 // repair-oriented request (ADR-0031) instead of the byte-identical prompt: the
@@ -904,7 +926,7 @@ func tryStructuredReview(
 	if onRetry != nil {
 		onRetry()
 	}
-	repairReq := repairRequest(req, classifyParseError(parseErr), resp.Content)
+	repairReq := repairRequest(req, classifyParseError(parseErr), resp.Content, resp.Usage.OutputTokens)
 	resp2, err2 := prov.Review(ctx, repairReq)
 	if err2 != nil {
 		// Network/auth failure on retry: surface the first response with the
@@ -943,15 +965,13 @@ func tryStructuredReview(
 // resending the identical prompt. For truncated/malformed JSON it also embeds
 // the partial output in the user prompt and raises the output ceiling, since
 // truncation is often max_tokens exhaustion.
-func repairRequest(req provider.Request, kind render.ParseErrorKind, prevOutput string) provider.Request {
+func repairRequest(req provider.Request, kind render.ParseErrorKind, prevOutput string, prevOutputTokens int) provider.Request {
 	r := req
 	switch kind {
 	case render.ParseErrMalformedJSON:
 		r.SystemPrompt = req.SystemPrompt + "\n\n" + rules.RepairJSONComplete
 		r.UserPrompt = req.UserPrompt + "\n\n" + fmt.Sprintf(rules.RepairPrevOutputTemplate, prevOutput)
-		if r.MaxTokens <= 0 {
-			r.MaxTokens = repairMaxTokens
-		}
+		r.MaxTokens = repairCeiling(req.MaxTokens, prevOutputTokens)
 	default: // ParseErrEmpty, ParseErrProse, ParseErrSchema → schema-ignored
 		r.SystemPrompt = req.SystemPrompt + "\n\n" + rules.RepairSchemaReset
 	}

@@ -1,0 +1,8 @@
+{
+  "language": "javascript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/retry.js", "line": 2, "reason": "Local variable rename for readability; no behavior change."},
+    {"file": "src/retry.js", "line": 8, "reason": "Use site mirrors the rename on line 2; not a finding."}
+  ]
+}

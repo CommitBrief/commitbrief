@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/cache.js", "line": 1, "reason": "Comment-only correction to match the actual TTL value; no code change."}
+  ]
+}

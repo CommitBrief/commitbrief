@@ -1,0 +1,9 @@
+{
+  "language": "typescript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/cart.ts", "line": 2, "reason": "Interface field rename for clarity; no behavior change."},
+    {"file": "src/cart.ts", "line": 7, "reason": "Use site mirrors the rename on line 2; not a finding."}
+  ],
+  "held_out": true
+}

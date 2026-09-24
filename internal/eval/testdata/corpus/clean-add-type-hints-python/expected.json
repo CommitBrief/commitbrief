@@ -1,0 +1,7 @@
+{
+  "language": "python",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "app/pricing.py", "line": 1, "reason": "New type hints on an existing function signature; behavior is unchanged."}
+  ]
+}

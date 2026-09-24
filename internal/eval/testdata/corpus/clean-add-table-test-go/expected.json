@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "internal/strutil/truncate_test.go", "line": 6, "reason": "New table-driven test only; asserts existing, already-correct behavior."}
+  ]
+}

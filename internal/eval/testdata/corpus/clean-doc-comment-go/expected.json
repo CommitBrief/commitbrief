@@ -1,0 +1,9 @@
+{
+  "language": "go",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "internal/queue/queue.go", "line": 1, "reason": "New package doc comment; purely descriptive text, no behavior."},
+    {"file": "internal/queue/queue.go", "line": 10, "reason": "New godoc comment on exported Enqueue; describes existing behavior accurately."}
+  ],
+  "held_out": true
+}

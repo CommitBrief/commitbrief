@@ -10,6 +10,71 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **Anthropic**: cataloged `claude-opus-5-5`, `claude-sonnet-5`, and
+  `claude-fable-5-1` alongside the existing Opus 4.8 / Sonnet 4.6 / Haiku
+  4.5 models, with pricing and 1M-token context windows sourced from
+  Anthropic's official pricing and model docs.
+- **OpenAI**: cataloged `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` —
+  Responses-API-only reasoning models with a 1,050,000-token context
+  window — alongside the existing GPT-4o / GPT-5.5 family.
+- **Gemini**: cataloged `gemini-3.8-flash` and `gemini-3.5-flash-lite`
+  alongside the existing Pro 3.1 / Flash 3.5 / Flash-Lite 3.1 models.
+- Eval corpus (`internal/eval/testdata/corpus/`) grown to 40 fixtures — 20
+  clean controls and 20 buggy — across Go, Python, JavaScript, and
+  TypeScript, giving `make eval-live` enough denominator to be statistically
+  meaningful (ADR-0043 §1's `n_buggy>=20`/`n_clean>=20` sufficiency floor).
+- `COMMITBRIEF_EVAL_RUNS=k` repeats the live eval corpus k times per
+  invocation and reports pooled recall/precision/fpr alongside the
+  per-run min/max spread, surfacing provider flakiness instead of hiding it
+  behind a single lucky (or unlucky) pass.
+- `COMMITBRIEF_EVAL_OUT=<path>` writes a machine-readable ADR-0043 §4
+  results row (`internal/eval/results.go`) to the given JSON file, keyed by
+  `{provider, model}` — re-measuring the same pair replaces its row, rows
+  for other pairs are kept, and a write refuses to mix rows measured
+  against a different corpus fingerprint or run count.
+- A written results row's `eligible` field is gated against the corpus's
+  sufficiency floor, ADR-0043 §2's fixed recall/fpr thresholds
+  (`recall>=0.90`, `fpr<=0.10`), and the current prompt hash. The
+  thresholds are hardcoded package constants (`internal/eval/results.go`),
+  not environment-configurable — ADR-0043 §1.5 disallows relaxing a
+  threshold for a given run.
+
+### Changed
+- **Default models (behavior change).** A fresh config, and any config
+  that leaves `providers.<name>.model` unset, now reviews with a different
+  model on two providers. No default below was chosen from a quality
+  measurement, and none carries a quality claim. Configs that pin a model
+  explicitly are unaffected; pin the old model to keep the old behavior.
+  - `gemini`: `gemini-3.8-flash` (was `gemini-3.5-flash`). Chosen by list
+    price under an interim rule that applies until a live measurement
+    exists: the cheapest model in the vendor's current mid tier whose
+    typical-diff estimate stays under the default
+    `cost.warn_threshold_usd` of $0.50. Not measured. Tier source: Google
+    positions Flash between Flash-Lite and Pro
+    (https://ai.google.dev/gemini-api/docs/models, accessed 2026-09-24). A
+    typical staged diff (about 8,500 input tokens) estimates at about
+    $0.012, rising to about $0.024 when Google's scheduled price increase
+    takes effect on 2027-01-01.
+  - `anthropic`: `claude-opus-5-5` (was `claude-opus-4-8`). A maintainer
+    choice of the current flagship, not the interim rule's pick (the rule
+    would have picked the mid-tier `claude-sonnet-5`). Not measured. A
+    typical staged diff estimates at about $0.064, but the model thinks by
+    default and the cost estimate does not count thinking tokens, so the
+    billed amount can be higher: in the worst case (output up to the
+    16,000-token ceiling plus one JSON repair retry) a single review can
+    reach about $0.88 without the cost prompt appearing.
+  - `openai`: unchanged, `gpt-5.4-mini`.
+- **Gemini**: corrected `CachedInputPer1M` for all cataloged models to
+  the officially published "Context caching" read price (previously an
+  unsourced ~0.25x-of-input approximation for the pre-existing models).
+
+### Fixed
+- The live eval harness now sends the model the same line-numbered diff
+  production review does (`internal/eval/runner.go`'s
+  `numberedFixtureDiff`), instead of the raw diff — eval measurements were
+  previously scored against a prompt the CLI never actually ships.
+
 ## [1.17.1] - 2026-09-23
 
 ### Changed

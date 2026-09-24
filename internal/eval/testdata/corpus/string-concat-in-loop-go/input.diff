@@ -2,7 +2,7 @@ diff --git a/internal/report/build.go b/internal/report/build.go
 index 1111111..2222222 100644
 --- a/internal/report/build.go
 +++ b/internal/report/build.go
-@@ -4,6 +4,9 @@ func Build(lines []string) string {
+@@ -4,3 +4,6 @@ func Build(lines []string) string {
  	result := ""
 -	return strings.Join(lines, "\n")
 +	for _, line := range lines {
