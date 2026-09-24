@@ -29,8 +29,24 @@ const (
 	// https://platform.claude.com/docs/en/build-with-claude/extended-thinking
 	// (accessed 2026-09-24).
 	defaultAdaptiveThinkingMaxTokens = 16000
-	testPingPrompt                   = "ping"
-	testPingMaxTok                   = 8
+	// nonStreamingMaxTokensCap is the highest max_tokens buildParams sends
+	// on a non-streaming call when no per-request timeout is set (see
+	// requestOpts/SetTimeout). anthropic-sdk-go rejects a non-streaming
+	// request locally, before any network call, once its token-derived
+	// "expected time" exceeds a 10-minute default timeout:
+	// expectedTime = 1h * maxTokens / 128000 > 10m  =>  maxTokens > 21333.3.
+	// (CalculateNonStreamingTimeout, github.com/anthropics/anthropic-sdk-go
+	// client.go, v1.45.0.) The repair-retry ceiling (internal/cli/review.go
+	// repairCeiling) can ask for up to 2x a truncated response's own output
+	// tokens — e.g. 32000 after a 16000-token adaptive-thinking truncation
+	// — which trips this locally and silently degrades the review instead
+	// of ever calling the API. Clamping here keeps review.go
+	// provider-agnostic; none of our current models appear in the SDK's
+	// separate per-model ModelNonStreamingTokens override table, so this
+	// generic cap is the only one that applies.
+	nonStreamingMaxTokensCap = 21333
+	testPingPrompt           = "ping"
+	testPingMaxTok           = 8
 )
 
 type Client struct {
@@ -155,6 +171,11 @@ func (c *Client) buildParams(req provider.Request) sdk.MessageNewParams {
 	maxTokens := int64(req.MaxTokens)
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokensFor(model)
+	}
+	// See nonStreamingMaxTokensCap: without a per-request timeout, the SDK
+	// rejects the call locally above this threshold instead of sending it.
+	if c.timeout <= 0 && maxTokens > nonStreamingMaxTokensCap {
+		maxTokens = nonStreamingMaxTokensCap
 	}
 	params := sdk.MessageNewParams{
 		Model:     sdk.Model(model),

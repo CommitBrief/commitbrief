@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	sdk "github.com/anthropics/anthropic-sdk-go"
+
 	"github.com/CommitBrief/commitbrief/internal/config"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 )
@@ -562,4 +564,47 @@ func TestDefaultMaxTokensForAdaptiveThinkingModels(t *testing.T) {
 			t.Errorf("defaultMaxTokensFor(%s) = %d, want unchanged default %d", model, got, defaultMaxTokens)
 		}
 	}
+}
+
+// TestBuildParamsClampsMaxTokensForNonStreaming locks the fix for the
+// repair-retry path (internal/cli/review.go repairCeiling) requesting up to
+// 2x a truncated response's own output tokens. On the three adaptive-thinking
+// models that defaults to 16000, doubling to 32000 exceeds
+// anthropic-sdk-go's local non-streaming pre-check (CalculateNonStreamingTimeout),
+// which rejects the call before any network I/O when no per-request timeout
+// is configured. buildParams must clamp to nonStreamingMaxTokensCap in that
+// case, and the clamped value must actually pass the SDK's own check.
+func TestBuildParamsClampsMaxTokensForNonStreaming(t *testing.T) {
+	p, err := New(config.ProviderConfig{APIKey: "sk-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := p.(*Client)
+
+	const repairRequestTokens = 32000 // 2x defaultAdaptiveThinkingMaxTokens (16000)
+
+	for _, model := range []string{ModelOpus55, ModelFable51, ModelSonnet5} {
+		t.Run(model, func(t *testing.T) {
+			params := c.buildParams(provider.Request{Model: model, UserPrompt: "x", MaxTokens: repairRequestTokens})
+			if params.MaxTokens != nonStreamingMaxTokensCap {
+				t.Errorf("buildParams(%s).MaxTokens = %d, want clamp to %d", model, params.MaxTokens, nonStreamingMaxTokensCap)
+			}
+			if params.MaxTokens > nonStreamingMaxTokensCap {
+				t.Errorf("buildParams(%s).MaxTokens = %d exceeds nonStreamingMaxTokensCap (%d)", model, params.MaxTokens, nonStreamingMaxTokensCap)
+			}
+			if _, err := sdk.CalculateNonStreamingTimeout(int(params.MaxTokens), sdk.Model(model), nil); err != nil {
+				t.Errorf("clamped MaxTokens %d for %s still rejected by SDK: %v", params.MaxTokens, model, err)
+			}
+		})
+	}
+
+	// A configured per-request timeout bypasses the SDK's local check, so no
+	// clamp should apply.
+	t.Run("timeout configured skips clamp", func(t *testing.T) {
+		c.SetTimeout(20 * time.Minute)
+		params := c.buildParams(provider.Request{Model: ModelOpus55, UserPrompt: "x", MaxTokens: repairRequestTokens})
+		if params.MaxTokens != repairRequestTokens {
+			t.Errorf("with a configured timeout, MaxTokens = %d, want unclamped %d", params.MaxTokens, repairRequestTokens)
+		}
+	})
 }
