@@ -436,8 +436,13 @@ func newModelSelect(spec *ProviderSpec, models []string, choices *Choices, cat *
 // A cataloged model shows its list price per 1M input/output tokens from the
 // provider metadata and "not measured": no benchmark results ship with the
 // binary yet, so the wizard makes no quality claim it cannot back. A model
-// with no price — a discovered ollama model, or one missing from the catalog —
-// is marked "local" instead of showing a misleading $0.
+// with no price is marked "local" instead of showing a misleading $0. The
+// only such model today is a discovered ollama one: static lists come from
+// md.Models, so every static entry has a catalog row. The boundary is
+// deliberate — a zero-priced API model (e.g. a free preview) added to the
+// catalog would be mislabeled "local", which TestModelLabelsShowPriceAndSignal
+// catches by requiring a "$" on every static label; give such a model its
+// own label then instead of relaxing the test.
 func modelLabel(model string, md provider.Metadata, haveMD bool, cat *i18n.Catalog) string {
 	const sep = " · "
 	var pricing provider.Pricing
