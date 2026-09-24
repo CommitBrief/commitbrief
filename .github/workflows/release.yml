@@ -64,3 +64,95 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+  # D-VP-2 (.ssot/plans/2026-09-23-version-pins): keep
+  # CommitBrief/commitbrief-action's README.md version pins from ever being
+  # hand-edited. Runs only after goreleaser has actually published the tag,
+  # and only for stable releases — a `-rc`/`-beta` prerelease tag is never a
+  # version anyone should pin their CI to. Opens a PR in the action repo;
+  # merging stays a maintainer action (see CLAUDE.md "Sürüm çıkınca …").
+  pin-action-readme:
+    needs: goreleaser
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')
+    runs-on: ubuntu-latest
+    # This job only ever pushes to commitbrief-action via the PAT below; it
+    # never needs to write to this repo's own GITHUB_TOKEN-backed contents.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout commitbrief (for the pin script)
+        uses: actions/checkout@v4
+
+      - name: Checkout commitbrief-action
+        uses: actions/checkout@v4
+        with:
+          repository: CommitBrief/commitbrief-action
+          # Reuses the existing Homebrew-tap PAT (classic, repo scope) — it
+          # is the only cross-repo write credential this workflow already
+          # holds; the default GITHUB_TOKEN can't push outside this repo.
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          path: commitbrief-action
+
+      - name: Resolve tag
+        id: tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Pin README version examples
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: bash scripts/pin-action-readme.sh commitbrief-action/README.md "$TAG"
+
+      - name: Check for changes
+        id: diff
+        working-directory: commitbrief-action
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open pin PR
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: commitbrief-action
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          branch="chore/pin-${TAG}"
+
+          open_pr() {
+            gh pr create \
+              --title "docs: pin README examples to ${TAG}" \
+              --body "Pins the \`version:\` workflow examples and the Inputs table's \`version\` example in README.md to ${TAG}. Opened automatically by the commitbrief release workflow on every stable tag." \
+              --head "$branch"
+          }
+
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            # Branch already pushed by an earlier run of this job. Only skip
+            # if a PR for it actually exists — a prior run can have pushed
+            # the branch and then failed before `gh pr create` (API hiccup,
+            # rate limit); in that case open the missing PR now instead of
+            # silently reporting success with no PR to show for it.
+            pr_count=$(gh pr list --head "$branch" --state all --json number -q 'length')
+            if [ "$pr_count" -eq 0 ]; then
+              echo "branch $branch exists but has no PR yet; opening one without pushing new commits"
+              open_pr
+            else
+              echo "branch $branch already has a PR, skipping"
+            fi
+            exit 0
+          fi
+
+          # github-actions[bot] (id 41898282) — not a real account, so a
+          # released tag's pin PR is never attributed to whichever
+          # maintainer happened to hold the PAT or to an unrelated GitHub
+          # user who happens to own a similar-looking noreply address.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add README.md
+          git commit -m "docs: pin README examples to ${TAG}"
+          git push origin "$branch"
+
+          open_pr
