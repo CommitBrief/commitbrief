@@ -14,7 +14,7 @@ const (
 	ModelFlash38     = "gemini-3.8-flash"
 	ModelFlashLite35 = "gemini-3.5-flash-lite"
 
-	DefaultModel = ModelFlash35
+	DefaultModel = ModelFlash38
 )
 
 var supportedModels = []string{

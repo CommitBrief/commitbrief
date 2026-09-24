@@ -4,12 +4,11 @@
     {
       "name": "anthropic",
       "kind": "api",
-      "default_model": "claude-opus-4-8",
+      "default_model": "claude-opus-5-5",
       "api_key_env": "ANTHROPIC_API_KEY",
       "models": [
         {
           "id": "claude-opus-4-8",
-          "default": true,
           "context_window": 1000000,
           "pricing": {
             "input_per_1m": 5,
@@ -37,6 +36,7 @@
         },
         {
           "id": "claude-opus-5-5",
+          "default": true,
           "context_window": 1000000,
           "pricing": {
             "input_per_1m": 4,
@@ -141,7 +141,7 @@
     {
       "name": "gemini",
       "kind": "api",
-      "default_model": "gemini-3.5-flash",
+      "default_model": "gemini-3.8-flash",
       "api_key_env": "GEMINI_API_KEY",
       "models": [
         {
@@ -155,7 +155,6 @@
         },
         {
           "id": "gemini-3.5-flash",
-          "default": true,
           "context_window": 1000000,
           "pricing": {
             "input_per_1m": 1.5,
@@ -174,6 +173,7 @@
         },
         {
           "id": "gemini-3.8-flash",
+          "default": true,
           "context_window": 1000000,
           "pricing": {
             "input_per_1m": 0.75,

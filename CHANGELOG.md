@@ -41,6 +41,17 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   threshold for a given run.
 
 ### Changed
+- **Default models (behavior change).** A fresh config — and any config
+  that leaves `providers.<name>.model` unset — now reviews with
+  `claude-opus-5-5` on `anthropic` (was `claude-opus-4-8`) and
+  `gemini-3.8-flash` on `gemini` (was `gemini-3.5-flash`). The `openai`
+  default stays `gpt-5.4-mini`. The defaults were picked on list price so
+  that a typical staged diff (about 8,500 input tokens) estimates well
+  under the default `cost.warn_threshold_usd` of $0.50 — about $0.064 on
+  Anthropic and $0.012 on Gemini — and the first review after `setup` does
+  not hit the cost prompt. They were not picked from a live quality
+  measurement. Configs that pin a model explicitly are unaffected; pin
+  `claude-opus-4-8` or `gemini-3.5-flash` to keep the old behavior.
 - **Gemini**: corrected `CachedInputPer1M` for all cataloged models to
   the officially published "Context caching" read price (previously an
   unsourced ~0.25x-of-input approximation for the pre-existing models).

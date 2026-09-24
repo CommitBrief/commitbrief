@@ -12,7 +12,7 @@ const (
 	ModelSonnet5  = "claude-sonnet-5"
 	ModelFable51  = "claude-fable-5-1"
 
-	DefaultModel = ModelOpus48
+	DefaultModel = ModelOpus55
 )
 
 // supportedModels' order is the order the setup wizard's model picker
