@@ -174,4 +174,4 @@ privately — do not open public issues for vulnerabilities.
 
 ## Contact
 
-Off-channel email: **info@muhammetsafak.com.tr**.
+Off-channel email: **info@muhammetsafak.com**.
