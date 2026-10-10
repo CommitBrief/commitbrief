@@ -78,7 +78,7 @@ func TestPrintLinksIssuesNotAuthor(t *testing.T) {
 	if !strings.Contains(out, "Issues") {
 		t.Errorf("expected the Issues label in the footer")
 	}
-	if strings.Contains(out, "muhammetsafak.com.tr") || strings.Contains(out, "Author") {
+	if strings.Contains(out, "muhammetsafak.com") || strings.Contains(out, "Author") {
 		t.Errorf("Author link should have been removed from the footer")
 	}
 }
