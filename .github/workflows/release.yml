@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*'
   # workflow_dispatch lets us re-run a release manually against an
   # existing tag (e.g. after a transient failure, or when a tag was
   # re-pushed at the same SHA and GitHub deduped the push event).

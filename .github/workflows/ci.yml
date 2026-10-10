@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # ROADMAP §1.7.1 originally specified `make lint test build` in CI. We
 # invoke the underlying Go commands directly so the matrix runs on
 # Windows without a separate `make` install step. The Makefile remains
@@ -18,6 +22,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +41,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -52,6 +58,7 @@ jobs:
     # parity via release-check.sh, so this single check guards both.
     name: i18n dead-key check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/i18n-deadkey-check.sh
@@ -62,6 +69,7 @@ jobs:
     # the 100% coverage reached in v0.9.0 from regressing.
     name: SPDX header check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/spdx-check.sh
@@ -75,6 +83,7 @@ jobs:
     # does `go run`.
     name: Docs drift check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
