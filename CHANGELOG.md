@@ -10,6 +10,24 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Fixed
+- **`install-hook --hook=pre-push`**: when pushing a new branch (remote sha
+  all zeros) the hook ran `commitbrief diff <sha>`, i.e. `git diff <sha>`,
+  which compares the working tree against the commit instead of reviewing
+  the pushed commit. It now reviews `<sha>^..<sha>` (the empty tree..`<sha>`
+  for a root commit); on a shallow clone whose tip's parent is not available
+  locally the ref is skipped with a stderr warning instead of sending the
+  whole repository for review. Existing installs keep the old script until it is
+  regenerated: re-run `commitbrief install-hook --hook=pre-push`.
+- **MCP `review` tool**: `min_severity` had no effect because the tool's
+  JSON result was never filtered. It now trims `findings[]` in the returned
+  document (the `fail_on` gate still evaluates the full set, and the text
+  summary notes that lower-severity findings are excluded). The CLI `--json`
+  output is unchanged and stays unfiltered.
+- `go.mod`: `github.com/spf13/pflag` and `github.com/muesli/termenv` are
+  imported directly (the latter from tests), so both are now listed in the
+  direct dependency block.
+
 ## [1.18.0] - 2026-09-24
 
 ### Added
