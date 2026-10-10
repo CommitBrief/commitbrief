@@ -1,20 +1,15 @@
 # CommitBrief
 
-[![Designed & Maintained with Tan](https://muhammetsafak.com/badges/designed-maintained-with-tan.svg)](https://muhammetsafak.com/tan/)
+Local LLM code review CLI for git diffs — review staged/unstaged changes, any git diff range, or a GitHub PR, right in your terminal.
 
-LLM-powered local code review for git diffs. Run a "second pair of eyes"
-review on your staged changes, a specific file, a single commit, or a
-PR-style three-dot range — without leaving the terminal.
+[![CI](https://github.com/CommitBrief/commitbrief/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CommitBrief/commitbrief/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/CommitBrief/commitbrief)](https://github.com/CommitBrief/commitbrief/releases/latest)
+[![License](https://img.shields.io/github/license/CommitBrief/commitbrief)](LICENSE)
 
-```sh
-commitbrief                                # review your staged changes
-commitbrief diff HEAD                      # review working tree vs HEAD
-commitbrief diff main...feature/x          # review a PR
-commitbrief --unstaged --dir app/Models    # narrow any scope to a directory
-```
-
-Output is rendered as colored markdown in the terminal, plain markdown to a
-file, or strict JSON for tooling — your choice.
+Run a "second pair of eyes" review on your staged changes, a specific file,
+a single commit, or a PR-style three-dot range — without leaving the
+terminal. Output is rendered as colored markdown in the terminal, plain
+markdown to a file, or strict JSON for tooling — your choice.
 
 ## Why
 
@@ -26,7 +21,20 @@ you pick, or nowhere at all with Ollama), provider-agnostic, cache aware
 on unchanged diffs, and steerable with a repo's own `COMMITBRIEF.md`
 review rules.
 
-## Install
+## Quick Start
+
+Install CommitBrief with one of the methods under [Installation](#installation), then:
+
+```sh
+commitbrief setup   # pick a provider, paste your API key, run a ping
+commitbrief init    # write a starter COMMITBRIEF.md
+commitbrief         # review your staged changes
+```
+
+Walkthrough with sample output: [Run your first
+review](https://commitbrief.com/docs/1.x/first-review).
+
+## Installation
 
 ```sh
 brew install CommitBrief/tap/commitbrief                          # macOS / Linux
@@ -39,18 +47,14 @@ Pre-built binaries are attached to each tagged release. Full install paths,
 package-manager setup, and `commitbrief upgrade`: see
 [Installation](https://commitbrief.com/docs/1.x/installation).
 
-## Quick start
+## Usage
 
 ```sh
-commitbrief setup   # pick a provider, paste your API key, run a ping
-commitbrief init    # write a starter COMMITBRIEF.md
-commitbrief         # review your staged changes
+commitbrief                                # review your staged changes
+commitbrief diff HEAD                      # review working tree vs HEAD
+commitbrief diff main...feature/x          # review a PR
+commitbrief --unstaged --dir app/Models    # narrow any scope to a directory
 ```
-
-Walkthrough with sample output: [Run your first
-review](https://commitbrief.com/docs/1.x/first-review).
-
-## Providers
 
 Shipped providers: `anthropic`, `openai`, `gemini`, `ollama` (native
 API/local), `deepseek`, `mistral`, `cohere` (OpenAI-compatible), and
@@ -58,7 +62,7 @@ API/local), `deepseek`, `mistral`, `cohere` (OpenAI-compatible), and
 extra API key). Models, context windows, and per-token pricing:
 [Providers](https://commitbrief.com/docs/1.x/providers).
 
-## Docs
+## Documentation
 
 The [full documentation](https://commitbrief.com/docs) is the source of
 truth for everything below the front door:
@@ -72,9 +76,9 @@ truth for everything below the front door:
 - [Credential audit — leaks](https://commitbrief.com/docs/1.x/leaks)
 - [FAQ / Troubleshooting](https://commitbrief.com/docs/1.x/troubleshooting)
 
-## Stability
+## Project Status
 
-The stable line is an **API freeze**: CLI flag surface, the JSON schema
+**Stable.** The stable line is an API freeze: CLI flag surface, the JSON schema
 (`--json`), `COMMITBRIEF.md`/`OUTPUT.md` formats, and the public config keys
 follow strict semver — breaking changes only ship in the next major line.
 Details: [Compatibility](https://commitbrief.com/docs/1.x/upgrade#compatibility).
@@ -88,6 +92,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the build/test flow, and the
 for licensing and PR conventions. Bug reports and questions are welcome in
 [Issues](https://github.com/CommitBrief/commitbrief/issues) and
 [Discussions](https://github.com/CommitBrief/commitbrief/discussions).
+
+## Security
+
+Do not report vulnerabilities in public issues. Use [private vulnerability
+reporting](https://github.com/CommitBrief/commitbrief/security/advisories/new);
+the full process is in the [security policy](https://github.com/CommitBrief/commitbrief/security/policy).
 
 ## License
 
