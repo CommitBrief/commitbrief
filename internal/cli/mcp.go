@@ -110,7 +110,7 @@ func reviewToolInputSchema() json.RawMessage {
 			"min_severity": map[string]any{
 				"type":        "string",
 				"enum":        []string{"critical", "high", "medium", "low", "info", "none"},
-				"description": "Hide findings below this severity in the returned set (display filter; the gate still sees the full set).",
+				"description": "Drop findings below this severity from the returned findings[] array (the gate, fail_on, still evaluates the full set; meta counters are unaffected).",
 			},
 			"no_flaky": map[string]any{
 				"type":        "boolean",
@@ -301,6 +301,9 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	// deliberate, recorded deviation from ADR-0028's "same pipeline" promise
 	// (ADR-0033) — `guard` inherits it, since it drives this same seam.
 	global.noSandbox = true
+	// The agent reads the JSON document itself, so min_severity must trim
+	// findings[] there (the CLI --json stays unfiltered; see renderResult).
+	global.trimJSON = true
 
 	scope := reviewScopeFlags{}
 	switch {
@@ -367,6 +370,13 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	}
 
 	summary := reviewSummary(doc, reviewErr)
+	// The counts above describe the returned (trimmed) findings[]; say so,
+	// so "no findings" is not mistaken for "nothing was found". The trimmed
+	// document cannot say whether anything was actually dropped, so the note
+	// states the filter rather than claiming findings were hidden.
+	if threshold, enabled, perr := parseMinSeverity(global.minSeverity); perr == nil && enabled {
+		summary += " Findings below " + string(threshold) + " severity are excluded from this result (min_severity)."
+	}
 	return summary, jsonOut, nil
 }
 

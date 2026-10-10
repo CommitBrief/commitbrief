@@ -308,3 +308,57 @@ func TestMCPReviewToolSchemaAdvertisesFilters(t *testing.T) {
 		}
 	}
 }
+
+// min_severity trims findings[] in the MCP result (the agent reads that JSON
+// as its display surface), while fail_on still evaluates the full set and the
+// CLI --json path stays unfiltered. The mock provider emits one "info" finding.
+func TestMCPReviewMinSeverityTrimsFindings(t *testing.T) {
+	e := newCLIEnv(t)
+	resps := runMCPServer(t, e,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"review","arguments":{"staged":true,"min_severity":"high","fail_on":"info"}}}`,
+	)
+	if len(resps) != 1 {
+		t.Fatalf("got %d responses, want 1", len(resps))
+	}
+	var callRes struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	// The MCP-only switch must be restored the moment the server returns —
+	// checked before anything (newCLIEnv resets global) could mask a leak.
+	if global.trimJSON {
+		t.Error("trimJSON must be restored after the MCP call")
+	}
+	decodeResult(t, resps[0], &callRes)
+	if callRes.IsError {
+		t.Fatalf("unexpected tool error: %+v", callRes)
+	}
+	doc, err := parseReviewDoc(callRes.Content[1].Text)
+	if err != nil {
+		t.Fatalf("parse result JSON: %v\n%s", err, callRes.Content[1].Text)
+	}
+	if len(doc.Findings) != 0 {
+		t.Errorf("min_severity=high must drop the info finding from findings[]; got %+v", doc.Findings)
+	}
+	if strings.Contains(callRes.Content[1].Text, "mock review output") {
+		t.Errorf("hidden finding still present in JSON:\n%s", callRes.Content[1].Text)
+	}
+	// The gate saw the full set: fail_on=info still trips.
+	if !strings.Contains(callRes.Content[0].Text, "GATE FAILED") {
+		t.Errorf("fail_on must evaluate the full set; summary %q", callRes.Content[0].Text)
+	}
+	if !strings.Contains(callRes.Content[0].Text, "min_severity") {
+		t.Errorf("summary should disclose the hidden findings; got %q", callRes.Content[0].Text)
+	}
+
+	// With the switch off, the CLI --json path keeps the full set.
+	e2 := newCLIEnv(t)
+	if err := e2.run("--staged", "--min-severity=high", "--json"); err != nil {
+		t.Fatalf("review --json: %v", err)
+	}
+	if !strings.Contains(e2.out.String(), "mock review output") {
+		t.Errorf("CLI --json must stay unfiltered; got:\n%s", e2.out.String())
+	}
+}

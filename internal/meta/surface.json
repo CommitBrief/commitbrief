@@ -1499,7 +1499,7 @@
         "info",
         "none"
       ],
-      "description": "Hide findings below this severity in the returned set (display filter; the gate still sees the full set)."
+      "description": "Drop findings below this severity from the returned findings[] array (the gate, fail_on, still evaluates the full set; meta counters are unaffected)."
     },
     {
       "name": "model",

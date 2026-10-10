@@ -1151,8 +1151,15 @@ func renderResult(cmd *cobra.Command, content, outputTemplate string, findings [
 
 	// JSON is machine output: emit it exactly (full, unfiltered) with no
 	// trailing blank line. --min-severity is a display-only filter and
-	// must not touch the machine contract.
+	// must not touch the machine contract of the CLI --json. The one
+	// exception is the MCP seam (global.trimJSON, set only by
+	// runReviewForMCP): there the JSON document IS the display surface the
+	// agent reads, so the `min_severity` tool argument trims findings[].
+	// Gating (--fail-on / fail_on) already ran on the full set.
 	if global.json {
+		if global.trimJSON {
+			payload.Findings = filterMinSeverity(payload.Findings)
+		}
 		return render.JSON(w, payload)
 	}
 

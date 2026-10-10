@@ -1144,15 +1144,15 @@ func TestInstallHookPrePushEmitsRangeAwareScript(t *testing.T) {
 		t.Errorf("pre-push body must NOT reuse the --staged invocation; got:\n%s", body)
 	}
 	for _, want := range []string{
-		"while read",                  // stdin loop
-		"local_sha",                   // ref tuple field
-		"remote_sha",                  // ref tuple field
-		"z40",                         // deletion / new-branch marker
-		`CB=`,                         // UC-27: binary captured into a shell var (absolute path)
-		`"$CB" diff `,                 // range-aware review call via the abs-path binary
-		"--fail-on=critical",          // gating remains
-		"--no-cost-check",             // CI bypass for preflight
-		"${remote_sha}..${local_sha}", // canonical range expression
+		"while read",            // stdin loop
+		"local_sha",             // ref tuple field
+		"remote_sha",            // ref tuple field
+		"z40",                   // deletion / new-branch marker
+		`CB=`,                   // UC-27: binary captured into a shell var (absolute path)
+		`"$CB" diff `,           // range-aware review call via the abs-path binary
+		"--fail-on=critical",    // gating remains
+		"--no-cost-check",       // CI bypass for preflight
+		"${remote_sha}..${tip}", // canonical range expression (tip = local sha peeled to its commit)
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("pre-push body missing %q\nfull body:\n%s", want, body)

@@ -130,7 +130,14 @@ func shellQuote(path string) string {
 // We loop over those refs and review the actual range being pushed via
 // `commitbrief diff`, so the developer is screened on *what they're
 // shipping*, not the current index. Branch deletions (local-sha is
-// all zeros) are skipped because there is no diff to review.
+// all zeros) are skipped because there is no diff to review. A new
+// remote branch reviews its tip commit (`<sha>^..<sha>`; the empty tree
+// stands in for the missing parent of a root commit) — never the bare
+// `<sha>`, which `git diff` would compare against the working tree. Annotated
+// tag objects are peeled to their commit first (tags that do not point at a
+// commit are skipped). A tip whose parent exists but is not present locally
+// (shallow clone) is skipped with a stderr warning rather than diffed
+// against the empty tree.
 //
 // UC-04 in PATCH_ROADMAP: prior to v0.9.1 every hook variant got the
 // same `--staged` body, which silently no-op'd at push time when the
@@ -147,14 +154,19 @@ func hookScript(name, binaryPath string) string {
 		// loop cleanly without -e tripping.
 		return fmt.Sprintf(`#!/usr/bin/env sh
 # %s — do not edit.
-# Re-run 'commitbrief install-hook --hook=pre-push' to regenerate, or pass --uninstall to remove.
+# Re-run 'commitbrief install-hook --hook=pre-push --yes' to regenerate, or pass --uninstall to remove.
 #
 # Pre-push contract (githooks(5)): one line per ref on stdin, format
 # "<local-ref> <local-sha> <remote-ref> <remote-sha>". A 40-zero sha
 # on the local side means the branch is being deleted (nothing to
 # review); a 40-zero sha on the remote side means the branch is new
-# (review the tip commit). Otherwise review the inclusive range
-# remote-sha..local-sha.
+# (review the tip commit only: <sha>^..<sha>, or the empty tree..<sha>
+# for a root commit; skipped with a warning when the parent is missing
+# locally, e.g. a shallow clone). Otherwise review the range remote-sha..local-sha.
+# Annotated tags are peeled to their commit first; a tag that does not
+# resolve to a commit is skipped.
+# The range always has two ends, so the working tree is never part of
+# the reviewed diff.
 set -eu
 
 CB=%s
@@ -164,10 +176,30 @@ while read -r local_ref local_sha remote_ref remote_sha || [ -n "${local_ref-}" 
     if [ "${local_sha}" = "${z40}" ]; then
         continue
     fi
+    # An annotated tag push reports the tag OBJECT sha, not a commit. Peel it
+    # to the commit it points at before inspecting parents or building the
+    # range; a tag of a tree or blob has no commit to review, so skip it.
+    if ! tip=$(git rev-parse -q --verify "${local_sha}^{commit}" 2>/dev/null); then
+        echo "commitbrief: skipping ${local_ref}: ${local_sha} does not point at a commit." >&2
+        continue
+    fi
     if [ "${remote_sha}" = "${z40}" ]; then
-        range="${local_sha}"
+        # A root commit has no "parent" header in its object. A commit that
+        # has the header but whose parent cannot be resolved locally sits on
+        # a shallow-clone boundary: diffing it against the empty tree would
+        # ship the whole repository, so warn and skip the ref instead.
+        if git cat-file -p "${tip}" | sed -n '/^$/q;/^parent /p' | grep -q .; then
+            if git rev-parse -q --verify "${tip}^" >/dev/null 2>&1; then
+                range="${tip}^..${tip}"
+            else
+                echo "commitbrief: skipping ${local_ref}: parent of ${tip} is not available locally (shallow clone?); fetch more history to review this push." >&2
+                continue
+            fi
+        else
+            range="4b825dc642cb6eb9a060e54bf8d69288fbee4904..${tip}"
+        fi
     else
-        range="${remote_sha}..${local_sha}"
+        range="${remote_sha}..${tip}"
     fi
     if ! "$CB" diff "${range}" --fail-on=critical --quiet --no-cost-check; then
         exit 1
@@ -179,7 +211,7 @@ exit 0
 	}
 	return fmt.Sprintf(`#!/usr/bin/env sh
 # %s — do not edit.
-# Re-run 'commitbrief install-hook' to regenerate, or pass --uninstall to remove.
+# Re-run 'commitbrief install-hook --yes' to regenerate, or pass --uninstall to remove.
 exec %s --staged --fail-on=critical --quiet --no-cost-check
 `, generatedHookMarker, quoted)
 }
