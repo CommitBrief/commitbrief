@@ -10,15 +10,19 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-10-10
+
 ### Fixed
-- **`install-hook --hook=pre-push`**: when pushing a new branch (remote sha
-  all zeros) the hook ran `commitbrief diff <sha>`, i.e. `git diff <sha>`,
+- **`install-hook --hook=pre-push`**: when pushing a new branch or tag (remote
+  sha all zeros) the hook ran `commitbrief diff <sha>`, i.e. `git diff <sha>`,
   which compares the working tree against the commit instead of reviewing
   the pushed commit. It now reviews `<sha>^..<sha>` (the empty tree..`<sha>`
   for a root commit); on a shallow clone whose tip's parent is not available
   locally the ref is skipped with a stderr warning instead of sending the
-  whole repository for review. Existing installs keep the old script until it is
-  regenerated: re-run `commitbrief install-hook --hook=pre-push`.
+  whole repository for review. Annotated tags are peeled to their commit;
+  a pushed ref that does not resolve to a commit (for example a tag pointing
+  at a tree) is skipped with a stderr warning. Existing installs keep the
+  old script until it is regenerated: re-run `commitbrief install-hook --hook=pre-push`.
 - **MCP `review` tool**: `min_severity` had no effect because the tool's
   JSON result was never filtered. It now trims `findings[]` in the returned
   document (the `fail_on` gate still evaluates the full set, and the text
@@ -2282,7 +2286,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.18.1...HEAD
+[1.18.1]: https://github.com/CommitBrief/commitbrief/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/CommitBrief/commitbrief/compare/v1.17.1...v1.18.0
 [1.17.1]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/CommitBrief/commitbrief/compare/v1.16.0...v1.17.0
