@@ -18,3 +18,19 @@
 
 # Shell scripts must stay LF or they fail to exec on Linux/macOS.
 *.sh text eol=lf
+
+# Binary files
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary
+*.tar    binary
+
+# Generated files (collapsed in diffs, excluded from language stats)
+go.sum     linguist-generated
+man/*.1    linguist-generated
