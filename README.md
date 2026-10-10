@@ -1,6 +1,6 @@
 # CommitBrief
 
-[![Designed & Maintained with Tan](https://www.muhammetsafak.com.tr/badges/designed-maintained-with-tan.svg)](https://www.muhammetsafak.com.tr/en/tan/)
+[![Designed & Maintained with Tan](https://muhammetsafak.com/badges/designed-maintained-with-tan.svg)](https://muhammetsafak.com/tan/)
 
 LLM-powered local code review for git diffs. Run a "second pair of eyes"
 review on your staged changes, a specific file, a single commit, or a
