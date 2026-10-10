@@ -154,7 +154,7 @@ func hookScript(name, binaryPath string) string {
 		// loop cleanly without -e tripping.
 		return fmt.Sprintf(`#!/usr/bin/env sh
 # %s — do not edit.
-# Re-run 'commitbrief install-hook --hook=pre-push' to regenerate, or pass --uninstall to remove.
+# Re-run 'commitbrief install-hook --hook=pre-push --yes' to regenerate, or pass --uninstall to remove.
 #
 # Pre-push contract (githooks(5)): one line per ref on stdin, format
 # "<local-ref> <local-sha> <remote-ref> <remote-sha>". A 40-zero sha
@@ -211,7 +211,7 @@ exit 0
 	}
 	return fmt.Sprintf(`#!/usr/bin/env sh
 # %s — do not edit.
-# Re-run 'commitbrief install-hook' to regenerate, or pass --uninstall to remove.
+# Re-run 'commitbrief install-hook --yes' to regenerate, or pass --uninstall to remove.
 exec %s --staged --fail-on=critical --quiet --no-cost-check
 `, generatedHookMarker, quoted)
 }

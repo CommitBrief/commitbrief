@@ -22,7 +22,7 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   whole repository for review. Annotated tags are peeled to their commit;
   a pushed ref that does not resolve to a commit (for example a tag pointing
   at a tree) is skipped with a stderr warning. Existing installs keep the
-  old script until it is regenerated: re-run `commitbrief install-hook --hook=pre-push`.
+  old script until it is regenerated: re-run `commitbrief install-hook --hook=pre-push --yes`.
 - **MCP `review` tool**: `min_severity` had no effect because the tool's
   JSON result was never filtered. It now trims `findings[]` in the returned
   document (the `fail_on` gate still evaluates the full set, and the text
