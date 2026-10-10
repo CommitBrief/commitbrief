@@ -31,7 +31,7 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v5
@@ -83,10 +83,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout commitbrief (for the pin script)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout commitbrief-action
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: CommitBrief/commitbrief-action
           # Reuses the existing Homebrew-tap PAT (classic, repo scope) — it
