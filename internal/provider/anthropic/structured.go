@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 
 	sdk "github.com/anthropics/anthropic-sdk-go"
+
+	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
 // toolName is the Anthropic tool we force the model to call. Every review
@@ -25,12 +27,17 @@ var findingsSchema = sdk.ToolInputSchemaParam{
 			"description": "Review findings produced by the model.",
 			"items": map[string]any{
 				"type":     "object",
-				"required": []string{"severity", "file", "line", "title", "description", "suggestion"},
+				"required": []string{"severity", "rule_id", "file", "line", "title", "description", "suggestion"},
 				"properties": map[string]any{
 					"severity": map[string]any{
 						"type":        "string",
 						"enum":        []string{"critical", "high", "medium", "low", "info"},
 						"description": "How urgently the finding should be addressed.",
+					},
+					"rule_id": map[string]any{
+						"type":        "string",
+						"enum":        rules.RuleIDs(),
+						"description": "Class of the issue from the closed rule taxonomy; general.other when none fits.",
 					},
 					"file": map[string]any{
 						"type":        "string",

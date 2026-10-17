@@ -65,8 +65,17 @@ type Hunk struct {
 	OldLines int
 	NewStart int
 	NewLines int
-	Header   string
-	Lines    []HunkLine
+	// Header is the trimmed function-context text after the closing "@@"
+	// of the hunk header line.
+	Header string
+	// HeaderRaw is the same text with only the single separator space
+	// removed and nothing else trimmed, so a leading indent survives. Git's
+	// default funcname rule only accepts a line whose first byte is a
+	// letter, '_' or '$'; an indented header is therefore a git artefact
+	// (a custom diff driver) and must not be mistaken for a symbol.
+	// Symbol detection (SymbolFor) reads this field, never Header.
+	HeaderRaw string
+	Lines     []HunkLine
 }
 
 type LineKind int

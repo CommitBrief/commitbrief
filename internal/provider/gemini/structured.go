@@ -4,6 +4,8 @@ package gemini
 
 import (
 	sdk "google.golang.org/genai"
+
+	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
 // responseSchema describes the Findings envelope (ADR-0014 §1) using the
@@ -23,13 +25,18 @@ func responseSchema() *sdk.Schema {
 				Description: "Review findings produced by the model.",
 				Items: &sdk.Schema{
 					Type:             sdk.TypeObject,
-					Required:         []string{"severity", "file", "line", "title", "description", "suggestion"},
-					PropertyOrdering: []string{"severity", "file", "line", "line_end", "title", "description", "suggestion", "language", "snippet"},
+					Required:         []string{"severity", "rule_id", "file", "line", "title", "description", "suggestion"},
+					PropertyOrdering: []string{"severity", "rule_id", "file", "line", "line_end", "title", "description", "suggestion", "language", "snippet"},
 					Properties: map[string]*sdk.Schema{
 						"severity": {
 							Type:        sdk.TypeString,
 							Enum:        []string{"critical", "high", "medium", "low", "info"},
 							Description: "How urgently the finding should be addressed.",
+						},
+						"rule_id": {
+							Type:        sdk.TypeString,
+							Enum:        rules.RuleIDs(),
+							Description: "Class of the issue from the closed rule taxonomy; general.other when none fits.",
 						},
 						"file": {
 							Type:        sdk.TypeString,

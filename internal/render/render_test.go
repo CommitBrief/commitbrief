@@ -297,6 +297,73 @@ func TestJSONv1Golden(t *testing.T) {
 	}
 }
 
+// TestJSONv1FindingsGolden pins the wire shape of a finding that carries the
+// ADR-0045 identity fields: rule_id and fingerprint are present, appended
+// after the pre-existing fields, and schema stays 1.
+func TestJSONv1FindingsGolden(t *testing.T) {
+	p := samplePayload()
+	p.Content = ""
+	p.Findings = []Finding{{
+		Severity:    SeverityHigh,
+		File:        "internal/auth/session.go",
+		Line:        142,
+		Title:       "SQL fragment built from request input",
+		Description: "String concatenation feeds db.Query() directly.",
+		Suggestion:  "Use a prepared statement.",
+		RuleID:      "sec.injection",
+		Fingerprint: Fingerprint("internal/auth/session.go", "sec.injection", "func (s *Store) Load(id string)"),
+	}}
+	var w bytes.Buffer
+	if err := JSON(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	got := w.Bytes()
+
+	goldenPath := filepath.Join("testdata", "json", "v1_findings.golden")
+	if *updateGolden {
+		if err := os.WriteFile(goldenPath, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("updated %s", goldenPath)
+		return
+	}
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden: %v (run with -update to create)", err)
+	}
+	want = bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))
+	if !bytes.Equal(got, want) {
+		t.Errorf("JSON output differs from %s.\n\nGot:\n%s\n\nWant:\n%s", goldenPath, got, want)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(got, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc["schema"] != float64(1) {
+		t.Errorf("schema = %v, want 1", doc["schema"])
+	}
+	f := doc["findings"].([]any)[0].(map[string]any)
+	if f["rule_id"] != "sec.injection" {
+		t.Errorf("rule_id = %v, want sec.injection", f["rule_id"])
+	}
+	if fp, _ := f["fingerprint"].(string); len(fp) != 64 {
+		t.Errorf("fingerprint = %v, want 64 hex chars", f["fingerprint"])
+	}
+}
+
+func TestJSONFindingOmitsIdentityWhenUnset(t *testing.T) {
+	p := samplePayload()
+	p.Findings = []Finding{{Severity: SeverityLow, File: "a.go", Line: 1, Title: "t", Description: "d", Suggestion: "s"}}
+	var w bytes.Buffer
+	if err := JSON(&w, p); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(w.String(), "rule_id") || strings.Contains(w.String(), "fingerprint") {
+		t.Errorf("unset identity fields must be omitted:\n%s", w.String())
+	}
+}
+
 func TestJSONCachedHit(t *testing.T) {
 	var w bytes.Buffer
 	p := samplePayload()

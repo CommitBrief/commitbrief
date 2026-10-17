@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -99,6 +100,7 @@ func newRootCmd() *cobra.Command {
 		// even attached to a subcommand) short-circuits to man-page emission
 		// instead of running a review. os.Exit(0) is the deliberate end-state.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			enableDebugLog(global.verbose && !global.quiet)
 			if global.genSurface != "" {
 				if err := writeSurface(cmd.Root(), global.genSurface); err != nil {
 					return fmt.Errorf("gen-surface: %w", err)
@@ -129,7 +131,7 @@ func newRootCmd() *cobra.Command {
 	flags.StringVarP(&global.output, "output", "o", "", "write output to file instead of stdout")
 	flags.BoolVar(&global.noCache, "no-cache", false, "bypass cache (read and write)")
 	flags.BoolVarP(&global.yes, "yes", "y", false, "auto-confirm prompts (pre-send guard, init overwrite)")
-	flags.BoolVarP(&global.verbose, "verbose", "v", false, "show token/cost/latency footer")
+	flags.BoolVarP(&global.verbose, "verbose", "v", false, "show token/cost/latency footer and debug logs on stderr")
 	flags.BoolVarP(&global.quiet, "quiet", "q", false, "suppress info messages on stderr")
 	flags.BoolVar(&global.compact, "compact", false, "one-line per finding (dense review output)")
 	flags.BoolVar(&global.allowSecrets, "allow-secrets", false, "bypass the pre-send secret scanner (use with care)")
@@ -334,4 +336,15 @@ func pickErrorCatalog() *i18n.Catalog {
 	}
 	cat, _ := i18n.Load(i18n.DefaultLang)
 	return cat
+}
+
+// enableDebugLog routes slog.Debug records (for example the count of findings
+// whose rule_id fell back to general.other, ADR-0045) to stderr when --verbose
+// is set. Without it the default slog handler stays at Info and debug records
+// are dropped.
+func enableDebugLog(on bool) {
+	if !on {
+		return
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 }

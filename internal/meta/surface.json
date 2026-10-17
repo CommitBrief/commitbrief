@@ -830,7 +830,7 @@
       "type": "bool",
       "default": "false",
       "no_opt_def_val": "true",
-      "usage": "show token/cost/latency footer",
+      "usage": "show token/cost/latency footer and debug logs on stderr",
       "scope": "global"
     },
     {

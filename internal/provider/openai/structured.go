@@ -6,6 +6,8 @@ import (
 	sdk "github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
+
+	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
 // schemaName is the json_schema.name OpenAI requires; must be a-z0-9_-.
@@ -33,12 +35,17 @@ var responseSchema = map[string]any{
 			"items": map[string]any{
 				"type":                 "object",
 				"additionalProperties": false,
-				"required":             []string{"severity", "file", "line", "title", "description", "suggestion"},
+				"required":             []string{"severity", "rule_id", "file", "line", "title", "description", "suggestion"},
 				"properties": map[string]any{
 					"severity": map[string]any{
 						"type":        "string",
 						"enum":        []string{"critical", "high", "medium", "low", "info"},
 						"description": "How urgently the finding should be addressed.",
+					},
+					"rule_id": map[string]any{
+						"type":        "string",
+						"enum":        rules.RuleIDs(),
+						"description": "Class of the issue from the closed rule taxonomy; general.other when none fits.",
 					},
 					"file": map[string]any{
 						"type":        "string",

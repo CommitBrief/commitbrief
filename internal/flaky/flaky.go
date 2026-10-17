@@ -15,6 +15,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/render"
+	ruleset "github.com/CommitBrief/commitbrief/internal/rules"
 )
 
 // Detector turns a parsed diff into deterministic flaky-test findings. The
@@ -147,6 +148,9 @@ func (d *Detector) makeFinding(path, lang string, line int, sev render.Severity,
 		Description: d.cat.T(descKey),
 		Suggestion:  d.cat.T(sugKey),
 		Language:    lang,
+		// Deterministic producer: the static pre-pass always emits test.flaky
+		// (ADR-0045); the fingerprint is stamped later by the review pipeline.
+		RuleID: ruleset.RuleTestFlaky,
 	}
 	if snippet != "" {
 		f.Snippet = "+" + snippet

@@ -425,3 +425,70 @@ func TestValidateOutputTemplate_SampleExecuteFailure(t *testing.T) {
 		t.Errorf("error %q does not include sample-execute prefix", err.Error())
 	}
 }
+
+func TestFingerprint_Shape(t *testing.T) {
+	fp := Fingerprint("internal/auth/session.go", "sec.injection", "func (s *Store) Load(id string)")
+	if len(fp) != 64 {
+		t.Fatalf("len(fingerprint) = %d, want 64 hex chars", len(fp))
+	}
+	if fp != strings.ToLower(fp) {
+		t.Errorf("fingerprint %q is not lowercase hex", fp)
+	}
+	if again := Fingerprint("internal/auth/session.go", "sec.injection", "func (s *Store) Load(id string)"); again != fp {
+		t.Errorf("fingerprint is not deterministic: %q vs %q", fp, again)
+	}
+}
+
+// Title, severity, description and line are not inputs: Fingerprint takes
+// only file, rule id and symbol, so the identity cannot depend on them. The
+// stamped-finding path is covered in internal/cli; here the formula's three
+// inputs are each shown to matter.
+func TestFingerprint_SensitiveToEachInput(t *testing.T) {
+	base := Fingerprint("a/b.go", "sec.injection", "func run()")
+	cases := map[string]string{
+		"file":    Fingerprint("a/c.go", "sec.injection", "func run()"),
+		"rule_id": Fingerprint("a/b.go", "sec.xss", "func run()"),
+		"symbol":  Fingerprint("a/b.go", "sec.injection", "func stop()"),
+	}
+	for name, got := range cases {
+		if got == base {
+			t.Errorf("changing %s did not change the fingerprint", name)
+		}
+	}
+}
+
+func TestFingerprint_NulSeparatorPreventsBoundaryCollision(t *testing.T) {
+	a := Fingerprint("ab", "c", "d")
+	b := Fingerprint("a", "bc", "d")
+	if a == b {
+		t.Error("field boundary shift produced the same fingerprint")
+	}
+}
+
+func TestFingerprint_PathCanonicalisation(t *testing.T) {
+	want := Fingerprint("pkg/x.go", "general.other", "")
+	for _, in := range []string{"./pkg/x.go", "pkg\\x.go", ".\\pkg\\x.go"} {
+		if got := Fingerprint(in, "general.other", ""); got != want {
+			t.Errorf("Fingerprint(%q) differs from the canonical path form", in)
+		}
+	}
+}
+
+func TestParseFindings_RuleIDRoundTrip(t *testing.T) {
+	in := `{"findings":[{"severity":"high","rule_id":"sec.xss","file":"a.go","line":1,"title":"t","description":"d","suggestion":"s"},
+	{"severity":"low","file":"b.go","line":2,"title":"t","description":"d","suggestion":"s"}]}`
+	got, err := ParseFindings(in)
+	if err != nil {
+		t.Fatalf("ParseFindings: %v", err)
+	}
+	if got[0].RuleID != "sec.xss" {
+		t.Errorf("findings[0].RuleID = %q, want sec.xss", got[0].RuleID)
+	}
+	// A missing rule_id is not a parse error (normalised later by the CLI).
+	if got[1].RuleID != "" {
+		t.Errorf("findings[1].RuleID = %q, want empty", got[1].RuleID)
+	}
+	if got[0].Fingerprint != "" {
+		t.Errorf("Fingerprint must never come from the model; got %q", got[0].Fingerprint)
+	}
+}

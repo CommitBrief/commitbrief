@@ -10,6 +10,25 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **Finding identity: `rule_id` and `fingerprint`** on every structured finding
+  (`--json` `findings[]`, `schema` stays `1`; both fields are additive and
+  omitted when unset). `rule_id` comes from a closed taxonomy of 30 ids
+  (`sec.injection`, `correctness.error-handling`, `test.flaky`, ..., `general.other`); the
+  model is asked for it and an empty or unknown value is normalised to
+  `general.other` without a repair retry. `fingerprint` is a local
+  `sha256(file, rule_id, symbol)` that ignores title, severity and line number,
+  so it survives rewording and unrelated edits above the finding. It is computed
+  on both the fresh and the cache-hit path and is not stored in the cache.
+- The OpenAI, Anthropic and Gemini structured schemas declare `rule_id` (required,
+  enum of the taxonomy). The flaky pre-pass reports `test.flaky`; `leaks` reports
+  `sec.hardcoded-secret` (no fingerprint).
+
+### Changed
+- The review system prompt gains a `<rule_taxonomy>` block (about 690 estimated
+  tokens) and asks for `rule_id`. The cache key includes the system prompt, so
+  existing cache entries miss once after upgrading.
+
 ## [1.18.1] - 2026-10-10
 
 ### Fixed

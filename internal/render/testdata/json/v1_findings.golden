@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "content": "",
+  "findings": [
+    {
+      "severity": "high",
+      "file": "internal/auth/session.go",
+      "line": 142,
+      "title": "SQL fragment built from request input",
+      "description": "String concatenation feeds db.Query() directly.",
+      "suggestion": "Use a prepared statement.",
+      "rule_id": "sec.injection",
+      "fingerprint": "36d16a0897d8cd95b8efdf48aba7fce56f1ea31c705f465cb75a9847b246f0b5"
+    }
+  ],
+  "summary": {},
+  "meta": {
+    "provider": "anthropic",
+    "model": "claude-opus-4-7",
+    "lang": "en",
+    "usage": {
+      "input_tokens": 4231,
+      "output_tokens": 1503,
+      "cached_input_tokens": 800
+    },
+    "cost_usd": 0.0632,
+    "latency_ms": 3200,
+    "cached": false,
+    "timestamp": "2026-05-26T12:00:00Z"
+  }
+}

@@ -157,8 +157,10 @@ func parseHunkHeader(line string) (*Hunk, error) {
 		return nil, fmt.Errorf("missing closing @@")
 	}
 	counts := strings.TrimSpace(rest[:end])
+	tail := rest[end+2:]
 	h := &Hunk{
-		Header: strings.TrimSpace(rest[end+2:]),
+		Header:    strings.TrimSpace(tail),
+		HeaderRaw: strings.TrimSuffix(strings.TrimPrefix(tail, " "), "\r"),
 	}
 	parts := strings.Fields(counts)
 	if len(parts) < 2 {

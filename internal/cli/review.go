@@ -376,6 +376,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				findings, _ = render.ParseFindings(entry.Result.Content)
 			}
 			findings = mergeFlaky(findings, flakyFindings)
+			findings = stampIdentity(parsed, findings)
 			// Signal-control stage (ADR-0027): baseline + inline suppression
 			// are TRUE removals applied before fail-on / render, even on a
 			// cache hit (the cached body is the provider response; what the
@@ -512,6 +513,10 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
 	}
 	findings = mergeFlaky(findings, flakyFindings)
+	// Identity (ADR-0045): rule_id normalisation + fingerprint, after the
+	// findings are assembled and before signal control. Same call as the
+	// cache-hit exit above.
+	findings = stampIdentity(parsed, findings)
 	// Signal-control stage (ADR-0027): baseline + inline suppression are TRUE
 	// removals (fail-on + JSON findings[] + display), inserted after the
 	// findings are assembled and before applyFailOn / render — distinct from

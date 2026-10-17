@@ -384,6 +384,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 			case cache.FormatJSON, "":
 				findings, _ = render.ParseFindings(entry.Result.Content)
 			}
+			findings = stampIdentity(parsed, findings)
 			if entry.Result.Format == cache.FormatPlainText {
 				if err := emitPlainText(cmd, entry.Result.Content); err != nil {
 					return err
@@ -459,6 +460,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 	case cache.FormatMarkdownFallback:
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), cat.T("review.degraded"))
 	}
+	findings = stampIdentity(parsed, findings)
 
 	meta := render.Meta{
 		Provider:      prov.Name(),
@@ -618,6 +620,7 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	if err != nil {
 		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
+	findings = stampIdentity(parsed, findings)
 	return prReviewResult{findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency}, nil
 }
 

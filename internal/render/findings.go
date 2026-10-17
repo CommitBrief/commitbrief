@@ -3,11 +3,15 @@
 package render
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 	"text/template"
+
+	"github.com/CommitBrief/commitbrief/internal/diff"
 )
 
 // Severity ranks how urgently a finding should be addressed. The vocabulary
@@ -55,6 +59,36 @@ type Finding struct {
 	Suggestion  string   `json:"suggestion"`
 	Language    string   `json:"language,omitempty"`
 	Snippet     string   `json:"snippet,omitempty"`
+
+	// RuleID is the finding's class from the closed rule taxonomy
+	// (internal/rules, ADR-0045). The model proposes it; the CLI normalises
+	// it right after parse (unknown or empty -> general.other), so a finding
+	// that reaches a renderer carries a canonical id. Additive and omitempty:
+	// JSON schema stays 1.
+	RuleID string `json:"rule_id,omitempty"`
+	// Fingerprint is the finding's stable identity, see Fingerprint. It is
+	// computed by the CLI after parse and never read from the model, never
+	// stored in the response cache. Additive and omitempty: schema stays 1.
+	Fingerprint string `json:"fingerprint,omitempty"`
+}
+
+// Fingerprint returns the stable identity of a finding (ADR-0045):
+//
+//	lowercase_hex(sha256(path + "\x00" + ruleID + "\x00" + symbol))
+//
+// path is the file in slash form without a leading "./". Title, Severity,
+// description and line numbers are deliberately not part of the formula, so
+// rewording a finding, re-grading it or moving it a few lines never changes
+// its identity. symbol is the enclosing function text derived from the diff
+// (diff.Diff.SymbolFor); it is "" when the diff offers none.
+func Fingerprint(file, ruleID, symbol string) string {
+	h := sha256.New()
+	h.Write([]byte(diff.CanonicalPath(file)))
+	h.Write([]byte{0})
+	h.Write([]byte(ruleID))
+	h.Write([]byte{0})
+	h.Write([]byte(symbol))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // LineRef formats the line reference as "142" when the finding is

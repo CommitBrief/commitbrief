@@ -14,6 +14,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/guard"
 	"github.com/CommitBrief/commitbrief/internal/leaks"
 	"github.com/CommitBrief/commitbrief/internal/render"
+	"github.com/CommitBrief/commitbrief/internal/rules"
 )
 
 // `commitbrief leaks` (ADR-0036) — the standalone credential audit.
@@ -188,10 +189,15 @@ func leakFindings(res leaks.Result, userPatterns []guard.UserSecretPattern) []re
 	for _, f := range res.Findings {
 		title := strings.Join(f.Patterns, ", ")
 		out = append(out, render.Finding{
-			Severity:    leakSeverity(f, userPatterns),
-			File:        f.File,
-			Line:        f.Line,
-			Title:       title,
+			Severity: leakSeverity(f, userPatterns),
+			File:     f.File,
+			Line:     f.Line,
+			Title:    title,
+			// Deterministic producer (ADR-0045): the scanner never asks a
+			// model, so every hit is a hardcoded secret. No fingerprint is
+			// stamped: a leak has no diff symbol, and (file, rule, "") would
+			// collapse every secret in one file into a single identity.
+			RuleID:      rules.RuleHardcodedSecret,
 			Description: leakDescription(f),
 			Suggestion: "Treat this credential as compromised: rotate it at the provider, " +
 				"then remove it from the repository. For a hit in history, rotation is the " +

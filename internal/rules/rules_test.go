@@ -267,3 +267,37 @@ func TestLoadOutputUnreadableErrors(t *testing.T) {
 		t.Error("expected error when OUTPUT.md is a directory, got nil")
 	}
 }
+
+func TestBuildEmbedsRuleTaxonomyBlock(t *testing.T) {
+	res := lang.Resolution{Code: "en", Name: "English", Source: lang.SourceRepoConfig}
+	system, _ := Build(Loaded{Content: "r"}, res, "")
+
+	rubric := strings.Index(system, "<severity_rubric>")
+	tax := strings.Index(system, "<rule_taxonomy>")
+	format := strings.Index(system, "<response_format>")
+	if rubric < 0 || tax < 0 || format < 0 || rubric >= tax || tax >= format {
+		t.Fatalf("want severity_rubric < rule_taxonomy < response_format, got %d %d %d", rubric, tax, format)
+	}
+	if !strings.Contains(system, "</rule_taxonomy>") {
+		t.Error("rule_taxonomy block is not closed")
+	}
+	for _, id := range RuleIDs() {
+		if !strings.Contains(system, id) {
+			t.Errorf("system prompt does not list rule id %q", id)
+		}
+	}
+	if !strings.Contains(system, `"rule_id"`) {
+		t.Error("response format example does not show rule_id")
+	}
+	if !strings.Contains(system, "severity, rule_id, file") {
+		t.Error("rule_id is not listed among the required fields")
+	}
+}
+
+func TestBuildPlainTextHasNoTaxonomy(t *testing.T) {
+	res := lang.Resolution{Code: "en", Name: "English", Source: lang.SourceRepoConfig}
+	system, _ := BuildPlainText(Loaded{Content: "r"}, res, "")
+	if strings.Contains(system, "<rule_taxonomy>") || strings.Contains(system, "rule_id") {
+		t.Errorf("plain-text prompt must stay free of the structured identity contract:\n%s", system)
+	}
+}

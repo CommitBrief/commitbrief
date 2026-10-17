@@ -92,6 +92,10 @@ func assertResolved(t *testing.T, f render.Finding) {
 	if f.Description == "" || f.Suggestion == "" {
 		t.Errorf("missing description/suggestion: %+v", f)
 	}
+	// Deterministic producers carry a fixed taxonomy id (ADR-0045).
+	if f.RuleID != "test.flaky" {
+		t.Errorf("rule_id = %q, want test.flaky", f.RuleID)
+	}
 	// Line-scoped rules carry the matched line as a "+"-prefixed snippet;
 	// file-scoped rules (over-mock) legitimately carry none.
 	if f.Snippet != "" && !strings.HasPrefix(f.Snippet, "+") {
