@@ -180,6 +180,7 @@ func runSummary(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) e
 	if model == "" {
 		model = prov.DefaultModel()
 	}
+	noteInsecureHTTP(cmd, app, prov, prog)
 	p := prompt.BuildSummary(diffText, manifest, app.Lang, global.withContext)
 
 	// --show-prompt: dump the exact prompt and stop (no provider call, no

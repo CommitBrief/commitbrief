@@ -93,3 +93,43 @@ func TestReviewWithFakeServer(t *testing.T) {
 		t.Errorf("resp = %q / %+v", resp.Content, resp.Usage)
 	}
 }
+
+// The openai-go SDK adds OpenAI-Organization / OpenAI-Project from the
+// OPENAI_ORG_ID / OPENAI_PROJECT_ID environment; they must not be sent to
+// this third-party endpoint, and Authorization must carry this provider's
+// own key rather than OPENAI_API_KEY.
+func TestReviewDoesNotLeakOpenAIIdentity(t *testing.T) {
+	t.Setenv("OPENAI_ORG_ID", "org-leak")
+	t.Setenv("OPENAI_PROJECT_ID", "proj-leak")
+	t.Setenv("OPENAI_API_KEY", "sk-openai-leak")
+
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "x", "object": "chat.completion", "created": 1, "model": "m",
+			"choices": []map[string]any{{"index": 0, "finish_reason": "stop",
+				"message": map[string]any{"role": "assistant", "content": "ok"}}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		})
+	}))
+	defer srv.Close()
+
+	c, err := New(config.ProviderConfig{APIKey: "own-key", BaseURL: srv.URL})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := c.Review(context.Background(), provider.Request{UserPrompt: "diff", MaxTokens: 16}); err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	if v := got.Get("OpenAI-Organization"); v != "" {
+		t.Errorf("OpenAI-Organization leaked: %q", v)
+	}
+	if v := got.Get("OpenAI-Project"); v != "" {
+		t.Errorf("OpenAI-Project leaked: %q", v)
+	}
+	if v := got.Get("Authorization"); v != "Bearer own-key" {
+		t.Errorf("Authorization = %q, want %q", v, "Bearer own-key")
+	}
+}

@@ -44,7 +44,14 @@ func New(cfg config.ProviderConfig) (provider.Provider, error) {
 		baseURL = defaultBaseURL
 	}
 	return &Client{
-		sdk:   sdk.NewClient(option.WithAPIKey(cfg.APIKey), option.WithBaseURL(baseURL)),
+		sdk: sdk.NewClient(
+			option.WithAPIKey(cfg.APIKey),
+			option.WithBaseURL(baseURL),
+			// openai-go reads OPENAI_ORG_ID / OPENAI_PROJECT_ID by default;
+			// those identify an OpenAI account and must not reach this endpoint.
+			option.WithHeaderDel("OpenAI-Organization"),
+			option.WithHeaderDel("OpenAI-Project"),
+		),
 		model: cfg.Model,
 	}, nil
 }

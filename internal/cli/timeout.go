@@ -101,6 +101,10 @@ func wrapTimeoutErr(ctx context.Context, err error, cat *i18n.Catalog, d time.Du
 // 10-minute non-streaming ceiling would still fire first — so raising
 // --timeout has to reach the provider itself. See provider.TimeoutSetter.
 func newProviderWithTimeout(name string, cfg config.ProviderConfig, d time.Duration) (provider.Provider, error) {
+	cfg, err := provider.ResolveAPIKeyEnv(name, cfg)
+	if err != nil {
+		return nil, err
+	}
 	p, err := provider.New(name, cfg)
 	if err != nil {
 		return nil, err

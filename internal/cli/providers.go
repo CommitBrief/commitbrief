@@ -33,6 +33,10 @@ func newProvidersCmd() *cobra.Command {
 	return cmd
 }
 
+// openAICompatibleName is the registry name of the generic OpenAI-compatible
+// provider (internal/provider/openai-compatible).
+const openAICompatibleName = "openai-compatible"
+
 func newProvidersListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
@@ -116,8 +120,14 @@ func newProvidersUseCmd() *cobra.Command {
 			// useful for non-key providers like ollama, and a soft nudge
 			// for the case where the user forgot to run setup first.
 			pc := app.Config.Providers[name]
-			if pc.APIKey == "" && name != "ollama" {
+			if pc.APIKey == "" && name != "ollama" && name != openAICompatibleName {
 				infof("%s", app.Catalog.T("providers.use.no_key_warning", name))
+			}
+			// openai-compatible has no usable defaults: without base_url and
+			// model every review fails, so say so now rather than at the
+			// first run. A key is optional there (local servers need none).
+			if name == openAICompatibleName && (pc.BaseURL == "" || pc.Model == "") {
+				infof("%s", app.Catalog.T("providers.use.openai_compatible_incomplete", name))
 			}
 
 			// writeConfigField (internal/cli/config.go) targets only this one
@@ -163,7 +173,10 @@ func newProvidersTestCmd() *cobra.Command {
 			}
 			ctx, cancel := app.withTimeout(cmd.Context())
 			defer cancel()
-			pc := app.Config.Providers[name]
+			pc, err := provider.ResolveAPIKeyEnv(name, app.Config.Providers[name])
+			if err != nil {
+				return err
+			}
 			// Single network step, shown through the shared staged-tree
 			// progress (a spinner while the ping is in flight). Close keeps
 			// the finished stage line above the stdout success summary.

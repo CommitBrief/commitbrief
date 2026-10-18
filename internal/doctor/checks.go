@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CommitBrief/commitbrief/internal/config"
+	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/rules"
 	"github.com/CommitBrief/commitbrief/internal/setup"
@@ -108,6 +110,14 @@ func (r *Runner) checkOutput() Result {
 	return Result{Name: name, Status: StatusOK, Detail: loaded.Path}
 }
 
+// keylessConfigured reports whether an openai-compatible block is complete
+// without any credential: it has no default endpoint or model, so base_url
+// plus model is what "configured" means there, and the key is optional
+// (auth-less local vLLM / LM Studio). Always false for every other provider.
+func keylessConfigured(name string, pc config.ProviderConfig) bool {
+	return name == "openai-compatible" && pc.BaseURL != "" && pc.Model != ""
+}
+
 // checkProviderConfigured asserts at least one provider entry has the
 // credentials it needs to make a request. "Configured" means:
 //   - an API key is set, OR
@@ -120,7 +130,7 @@ func (r *Runner) checkOutput() Result {
 func (r *Runner) checkProviderConfigured() Result {
 	name := r.t("doctor.check.provider_configured")
 	for n, pc := range r.Config.Providers {
-		if pc.APIKey != "" {
+		if pc.APIKey != "" || keylessConfigured(n, pc) {
 			return Result{Name: name, Status: StatusOK, Detail: n}
 		}
 		if n == "ollama" && n == r.Config.Provider && pc.BaseURL != "" {
@@ -157,7 +167,13 @@ func (r *Runner) checkActiveProvider() Result {
 	if !ok {
 		return Result{Name: name, Status: StatusFail, Detail: r.t("doctor.detail.active_provider_unknown", active)}
 	}
-	if pc.APIKey != "" {
+	// api_key_env is strict at review time: set but empty is an error, never
+	// a silent fallback to api_key. Doctor applies the same rule so it cannot
+	// go green on a config the next review would reject.
+	if _, err := provider.ResolveAPIKeyEnv(active, pc); err != nil {
+		return Result{Name: name, Status: StatusFail, Detail: err.Error()}
+	}
+	if pc.APIKey != "" || keylessConfigured(active, pc) {
 		return Result{Name: name, Status: StatusOK, Detail: active}
 	}
 	if active == "ollama" && pc.BaseURL != "" {
@@ -178,7 +194,7 @@ func (r *Runner) checkActiveProvider() Result {
 func (r *Runner) checkProviderConnections(ctx context.Context) []Result {
 	configured := make([]string, 0, len(r.Config.Providers))
 	for n, pc := range r.Config.Providers {
-		if pc.APIKey != "" {
+		if pc.APIKey != "" || keylessConfigured(n, pc) {
 			configured = append(configured, n)
 			continue
 		}
@@ -203,6 +219,12 @@ func (r *Runner) checkProviderConnections(ctx context.Context) []Result {
 
 			pc := r.Config.Providers[providerName]
 			label := r.t("doctor.check.provider_connection", providerName)
+			// Same strict api_key_env rule as a real review: do not ping with
+			// a stale api_key when the pinned variable is empty.
+			if _, err := provider.ResolveAPIKeyEnv(providerName, pc); err != nil {
+				results[i] = Result{Name: label, Status: StatusWarn, Detail: err.Error()}
+				return
+			}
 			start := time.Now()
 			err := setup.TestConnectionTimeout(ctx2, providerName, pc, r.ConnTimeout)
 			elapsed := time.Since(start).Round(time.Millisecond)

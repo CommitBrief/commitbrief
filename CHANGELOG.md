@@ -10,6 +10,43 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`openai-compatible` provider**: points CommitBrief at any OpenAI-compatible
+  chat-completions endpoint (vLLM, LM Studio, OpenRouter, ...) through config
+  alone. `providers.openai-compatible.base_url` and `model` are required; the
+  key is optional (`api_key_env` > `api_key` > no `Authorization` header, for
+  auth-less local servers). The request carries no `response_format`: the JSON
+  shape comes from the prompt, and the reply goes through the usual fence
+  salvage and repair-retry path. Prices and context window are declared in
+  config (`pricing.<model>`, `context_window`); without a price the cost is
+  shown as `unknown`, one stderr note is printed, and the cost confirmation is
+  skipped. A literal `0.0` price is treated as "not declared".
+- **`providers.<name>.api_key_env`** (every API provider): read the credential
+  from the named environment variable. It beats both the provider's fixed
+  variable (`ANTHROPIC_API_KEY` and friends) and `api_key`; set but empty is an
+  error. Inert for the `*-cli` providers. Unset leaves behavior unchanged.
+- **`providers.<name>.context_window`** (every API provider): overrides the
+  built-in context window used by the token preflight and `dry-run`. Unset
+  leaves behavior unchanged.
+- **`openai-compatible` safety notes**: a `base_url` that uses plain `http://`
+  to a non-loopback host prints a one-line stderr warning (also under
+  `--quiet`; the request is never refused). `doctor` reports an `api_key_env`
+  that points at an empty variable as a failure instead of pinging without a key.
+
+### Changed
+- **`dry-run`**: when the configured provider cannot be built (for example
+  `api_key_env` points at an unset variable, or `base_url` / `model` is
+  missing), it now prints a `Provider unavailable: <reason>` line on stderr
+  for every provider (also under `--quiet`) instead of silently estimating
+  without it. The real run
+  fails with that same error. The estimate itself is still printed.
+
+### Fixed
+- **deepseek, mistral, cohere**: the OpenAI SDK's environment defaults leaked
+  `OPENAI_ORG_ID` / `OPENAI_PROJECT_ID` to these third-party endpoints as
+  `OpenAI-Organization` / `OpenAI-Project` headers. They are no longer sent
+  (the API key was never affected).
+
 ## [1.18.1] - 2026-10-10
 
 ### Fixed

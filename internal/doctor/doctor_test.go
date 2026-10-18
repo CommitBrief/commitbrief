@@ -405,3 +405,76 @@ func TestConnTimeoutOrDefault(t *testing.T) {
 		t.Errorf("negative ConnTimeout = %v, want the built-in %v", got, connectionTimeout)
 	}
 }
+
+// openai-compatible is configured by base_url + model alone: the key is
+// optional (auth-less local vLLM / LM Studio).
+func TestKeylessOpenAICompatibleCountsAsConfigured(t *testing.T) {
+	r := minimalRunner(t)
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Catalog = cat
+	for n := range r.Config.Providers {
+		r.Config.Providers[n] = config.ProviderConfig{}
+	}
+	r.Config.Providers["openai-compatible"] = config.ProviderConfig{BaseURL: "http://localhost:8000/v1", Model: "m"}
+	r.Config.Provider = "openai-compatible"
+
+	if got := r.checkProviderConfigured(); got.Status != StatusOK {
+		t.Errorf("checkProviderConfigured = %v, want OK for keyless base_url+model", got.Status)
+	}
+	if got := r.checkActiveProvider(); got.Status != StatusOK {
+		t.Errorf("checkActiveProvider = %v (%q), want OK for keyless base_url+model", got.Status, got.Detail)
+	}
+
+	// Incomplete block (no model) is not configured.
+	r.Config.Providers["openai-compatible"] = config.ProviderConfig{BaseURL: "http://localhost:8000/v1"}
+	if got := r.checkProviderConfigured(); got.Status != StatusFail {
+		t.Errorf("base_url without model must not count as configured; got %v", got.Status)
+	}
+	// The keyless exception is specific to openai-compatible.
+	if keylessConfigured("deepseek", config.ProviderConfig{BaseURL: "x", Model: "y"}) {
+		t.Error("keyless exception must not apply to other providers")
+	}
+}
+
+// api_key_env is strict at review time (set but empty is an error, no
+// fallback to api_key). Doctor must not go green on such a config.
+func TestAPIKeyEnvEmptyFailsDoctor(t *testing.T) {
+	t.Setenv("DOCTOR_PINNED_KEY", "")
+	r := minimalRunner(t)
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Catalog = cat
+	r.ConnTimeout = 50 * time.Millisecond
+	for n := range r.Config.Providers {
+		r.Config.Providers[n] = config.ProviderConfig{}
+	}
+	r.Config.Providers["deepseek"] = config.ProviderConfig{APIKey: "sk-old", APIKeyEnv: "DOCTOR_PINNED_KEY"}
+	r.Config.Provider = "deepseek"
+
+	got := r.checkActiveProvider()
+	if got.Status != StatusFail || !strings.Contains(got.Detail, "DOCTOR_PINNED_KEY") {
+		t.Errorf("checkActiveProvider = %v (%q), want FAIL naming the empty variable", got.Status, got.Detail)
+	}
+
+	var conn *Result
+	for _, res := range r.checkProviderConnections(context.Background()) {
+		if strings.Contains(res.Name, "deepseek") {
+			res := res
+			conn = &res
+		}
+	}
+	if conn == nil || conn.Status == StatusOK || !strings.Contains(conn.Detail, "DOCTOR_PINNED_KEY") {
+		t.Errorf("connection check must not ping with the stale api_key: %+v", conn)
+	}
+
+	// With the variable set, the same block is fine again.
+	t.Setenv("DOCTOR_PINNED_KEY", "sk-new")
+	if got := r.checkActiveProvider(); got.Status != StatusOK {
+		t.Errorf("checkActiveProvider = %v (%q), want OK once the variable is set", got.Status, got.Detail)
+	}
+}

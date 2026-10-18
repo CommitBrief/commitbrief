@@ -360,6 +360,12 @@
           }
         }
       ]
+    },
+    {
+      "name": "openai-compatible",
+      "kind": "api",
+      "default_model": "",
+      "pricing_user_declared": true
     }
   ],
   "commands": [
@@ -1332,8 +1338,18 @@
       "free_form": true
     },
     {
+      "path": "providers.\u003cname\u003e.api_key_env",
+      "type": "string",
+      "free_form": true
+    },
+    {
       "path": "providers.\u003cname\u003e.base_url",
       "type": "string",
+      "free_form": true
+    },
+    {
+      "path": "providers.\u003cname\u003e.context_window",
+      "type": "int",
       "free_form": true
     },
     {

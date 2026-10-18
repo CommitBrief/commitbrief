@@ -330,3 +330,22 @@ func contains(s []string, v string) bool {
 	}
 	return false
 }
+
+// api_key_env and context_window are per-provider keys valid on every
+// provider block (ADR-0040 derives the allowed set from struct tags).
+func TestValidateKeysAcceptsAPIKeyEnvAndContextWindow(t *testing.T) {
+	m := decodeYAML(t, `
+providers:
+  openai-compatible:
+    base_url: http://localhost:8000/v1
+    model: my-model
+    api_key_env: MY_KEY
+    context_window: 32768
+  anthropic:
+    api_key_env: MY_ANTHROPIC_KEY
+    context_window: 100000
+`)
+	if got := ValidateKeys(m, "cfg.yml"); len(got) != 0 {
+		t.Fatalf("ValidateKeys = %v, want none", paths(got))
+	}
+}

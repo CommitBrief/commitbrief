@@ -255,7 +255,11 @@ func cardsFooter(m Meta, findings []Finding) string {
 	if m.Cached {
 		moneyLabel = "Saved: "
 	}
-	money := stylePrefix.Render(moneyLabel) + styleAccent.Render(fmt.Sprintf("$%.4f", m.Cost))
+	amount := fmt.Sprintf("$%.4f", m.Cost)
+	if m.CostUnknown {
+		amount = "unknown"
+	}
+	money := stylePrefix.Render(moneyLabel) + styleAccent.Render(amount)
 
 	segments := []string{check + timing}
 	if findings != nil {

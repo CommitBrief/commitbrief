@@ -193,6 +193,7 @@ func runCommit(cmd *cobra.Command) error {
 	if model == "" {
 		model = prov.DefaultModel()
 	}
+	noteInsecureHTTP(cmd, app, prov, prog)
 	p := prompt.BuildCommitMessage(diffText, prompt.CommitOptions{Type: ctype, Count: count})
 
 	// --show-prompt: dump the exact prompt and stop (no provider call, no

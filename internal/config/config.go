@@ -165,6 +165,21 @@ type ProviderConfig struct {
 	Model   string `yaml:"model,omitempty"`
 	BaseURL string `yaml:"base_url,omitempty"`
 
+	// APIKeyEnv names the environment variable the credential is read from.
+	// When set it beats both the provider's fixed env var (ANTHROPIC_API_KEY
+	// and friends) and api_key; if it is set but the named variable is
+	// empty, the run fails instead of falling back. Opt-in on every API
+	// provider; no effect for the *-cli providers (see
+	// provider.ResolveAPIKeyEnv and cli.applyAPIKeyEnvLenient).
+	APIKeyEnv string `yaml:"api_key_env,omitempty"`
+
+	// ContextWindow overrides the provider's built-in per-model context
+	// window, in tokens. Zero (unset) keeps the provider table. Consumed by
+	// the token preflight and dry-run via resolveContextWindow
+	// (internal/cli); it is the only source for openai-compatible, whose
+	// models are unknown to CommitBrief.
+	ContextWindow int `yaml:"context_window,omitempty"`
+
 	// Pricing overrides the built-in per-model rate table (OQ-09), keyed
 	// by model name. Useful when the hard-coded snapshot drifts or for a
 	// negotiated rate. Zero fields fall back to the built-in value, so a
