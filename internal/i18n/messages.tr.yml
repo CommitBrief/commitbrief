@@ -131,6 +131,9 @@ review.architecture.invalid: "mimari dosyası: %s"
 baseline.updated: "Baseline güncellendi: %d bulgu %s dosyasına kaydedildi"
 baseline.filtered: "%d baseline'da"
 suppress.filtered: "%d susturuldu"
+baseline.legacy: "uyarı: %s dosyası sürüm 1 baseline (başlık tabanlı eşleşme). Sürüm 2'ye geçmek için onu oluşturan aralıkta --update-baseline çalıştırın; o zamana kadar başlığı değişen bulgular yeniden görünür."
+suppress.unknown_rule: "uyarı: %s:%d: commitbrief-ignore[%s] bilinen bir kural id'si ya da kategorisi değil; kapsamsız işaret olarak ele alınıyor"
+suppress.unknown_scope: "uyarı: %s:%d: commitbrief-ignore[%s] geçerli bir önem derecesi ya da kural id'si değil; kapsamsız işaret olarak ele alınıyor"
 
 output.template.invalid: "OUTPUT.md template geçersiz (%s):\n  %s\n\nSağlayıcıya istek gönderilmedi. Template'i düzeltin veya\n'commitbrief init --yes' komutuyla varsayılana sıfırlayın."
 
@@ -255,6 +258,9 @@ guard.pass: "Politika kapısı: GEÇTİ"
 guard.blocked: "Politika kapısı: ENGELLENDİ — %d ihlal"
 guard.violation_line: "%s: %d bulundu (en fazla %d)"
 guard.counts: "bulgular"
+guard.rule_violation_line: "kural %s: politika tarafından yasaklı"
+guard.rule_violation_count: "kural %s: politika tarafından yasaklı (%d bulgu)"
+guard.waived: "rules.allow ile feragat edilen: %d bulgu"
 mcp.tool.review.description: "Mevcut git deposunun diff'i üzerinde bir CommitBrief kod incelemesi çalıştırır ve yapılandırılmış bulguları (JSON şema v1) kısa bir özetle birlikte döndürür. Argüman verilmezse staged diff'i inceler; başka değişiklikleri incelemek için `unstaged` veya `diff` git-aralığı argümanlarını geçin. Bir insan inceleyicinin yakalayacağı sorunları yakalamak için kodu göndermeden önce bunu kullanın."
 
 # Deterministik flaky-test dedektörü (ADR-0022). Statik internal/flaky

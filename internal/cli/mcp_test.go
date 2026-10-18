@@ -362,3 +362,79 @@ func TestMCPReviewMinSeverityTrimsFindings(t *testing.T) {
 		t.Errorf("CLI --json must stay unfiltered; got:\n%s", e2.out.String())
 	}
 }
+
+// TestMCPReviewSurfacesSignalControlWarnings pins that the legacy-baseline
+// notice and suppression-marker warnings reach the MCP caller. The seam forces
+// --quiet and buffers stderr, so without the warning sink they would vanish.
+// The warnings ride on the text summary only; the JSON block stays schema-v1.
+func TestMCPReviewSurfacesSignalControlWarnings(t *testing.T) {
+	e := newCLIEnv(t)
+	e.writeBaselineFile(t, `{"version":1,"fingerprints":["0000"]}`)
+	e.stageMarkerFile(t, "sec.nope")
+
+	resps := runMCPServer(t, e,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"review","arguments":{"staged":true}}}`,
+	)
+	if len(resps) != 1 {
+		t.Fatalf("got %d responses, want 1", len(resps))
+	}
+	var callRes struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	decodeResult(t, resps[0], &callRes)
+	if callRes.IsError {
+		t.Fatalf("review returned IsError: %+v", callRes.Content)
+	}
+	if len(callRes.Content) != 2 {
+		t.Fatalf("content blocks = %d, want 2 (summary + JSON)", len(callRes.Content))
+	}
+	summary := callRes.Content[0].Text
+	if strings.Contains(summary, "Warning: warning:") || strings.Contains(summary, "Warning: uyarı:") {
+		t.Errorf("summary must not double the warning prefix:\n%s", summary)
+	}
+	for _, want := range []string{"version 1 baseline", "commitbrief-ignore[sec.nope]"} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("summary missing warning %q:\n%s", want, summary)
+		}
+	}
+	if _, err := parseReviewDoc(callRes.Content[1].Text); err != nil {
+		t.Errorf("JSON block must stay a valid schema-v1 document: %v", err)
+	}
+	if strings.Contains(callRes.Content[1].Text, "version 1 baseline") {
+		t.Errorf("warnings must not leak into the JSON block:\n%s", callRes.Content[1].Text)
+	}
+}
+
+// TestMCPReviewWarningsStayEnglishUnderTRLocale pins ADR-0028's "English
+// summary": even with output.lang: tr the MCP warnings render with the English
+// catalog, never the localized UI one.
+func TestMCPReviewWarningsStayEnglishUnderTRLocale(t *testing.T) {
+	e := newCLIEnv(t)
+	writeFile(t, filepath.Join(e.homeDir, ".commitbrief", "config.yml"),
+		"version: 1\nprovider: mock\nproviders:\n  mock:\n    api_key: test\n    model: mock-model\n"+
+			"output:\n  lang: tr\n  stream: false\n  color: never\ncache:\n  enabled: true\n  ttl_days: 7\n")
+	e.writeBaselineFile(t, `{"version":1,"fingerprints":["0000"]}`)
+
+	resps := runMCPServer(t, e,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"review","arguments":{"staged":true}}}`,
+	)
+	if len(resps) != 1 {
+		t.Fatalf("got %d responses, want 1", len(resps))
+	}
+	var callRes struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	decodeResult(t, resps[0], &callRes)
+	summary := callRes.Content[0].Text
+	if !strings.Contains(summary, "is a version 1 baseline") {
+		t.Errorf("summary missing the English legacy-baseline warning:\n%s", summary)
+	}
+	if strings.Contains(summary, "uyarı") {
+		t.Errorf("summary must not carry localized warning text:\n%s", summary)
+	}
+}

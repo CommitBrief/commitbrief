@@ -23,11 +23,33 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 - The OpenAI, Anthropic and Gemini structured schemas declare `rule_id` (required,
   enum of the taxonomy). The flaky pre-pass reports `test.flaky`; `leaks` reports
   `sec.hardcoded-secret` (no fingerprint).
+- **Baseline v2**: `.commitbrief/baseline.json` now stores finding fingerprints
+  (`version: 2`) so a reworded title no longer unhides a baselined finding.
+  `--update-baseline` always writes v2; an existing v1 file keeps matching with the
+  old formula and prints a one-time warning.
+- **Policy `rules`**: `.commitbrief/policy.yml` accepts `rules.deny` (a single finding of
+  that rule blocks; every matching finding is its own `rule:<rule_id>` violation)
+  and `rules.allow` (findings are waived from thresholds and `total`).
+  Entries are taxonomy ids or `<category>.*`. The guard verdict gains an additive
+  `waived` count. `version: 1` policies without `rules` behave as before.
+- **Inline `[rule_id]` markers**: `commitbrief-ignore[sec.injection]: reason` silences
+  only that rule's findings; `[high]` works as before. An unknown token falls open to
+  an unscoped marker with a warning. Any `commitbrief-ignore[token]:` line is now a
+  marker, including tokens that were previously not recognised (e.g. `[todo-1]`); such
+  a token is treated as unscoped and warned about.
 
 ### Changed
+- Migrating a v1 baseline to v2 is lossy (title-based hashes cannot be converted);
+  re-run `--update-baseline` to adopt v2.
 - The review system prompt gains a `<rule_taxonomy>` block (about 690 estimated
   tokens) and asks for `rule_id`. The cache key includes the system prompt, so
   existing cache entries miss once after upgrading.
+
+### Fixed
+- **Inline suppression leaked across files**: a `commitbrief-ignore` marker at line N of
+  one file also suppressed a finding at line N of another file in the same diff. Markers
+  are now keyed by file and line. Findings that were wrongly suppressed before will
+  reappear after upgrading.
 
 ## [1.18.1] - 2026-10-10
 

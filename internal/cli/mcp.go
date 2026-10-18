@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/mcp"
 	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/version"
@@ -342,6 +343,19 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	// cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr() — never os.Stdout
 	// for its rendered output — so the JSON lands in outBuf.
 	var outBuf, errBuf bytes.Buffer
+	// Signal-control warnings (legacy baseline, unknown suppression tokens)
+	// cannot ride on stderr here: --quiet is forced and errBuf is only read on
+	// failure. Collect them and append them to the text summary — the JSON
+	// document stays schema-v1 exactly. A caller that already installed its
+	// own sink (guard forwards to its terminal) keeps it.
+	var warnings []string
+	if _, ok := warningTargetFrom(ctx); !ok {
+		// The summary is English model-facing text (ADR-0028), so render the
+		// warnings with the English catalog whatever output.lang is set to.
+		if enCat, cerr := i18n.Load(i18n.DefaultLang); cerr == nil {
+			ctx = withWarningSink(ctx, func(line string) { warnings = append(warnings, line) }, enCat)
+		}
+	}
 	cmd := &cobra.Command{}
 	cmd.SetOut(&outBuf)
 	cmd.SetErr(&errBuf)
@@ -376,6 +390,10 @@ func runReviewForMCP(ctx context.Context, args reviewToolArgs) (string, string, 
 	// states the filter rather than claiming findings were hidden.
 	if threshold, enabled, perr := parseMinSeverity(global.minSeverity); perr == nil && enabled {
 		summary += " Findings below " + string(threshold) + " severity are excluded from this result (min_severity)."
+	}
+	for _, w := range warnings {
+		// Catalog warnings already start with "warning: ".
+		summary += " " + w
 	}
 	return summary, jsonOut, nil
 }

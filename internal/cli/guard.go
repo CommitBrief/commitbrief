@@ -55,7 +55,8 @@ func newGuardCmd() *cobra.Command {
 			"and exit non-zero when it is breached — a richer, opt-in alternative to " +
 			"--fail-on for gating (often AI-authored) pull requests.\n\n" +
 			"The policy (.commitbrief/policy.yml) caps how many findings of each " +
-			"severity a change may carry (plus an optional total cap). Unlike " +
+			"severity a change may carry (plus an optional total cap), and can deny " +
+			"or waive findings by rule id (rules.deny / rules.allow). Unlike " +
 			"--fail-on (a single threshold), guard enforces a per-severity budget and " +
 			"can consume a prior review's JSON via --from-json without re-running the " +
 			"provider. It evaluates the set that survives baseline + suppression.",
@@ -172,7 +173,16 @@ func guardReviewJSON(cmd *cobra.Command) (string, error) {
 	// guard --unstaged together with a commit filter is left to fail in
 	// buildCommitFilter, which reports the scope conflict with the same
 	// message a review would — one rule, one message.
-	_, reviewJSON, err := runReviewForMCP(cmd.Context(), args)
+	// The seam forces --quiet, so hand it a sink that forwards signal-control
+	// warnings (e.g. the legacy baseline notice) to this command's stderr,
+	// honoring the user's own --quiet.
+	quiet := global.quiet
+	ctx := withWarningSink(cmd.Context(), func(line string) {
+		if !quiet {
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), line)
+		}
+	}, nil)
+	_, reviewJSON, err := runReviewForMCP(ctx, args)
 	if err != nil {
 		return "", err
 	}
@@ -207,9 +217,34 @@ func renderGuardVerdict(cmd *cobra.Command, app *appContext, v policy.Verdict) e
 		lines = append(lines, app.Catalog.T("guard.pass"))
 	} else {
 		lines = append(lines, app.Catalog.T("guard.blocked", len(v.Violations)))
+		// Rule violations are one per finding (ADR-0045 §6) and carry no
+		// location, so identical ids would print as indistinguishable
+		// lines; fold them into one line with a finding count.
+		ruleCounts := map[string]int{}
 		for _, vio := range v.Violations {
+			if id, ok := strings.CutPrefix(vio.Severity, "rule:"); ok {
+				ruleCounts[id]++
+			}
+		}
+		for _, vio := range v.Violations {
+			if id, ok := strings.CutPrefix(vio.Severity, "rule:"); ok {
+				n, seen := ruleCounts[id]
+				if !seen {
+					continue
+				}
+				delete(ruleCounts, id)
+				if n > 1 {
+					lines = append(lines, "  "+app.Catalog.T("guard.rule_violation_count", id, n))
+				} else {
+					lines = append(lines, "  "+app.Catalog.T("guard.rule_violation_line", id))
+				}
+				continue
+			}
 			lines = append(lines, "  "+app.Catalog.T("guard.violation_line", vio.Severity, vio.Actual, vio.Allowed))
 		}
+	}
+	if v.Waived > 0 {
+		lines = append(lines, app.Catalog.T("guard.waived", v.Waived))
 	}
 	lines = append(lines, fmt.Sprintf("%s (%s, total %d)", app.Catalog.T("guard.counts"), strings.Join(parts, " "), v.Total))
 	if _, err := fmt.Fprintln(out, strings.Join(lines, "\n")); err != nil {
