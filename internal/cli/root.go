@@ -31,6 +31,7 @@ const sandboxRerunDefault = 5
 type globalFlags struct {
 	json           bool
 	markdown       bool
+	sarif          bool // --sarif; review and diff only (local flag, not persistent): emit SARIF 2.1.0 for GitHub Code Scanning instead of cards/JSON (ADR-0047)
 	output         string
 	noCache        bool
 	yes            bool
@@ -195,6 +196,7 @@ func newRootCmd() *cobra.Command {
 	// a subcommand. They are re-bound on `dry-run` (see newDryRunCmd) since
 	// it walks the same pipeline.
 	bindScopeFlags(cmd)
+	bindSarifFlag(cmd)
 
 	cmd.AddCommand(
 		newInitCmd(),

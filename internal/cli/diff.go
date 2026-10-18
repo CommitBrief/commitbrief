@@ -31,7 +31,7 @@ import (
 // <merge-hash>` is no longer emitted — `git diff <hash>` semantics
 // are well-known to anyone who already knows `git diff`.
 func newDiffCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "diff <args>...",
 		Short: "Run a review against an arbitrary git diff (passthrough)",
 		Long: "Review the output of `git diff <args>`. Arguments are forwarded " +
@@ -48,4 +48,6 @@ func newDiffCmd() *cobra.Command {
 			return runReview(cmd, reviewScopeFlags{}, args)
 		},
 	}
+	bindSarifFlag(cmd)
+	return cmd
 }

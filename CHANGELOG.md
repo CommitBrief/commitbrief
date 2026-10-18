@@ -24,6 +24,19 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   enum of the taxonomy). The flaky pre-pass reports `test.flaky`; `leaks` reports
   `sec.hardcoded-secret` (no fingerprint).
 
+- **`--sarif`** on the root review and on `commitbrief diff` writes the findings as
+  a SARIF 2.1.0 log for GitHub Code Scanning (`commitbrief diff <range> --sarif -o
+  commitbrief.sarif`). Each result carries `ruleId`, `level`, `rank`, a repo-relative
+  forward-slash `artifactLocation.uri`, `region.startLine`/`endLine`, and
+  `partialFingerprints["commitbrief/v1"]` (the finding fingerprint); `tool.driver.rules[]`
+  lists the full rule taxonomy. `--sarif` is exclusive with `--json`, `--markdown`,
+  `--suggest-commit`, `--cli` and `--show-prompt`, and is refused with a CLI-backed provider (claude-cli, gemini-cli,
+  codex-cli) before any provider call. It fails closed: a response that never parsed
+  into structured findings, fresh or replayed from cache, produces an error and no file,
+  because an empty `results[]` would tell Code Scanning every open alert is fixed. A diff
+  that is empty after filtering is not a failure: it writes a valid log with
+  `results: []` so an `upload-sarif` step still finds its file.
+
 ### Changed
 - The review system prompt gains a `<rule_taxonomy>` block (about 690 estimated
   tokens) and asks for `rule_id`. The cache key includes the system prompt, so

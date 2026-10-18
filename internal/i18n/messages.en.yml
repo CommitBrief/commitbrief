@@ -323,3 +323,7 @@ leaks.nothing_to_scan: "--no-worktree and --no-history together leave nothing to
 leaks.gate_failed: "failing: %d credential finding(s). Pass --fail-on none to report without failing."
 
 timeout.exceeded: "timed out after %s — the run was stopped by --timeout / review.timeout, not by the provider. Pass a larger --timeout (e.g. --timeout 20m) to allow more time, or --timeout 0 to fall back to the provider's own limit."
+
+sarif.plain_text_provider: "--sarif needs structured findings, which CLI-backed providers (claude-cli, gemini-cli, codex-cli) do not return. Use an API provider (anthropic, openai, gemini, ollama, deepseek, mistral, cohere) with --sarif."
+sarif.output_conflict: "--sarif cannot be combined with --json, --markdown, --suggest-commit, --cli or --show-prompt; each selects a different output format or produces no review at all."
+sarif.degraded: "--sarif refused: the model response could not be parsed into structured findings, and an empty SARIF file would tell Code Scanning that every open alert is fixed. No file was written. Re-run the review."

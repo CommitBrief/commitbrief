@@ -854,6 +854,15 @@
     },
     {
       "command": "commitbrief",
+      "name": "sarif",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "emit SARIF 2.1.0 for GitHub Code Scanning instead of the review (use -o to write a file; API providers only; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief",
       "name": "staged",
       "shorthand": "s",
       "type": "bool",
@@ -971,6 +980,15 @@
       "default": "false",
       "no_opt_def_val": "true",
       "usage": "write to repo .commitbrief/config.yml instead of user-level",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief diff",
+      "name": "sarif",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "emit SARIF 2.1.0 for GitHub Code Scanning instead of the review (use -o to write a file; API providers only; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)",
       "scope": "command"
     },
     {
