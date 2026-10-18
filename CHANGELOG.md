@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-18
+
 ### Added
 - **Finding identity: `rule_id` and `fingerprint`** on every structured finding
   (`--json` `findings[]`, `schema` stays `1`; both fields are additive and
@@ -2370,7 +2372,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.18.1...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.19.0...HEAD
+[1.19.0]: https://github.com/CommitBrief/commitbrief/compare/v1.18.1...v1.19.0
 [1.18.1]: https://github.com/CommitBrief/commitbrief/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/CommitBrief/commitbrief/compare/v1.17.1...v1.18.0
 [1.17.1]: https://github.com/CommitBrief/commitbrief/compare/v1.17.0...v1.17.1
