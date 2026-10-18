@@ -10,6 +10,23 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- **`remote pr` now syncs instead of re-posting** (ADR-0046). Each inline comment
+  carries a hidden marker (`<!-- commitbrief:fp=<fingerprint> v=1 -->`) so the next
+  run recognises its own threads: a finding that is still present is left alone (or
+  its comment body is edited in place when the text changed), a new finding is
+  posted once, and a finding that disappeared has its thread resolved. A finding
+  that reappears reopens the thread CommitBrief resolved. Threads a human resolved
+  or reopened are never touched, and duplicates of one fingerprint collapse into a
+  single thread (occurrences are listed as `Also at:`).
+- When CommitBrief cannot resolve a thread (no permission) it leaves a short
+  `No longer present as of <sha>` / `Present again as of <sha>` reply instead,
+  once per transition. Comments without a marker, written by someone else, or with
+  an unknown marker version are never modified.
+- `remote pr` ends with a one-line stderr summary:
+  `Synced: N posted · M updated · K unchanged · R resolved · Q replied · H held`.
+  If the review threads cannot be read, the run degrades to plain posting.
+
 ## [1.19.0] - 2026-10-18
 
 ### Added

@@ -5,11 +5,13 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -170,6 +172,7 @@ type fakeGH struct {
 	commitsIdx int
 	diff       string
 	commentErr error
+	threads    string // `api graphql` review-thread snapshot (empty = none)
 	calls      []string
 }
 
@@ -189,6 +192,8 @@ func (f *fakeGH) Run(_ context.Context, args ...string) ([]byte, error) {
 		return []byte(f.prMeta), nil
 	case has(args, "diff"):
 		return []byte(f.diff), nil
+	case len(args) >= 2 && args[0] == "api" && args[1] == "graphql":
+		return []byte(f.threads), nil
 	case len(args) > 0 && args[0] == "api" && has(args, "POST"):
 		return nil, f.commentErr
 	case has(args, "review"):
@@ -454,5 +459,97 @@ func TestSubmitPRReviewAnchorsAndFallsBack(t *testing.T) {
 	}
 	if !strings.Contains(reviewBody, "floating") {
 		t.Errorf("unanchored finding title missing from body; review call=%q", reviewBody)
+	}
+}
+
+func fpOfTest(c string) string { return strings.Repeat(c, 64) }
+
+func TestRemotePRBuildSyncGroupsFoldsByFingerprint(t *testing.T) {
+	parsed, err := diff.Parse(git.Diff{Content: sampleDiff, Origin: git.OriginDiff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	anchors := parsed.Anchors()
+	fp := fpOfTest("a")
+	findings := []render.Finding{
+		{Severity: render.SeverityInfo, File: "mock.go", Line: 999, Title: "t", Description: "d", Suggestion: "s", Fingerprint: fp},
+		{Severity: render.SeverityHigh, File: "mock.go", Line: 1, Title: "t", Description: "d", Suggestion: "s", Fingerprint: fp},
+		{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "u", Description: "d", Suggestion: "s"},
+		{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "v", Description: "d", Suggestion: "s", Fingerprint: "bogus"},
+	}
+	groups := buildSyncGroups(findings, anchors, "me")
+	if len(groups) != 3 {
+		t.Fatalf("want 3 groups (1 folded + 2 unmanaged), got %d", len(groups))
+	}
+	g := groups[0]
+	if g.FP != fp || len(g.Members) != 2 || !g.Anchored || g.Rep.Line != 1 || g.Severity != render.SeverityHigh {
+		t.Fatalf("folded group = %+v", g)
+	}
+	if !strings.Contains(g.Text, "Also at: mock.go:999") {
+		t.Fatalf("group text lacks the other occurrence: %q", g.Text)
+	}
+	if groups[1].FP != "" || groups[2].FP != "" {
+		t.Fatalf("unmanaged groups must carry no fingerprint")
+	}
+}
+
+func submitForTest(t *testing.T, r *fakeGH, findings []render.Finding) {
+	t.Helper()
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := diff.Parse(git.Diff{Content: sampleDiff, Origin: git.OriginDiff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
+	prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
+	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
+		findings, parsed.Anchors(), render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog); err != nil {
+		t.Fatalf("submitPRReview: %v", err)
+	}
+}
+
+func TestRemotePRSyncSkipsUnchangedAndResolvesGone(t *testing.T) {
+	fpKept, fpGone := fpOfTest("a"), fpOfTest("b")
+	f := render.Finding{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "kept", Description: "d", Suggestion: "s", Fingerprint: fpKept}
+	keptBody := remote.BuildCommentBody(f, "tester")
+	goneBody := "[INFO] - gone\nd\n\U0001F4A1 s @tester by #commitbrief\n<!-- commitbrief:fp=" + fpGone + " v=1 -->"
+	node := func(id string, dbID int, body string) string {
+		b, _ := json.Marshal(body)
+		return `{"id":"` + id + `","isResolved":false,"isOutdated":false,"viewerCanResolve":true,"viewerCanUnresolve":true,"viewerCanReply":true,` +
+			`"comments":{"nodes":[{"databaseId":` + strconv.Itoa(dbID) + `,"body":` + string(b) + `,"viewerDidAuthor":true,"viewerCanUpdate":true}]},` +
+			`"recent":{"nodes":[{"databaseId":` + strconv.Itoa(dbID) + `,"body":` + string(b) + `,"viewerDidAuthor":true}]}}`
+	}
+	snapshot := `{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[` +
+		node("KEPT", 1, keptBody) + `,` + node("GONE", 2, goneBody) + `]}}}}}`
+
+	r := &fakeGH{threads: snapshot}
+	submitForTest(t, r, []render.Finding{f})
+
+	if got := r.callCount("/pulls/42/comments "); got != 0 {
+		t.Errorf("unchanged finding must not be posted again; calls=%v", r.calls)
+	}
+	if r.callCount("resolveReviewThread") != 1 || r.callCount("id=GONE") != 1 {
+		t.Errorf("want exactly one resolve for the vanished finding; calls=%v", r.calls)
+	}
+	if r.callCount("PATCH") != 1 || r.callCount("/pulls/comments/2") != 1 {
+		t.Errorf("resolve must be recorded on the root comment; calls=%v", r.calls)
+	}
+	if r.callCount("id=KEPT") != 0 {
+		t.Errorf("kept thread must not be touched; calls=%v", r.calls)
+	}
+}
+
+func TestRemotePRSyncReadFailureDegradesToPosting(t *testing.T) {
+	f := render.Finding{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "kept", Description: "d", Suggestion: "s", Fingerprint: fpOfTest("a")}
+	r := &fakeGH{threads: "{garbage"}
+	submitForTest(t, r, []render.Finding{f})
+	if got := r.callCount("/comments"); got != 1 {
+		t.Errorf("a failed thread read must still post the comment once; calls=%v", r.calls)
+	}
+	if r.callCount("resolveReviewThread") != 0 {
+		t.Errorf("no thread writes without a snapshot; calls=%v", r.calls)
 	}
 }

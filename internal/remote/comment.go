@@ -27,7 +27,38 @@ const suggestionPrefix = "💡 "
 //	[SEVERITY] - Title
 //	Description
 //	💡 Suggestion @whoami by #commitbrief
+//
+// A finding that carries a fingerprint also gets the identity marker on its
+// own trailing line (ADR-0046); the visible text is unchanged.
 func BuildCommentBody(f render.Finding, whoami string) string {
+	text := commentText(f, whoami)
+	if validFingerprint(f.Fingerprint) {
+		return withMarker(text, NewMarker(f.Fingerprint))
+	}
+	return text
+}
+
+// CommentText renders the visible part of a finding's comment (no marker).
+func CommentText(f render.Finding, whoami string) string { return commentText(f, whoami) }
+
+// ValidFingerprint reports whether fp is a 64-char lowercase hex digest, the
+// only shape the identity marker accepts.
+func ValidFingerprint(fp string) bool { return validFingerprint(fp) }
+
+func validFingerprint(fp string) bool {
+	if len(fp) != 64 {
+		return false
+	}
+	for i := 0; i < len(fp); i++ {
+		c := fp[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func commentText(f render.Finding, whoami string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s] - %s\n", strings.ToUpper(string(f.Severity)), f.Title)
 	fmt.Fprintf(&b, "%s\n", f.Description)
