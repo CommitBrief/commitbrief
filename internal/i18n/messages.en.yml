@@ -133,6 +133,9 @@ review.architecture.invalid: "architecture file: %s"
 baseline.updated: "Baseline updated: %d finding(s) recorded in %s"
 baseline.filtered: "%d baselined"
 suppress.filtered: "%d suppressed"
+baseline.legacy: "warning: %s is a version 1 baseline (title-based matching). Re-run with --update-baseline over the same range that created it to migrate to version 2; findings whose titles changed will reappear until then."
+suppress.unknown_rule: "warning: %s:%d: commitbrief-ignore[%s] is not a known rule id or category; treating it as an unscoped marker"
+suppress.unknown_scope: "warning: %s:%d: commitbrief-ignore[%s] is not a valid severity or rule id; treating it as an unscoped marker"
 
 output.template.invalid: "OUTPUT.md template is invalid at %s:\n  %s\n\nThe pipeline did not contact the provider. Fix the template, or run\n'commitbrief init --yes' to overwrite it with the default."
 
@@ -260,6 +263,9 @@ guard.pass: "Policy gate: PASS"
 guard.blocked: "Policy gate: BLOCKED — %d violation(s)"
 guard.violation_line: "%s: %d found (max %d)"
 guard.counts: "findings"
+guard.rule_violation_line: "rule %s: denied by policy"
+guard.rule_violation_count: "rule %s: denied by policy (%d findings)"
+guard.waived: "Waived by policy rules.allow: %d finding(s)"
 mcp.tool.review.description: "Run a CommitBrief code review on the current git repository's diff and return structured findings (JSON schema v1) plus a short summary. With no arguments it reviews the staged diff; pass `unstaged`, or `diff` git-range arguments, to review other changes. Use this before submitting code to catch issues the way a human reviewer would."
 
 # Deterministic flaky-test detector (ADR-0022). Finding text for the static

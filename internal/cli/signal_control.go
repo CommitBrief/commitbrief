@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/CommitBrief/commitbrief/internal/baseline"
 	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/suppress"
 )
@@ -66,14 +68,27 @@ func applyActionableFilters(cmd *cobra.Command, app *appContext, parsed diff.Dif
 		if lerr != nil {
 			return nil, 0, 0, lerr
 		}
+		if set.Legacy() {
+			// A v1 file matches via the legacy title-based formula; tell the
+			// user once per run how to migrate (the migration is lossy, so it
+			// is never done silently).
+			warnT(cmd, app, "baseline.legacy", baseline.Path(app.RepoRoot))
+		}
 		findings, baselined = baseline.Filter(findings, set)
 	}
 
 	// SC2 — inline suppression. Always active (it's an in-source, reviewer-
 	// visible marker with no team-shared hide-vector risk, so no config gate).
 	// Markers are read from the ADDED diff lines and matched to a finding's
-	// line (or the line directly above).
+	// line (or the line directly above) in the same file.
 	sup := suppress.ParseSuppressions(parsed)
+	for _, w := range sup.Warnings() {
+		key := "suppress.unknown_scope"
+		if w.UnknownRule {
+			key = "suppress.unknown_rule"
+		}
+		warnT(cmd, app, key, w.Path, w.Line, w.Token)
+	}
 	findings, suppressed = suppress.Filter(findings, sup)
 
 	return findings, baselined, suppressed, nil
@@ -100,4 +115,60 @@ func signalControlFooter(cmd *cobra.Command, app *appContext, baselined, suppres
 		parts = append(parts, app.Catalog.T("suppress.filtered", suppressed))
 	}
 	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), strings.Join(parts, " · "))
+}
+
+// warningSinkKey is the context key under which a caller of the shared review
+// seam (runReviewForMCP) installs a warningTarget.
+type warningSinkKey struct{}
+
+// warningSink receives signal-control warnings as plain lines. MCP and guard
+// install one because the seam forces --quiet and buffers stderr, which would
+// otherwise swallow the warnings (the legacy-baseline migration notice is the
+// only signal a v1 baseline user gets).
+type warningSink func(line string)
+
+// warningTarget is the installed sink plus the catalog its lines are rendered
+// with. A nil catalog means the user's UI catalog (guard prints to a terminal);
+// MCP passes the English catalog because its summary is intentionally English
+// model-facing text (ADR-0028), not localized UI.
+type warningTarget struct {
+	sink    warningSink
+	catalog *i18n.Catalog
+}
+
+func withWarningSink(ctx context.Context, sink warningSink, catalog *i18n.Catalog) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, warningSinkKey{}, warningTarget{sink: sink, catalog: catalog})
+}
+
+func warningTargetFrom(ctx context.Context) (warningTarget, bool) {
+	if ctx == nil {
+		return warningTarget{}, false
+	}
+	t, ok := ctx.Value(warningSinkKey{}).(warningTarget)
+	return t, ok && t.sink != nil
+}
+
+// warnT renders the catalog message `key` and delivers it as a signal-control
+// warning. It writes to the command's stderr (so it never corrupts a piped
+// --json/--markdown stdout), honoring --quiet. When the command's context
+// carries a warning target (MCP, guard run-mode) the line goes to its sink
+// instead, regardless of --quiet: those callers force --quiet for the review
+// pipeline but still want the warning delivered. The target may also pin the
+// catalog (MCP: English); otherwise the app's UI catalog renders the line.
+func warnT(cmd *cobra.Command, app *appContext, key string, args ...any) {
+	if t, ok := warningTargetFrom(cmd.Context()); ok {
+		cat := app.Catalog
+		if t.catalog != nil {
+			cat = t.catalog
+		}
+		t.sink(cat.T(key, args...))
+		return
+	}
+	if global.quiet {
+		return
+	}
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T(key, args...))
 }
