@@ -58,14 +58,19 @@ type Payload struct {
 }
 
 type Meta struct {
-	Provider  string
-	Model     string
-	Lang      string
-	Usage     provider.Usage
-	Cost      float64
-	Latency   time.Duration
-	Cached    bool
-	Timestamp time.Time
+	Provider string
+	Model    string
+	Lang     string
+	Usage    provider.Usage
+	Cost     float64
+	// CostUnknown marks a run whose provider has no declared price
+	// (openai-compatible without pricing in config). The cards and verbose
+	// footers then print "unknown" instead of $0.0000; the JSON cost_usd
+	// field is deliberately unchanged (existing schema contract).
+	CostUnknown bool
+	Latency     time.Duration
+	Cached      bool
+	Timestamp   time.Time
 	// Stats describing what went into this review. Used by the Cards
 	// renderer for its pre-body status line; zero values cause the line
 	// to be omitted. Markdown / JSON / verbose-footer renderers ignore

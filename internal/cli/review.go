@@ -385,6 +385,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	if model == "" {
 		model = prov.DefaultModel()
 	}
+	noteUndeclaredLimits(cmd, app, prov, model, prog, true)
 
 	cacheKey := cache.Compute(cache.ComputeArgs{
 		Diff:         diffText,
@@ -423,6 +424,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				Timestamp:       entry.CreatedAt,
 				Usage:           usage,
 				Cost:            resolvePricing(app.Config, prov, model).Cost(usage),
+				CostUnknown:     costIsUnknown(app.Config, prov, model),
 				Files:           parsed.FileCount(),
 				LinesAdded:      parsed.AddedLines(),
 				LinesRemoved:    parsed.DeletedLines(),
@@ -501,7 +503,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// config); --yes deliberately does NOT bypass — see the rationale
 	// on handleCostPreflight. Pause the progress animation around the
 	// prompt so the user sees a clean y/N question.
-	if !global.noCostCheck {
+	// An unknown price (D3) has no figure to compare against the threshold,
+	// so the confirmation is skipped rather than asked about a made-up $0.
+	if !global.noCostCheck && !costIsUnknown(app.Config, prov, model) {
 		estUsage := provider.Usage{
 			InputTokens:  p.EstimatedTokens(),
 			OutputTokens: estimateOutputTokens(p.EstimatedTokens()),
@@ -614,6 +618,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		Lang:          app.Lang.Code,
 		Usage:         usage,
 		Cost:          resolvePricing(app.Config, prov, respModel).Cost(usage),
+		CostUnknown:   costIsUnknown(app.Config, prov, respModel),
 		Latency:       latency,
 		Timestamp:     time.Now().UTC(),
 		Files:         parsed.FileCount(),
@@ -837,7 +842,7 @@ func showPromptOutput(cmd *cobra.Command, p prompt.Prompt) error {
 // that reports a non-positive window (ExceedsContext guards this) never
 // triggers the prompt.
 func handleTokenPreflight(cmd *cobra.Command, app *appContext, prov provider.Provider, p prompt.Prompt, model string, stdin *bufio.Reader) bool {
-	window := prov.ContextWindow(model)
+	window := resolveContextWindow(app.Config, prov, model)
 	if !p.ExceedsContext(window) {
 		return false
 	}

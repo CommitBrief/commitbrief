@@ -656,3 +656,30 @@ func TestJSONFilteredCommitsPresentWhenSet(t *testing.T) {
 		t.Errorf("schema = %v, want 1 (additive change must not bump)", doc["schema"])
 	}
 }
+
+func TestVerboseFooterCostUnknown(t *testing.T) {
+	m := samplePayload().Meta
+	m.Cost = 0
+	m.CostUnknown = true
+	out := VerboseFooter(m)
+	if !strings.Contains(out, "Cost:      unknown") {
+		t.Errorf("footer should print unknown cost; got:\n%s", out)
+	}
+	if strings.Contains(out, "$0.0000") {
+		t.Errorf("unknown cost must not render as $0.0000; got:\n%s", out)
+	}
+	m.Cached = true
+	if out := VerboseFooter(m); !strings.Contains(out, "Saved:     unknown") {
+		t.Errorf("cached unknown cost should read Saved: unknown; got:\n%s", out)
+	}
+}
+
+func TestCardsFooterCostUnknown(t *testing.T) {
+	m := samplePayload().Meta
+	m.Cost = 0
+	m.CostUnknown = true
+	out := cardsFooter(m, nil)
+	if !strings.Contains(out, "unknown") || strings.Contains(out, "$0.0000") {
+		t.Errorf("cards footer should say unknown, not $0.0000; got:\n%s", out)
+	}
+}

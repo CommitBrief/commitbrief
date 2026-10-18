@@ -44,12 +44,33 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   forward-slash `artifactLocation.uri`, `region.startLine`/`endLine`, and
   `partialFingerprints["commitbrief/v1"]` (the finding fingerprint); `tool.driver.rules[]`
   lists the full rule taxonomy. `--sarif` is exclusive with `--json`, `--markdown`,
-  `--suggest-commit`, `--cli` and `--show-prompt`, and is refused with a CLI-backed provider (claude-cli, gemini-cli,
-  codex-cli) before any provider call. It fails closed: a response that never parsed
+  `--suggest-commit`, `--cli` and `--show-prompt`, and is refused with a CLI-backed
+  provider (claude-cli, gemini-cli, codex-cli) before any provider call. It fails closed: a response that never parsed
   into structured findings, fresh or replayed from cache, produces an error and no file,
   because an empty `results[]` would tell Code Scanning every open alert is fixed. A diff
   that is empty after filtering is not a failure: it writes a valid log with
   `results: []` so an `upload-sarif` step still finds its file.
+- **`openai-compatible` provider**: points CommitBrief at any OpenAI-compatible
+  chat-completions endpoint (vLLM, LM Studio, OpenRouter, ...) through config
+  alone. `providers.openai-compatible.base_url` and `model` are required; the
+  key is optional (`api_key_env` > `api_key` > no `Authorization` header, for
+  auth-less local servers). The request carries no `response_format`: the JSON
+  shape comes from the prompt, and the reply goes through the usual fence
+  salvage and repair-retry path. Prices and context window are declared in
+  config (`pricing.<model>`, `context_window`); without a price the cost is
+  shown as `unknown`, one stderr note is printed, and the cost confirmation is
+  skipped. A literal `0.0` price is treated as "not declared".
+- **`providers.<name>.api_key_env`** (every API provider): read the credential
+  from the named environment variable. It beats both the provider's fixed
+  variable (`ANTHROPIC_API_KEY` and friends) and `api_key`; set but empty is an
+  error. Inert for the `*-cli` providers. Unset leaves behavior unchanged.
+- **`providers.<name>.context_window`** (every API provider): overrides the
+  built-in context window used by the token preflight and `dry-run`. Unset
+  leaves behavior unchanged.
+- **`openai-compatible` safety notes**: a `base_url` that uses plain `http://`
+  to a non-loopback host prints a one-line stderr warning (also under
+  `--quiet`; the request is never refused). `doctor` reports an `api_key_env`
+  that points at an empty variable as a failure instead of pinging without a key.
 
 ### Changed
 - Migrating a v1 baseline to v2 is lossy (title-based hashes cannot be converted);
@@ -57,12 +78,21 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 - The review system prompt gains a `<rule_taxonomy>` block (about 690 estimated
   tokens) and asks for `rule_id`. The cache key includes the system prompt, so
   existing cache entries miss once after upgrading.
+- **`dry-run`**: when the configured provider cannot be built (for example
+  `api_key_env` points at an unset variable, or `base_url` / `model` is
+  missing), it now prints a `Provider unavailable: <reason>` line on stderr
+  for every provider (also under `--quiet`) instead of silently estimating
+  without it. The real run fails with that same error. The estimate itself is still printed.
 
 ### Fixed
 - **Inline suppression leaked across files**: a `commitbrief-ignore` marker at line N of
   one file also suppressed a finding at line N of another file in the same diff. Markers
   are now keyed by file and line. Findings that were wrongly suppressed before will
   reappear after upgrading.
+- **deepseek, mistral, cohere**: the OpenAI SDK's environment defaults leaked
+  `OPENAI_ORG_ID` / `OPENAI_PROJECT_ID` to these third-party endpoints as
+  `OpenAI-Organization` / `OpenAI-Project` headers. They are no longer sent
+  (the API key was never affected).
 
 ## [1.18.1] - 2026-10-10
 

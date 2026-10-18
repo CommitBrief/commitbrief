@@ -164,6 +164,7 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 	// animated redraw.
 	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
 	defer prog.Close()
+	noteUndeclaredLimits(cmd, app, prov, model, prog, false)
 
 	if global.failOn != "" {
 		prog.Info(cat.T("remote.fail_on_ignored"))
@@ -210,11 +211,12 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 	prog.Close()
 	if !global.quiet {
 		footerMeta := render.Meta{
-			Provider: prov.Name(),
-			Model:    model,
-			Usage:    res.usage,
-			Cost:     resolvePricing(app.Config, prov, model).Cost(res.usage),
-			Latency:  res.latency,
+			Provider:    prov.Name(),
+			Model:       model,
+			Usage:       res.usage,
+			Cost:        resolvePricing(app.Config, prov, model).Cost(res.usage),
+			CostUnknown: costIsUnknown(app.Config, prov, model),
+			Latency:     res.latency,
 		}
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.FooterLine(footerMeta, res.findings))
 	}
@@ -294,6 +296,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 	}
 	prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
 	defer prog.Close()
+	noteUndeclaredLimits(cmd, app, prov, model, prog, false)
 
 	prog.Start(cat.T("remote.fetching_pr", prID))
 	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
@@ -374,6 +377,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 				Timestamp:    entry.CreatedAt,
 				Usage:        usage,
 				Cost:         resolvePricing(app.Config, prov, model).Cost(usage),
+				CostUnknown:  costIsUnknown(app.Config, prov, model),
 				Files:        parsed.FileCount(),
 				LinesAdded:   parsed.AddedLines(),
 				LinesRemoved: parsed.DeletedLines(),
@@ -400,7 +404,9 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 
 	// Cost preflight, same as a local review (no-op for zero-priced CLI
 	// providers). --no-cost-check bypasses; --yes deliberately does not.
-	if !global.noCostCheck {
+	// Skipped when the price is unknown (openai-compatible without a declared
+	// price): there is no figure to confirm (D3).
+	if !global.noCostCheck && !costIsUnknown(app.Config, prov, model) {
 		estUsage := provider.Usage{
 			InputTokens:  p.EstimatedTokens(),
 			OutputTokens: estimateOutputTokens(p.EstimatedTokens()),
@@ -468,6 +474,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		Lang:          app.Lang.Code,
 		Usage:         usage,
 		Cost:          resolvePricing(app.Config, prov, model).Cost(usage),
+		CostUnknown:   costIsUnknown(app.Config, prov, model),
 		Latency:       latency,
 		Timestamp:     time.Now().UTC(),
 		Files:         parsed.FileCount(),

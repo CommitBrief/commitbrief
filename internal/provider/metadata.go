@@ -46,6 +46,13 @@ type Metadata struct {
 	DefaultBaseURL string      `json:"default_base_url,omitempty"`
 	Binary         string      `json:"binary,omitempty"`
 	Models         []ModelInfo `json:"models,omitempty"`
+
+	// PricingUserDeclared marks a provider whose models and prices CommitBrief
+	// cannot know (openai-compatible): a zero price there means "the user
+	// did not say", not "free", so the cost is reported as unknown instead
+	// of $0.0000. Providers with a genuinely free price (ollama, *-cli)
+	// leave it false.
+	PricingUserDeclared bool `json:"pricing_user_declared,omitempty"`
 }
 
 var (

@@ -72,6 +72,7 @@ func newCompressCmd() *cobra.Command {
 			// report and the interactive replace prompt take the terminal.
 			prog := ui.NewProgress(cmd.ErrOrStderr(), ui.ParseColorMode(global.color), global.quiet)
 			defer prog.Close()
+			noteUndeclaredLimits(cmd, app, prov, model, prog, false)
 			prog.Start(app.Catalog.T("compress.compressing", rulesPath, prov.Name(), model, level))
 
 			start := time.Now()
@@ -99,11 +100,17 @@ func newCompressCmd() *cobra.Command {
 			_, _ = fmt.Fprintf(out, "Compressed: %d chars / ~%d tokens\n",
 				result.CompressedChars, result.CompressedTokens)
 			_, _ = fmt.Fprintf(out, "Reduction:  %.1f%% (%d tokens)\n", percent, deltaTokens)
-			_, _ = fmt.Fprintf(out, "Per-review input savings: $%.5f (at %s rate)\n",
-				perReviewSavedUSD, model)
-			_, _ = fmt.Fprintf(out, "Compression call cost: in=%d out=%d (≈$%.5f), latency %s\n",
+			savingsText := fmt.Sprintf("$%.5f", perReviewSavedUSD)
+			callCostText := fmt.Sprintf("≈$%.5f", pricing.Cost(result.Usage))
+			if costIsUnknown(app.Config, prov, model) {
+				// No declared price: a dollar figure would be a fabrication (D3).
+				savingsText, callCostText = "unknown", "cost unknown"
+			}
+			_, _ = fmt.Fprintf(out, "Per-review input savings: %s (at %s rate)\n",
+				savingsText, model)
+			_, _ = fmt.Fprintf(out, "Compression call cost: in=%d out=%d (%s), latency %s\n",
 				result.Usage.InputTokens, result.Usage.OutputTokens,
-				pricing.Cost(result.Usage), latency.Round(time.Millisecond))
+				callCostText, latency.Round(time.Millisecond))
 
 			if result.Aborted {
 				return errors.New(app.Catalog.T("compress.aborted_larger", result.AbortReason))

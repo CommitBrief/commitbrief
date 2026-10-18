@@ -69,6 +69,7 @@ func resolveContext(requireRepo bool) (*appContext, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	config.ApplyEnv(cfg)
+	applyAPIKeyEnvLenient(cfg)
 
 	// Apply CLI overrides. --cli <name> is a shorthand that resolves
 	// to the "<name>-cli" provider (claude → claude-cli, gemini →

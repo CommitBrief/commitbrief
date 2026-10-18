@@ -21,6 +21,7 @@ import (
 	_ "github.com/CommitBrief/commitbrief/internal/provider/mistral"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/ollama"
 	_ "github.com/CommitBrief/commitbrief/internal/provider/openai"
+	_ "github.com/CommitBrief/commitbrief/internal/provider/openai-compatible"
 )
 
 func main() {

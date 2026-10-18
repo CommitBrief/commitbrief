@@ -100,21 +100,40 @@ func newDryRunCmd() *cobra.Command {
 			// fire the review. Provider instantiation can fail in
 			// unusual setups (missing API key, etc.); we tolerate
 			// that by zero-ing the provider-derived numbers rather
-			// than aborting the whole dry-run report.
+			// than aborting the whole dry-run report, and report the
+			// build error on stderr (cost shows "unknown" for
+			// user-declared-price providers).
 			modelName := app.Config.Providers[app.Config.Provider].Model
 			inputTokens := p.EstimatedTokens()
 			outputTokens := estimateOutputTokens(inputTokens)
 			var contextWindow int
 			var estCost float64
-			if prov, perr := provider.New(app.Config.Provider, app.Config.Providers[app.Config.Provider]); perr == nil {
+			var costUnknown bool
+			if prov, perr := newProviderWithTimeout(app.Config.Provider, app.Config.Providers[app.Config.Provider], 0); perr == nil {
 				if modelName == "" {
 					modelName = prov.DefaultModel()
 				}
-				contextWindow = prov.ContextWindow(modelName)
+				contextWindow = resolveContextWindow(app.Config, prov, modelName)
 				estCost = resolvePricing(app.Config, prov, modelName).Cost(provider.Usage{
 					InputTokens:  inputTokens,
 					OutputTokens: outputTokens,
 				})
+				// openai-compatible with no declared price: say "unknown"
+				// instead of a fabricated $0.0000 (D3), note it once.
+				costUnknown = costIsUnknown(app.Config, prov, modelName)
+				noteUndeclaredLimits(cmd, app, prov, modelName, nil, false)
+			} else {
+				// The provider could not be built (e.g. api_key_env unset,
+				// base_url missing). Do not swallow it: the real run will
+				// fail with this exact error, so say so, and keep the cost
+				// honest for user-declared-price providers (D3).
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Provider unavailable: %v\n", perr)
+				if n := insecureHTTPNote(app, app.Config.Provider); n != "" {
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), n)
+				}
+				if m, ok := provider.MetadataFor(app.Config.Provider); ok && m.PricingUserDeclared {
+					costUnknown = true
+				}
 			}
 
 			cacheKey := cache.Compute(cache.ComputeArgs{
@@ -165,13 +184,17 @@ func newDryRunCmd() *cobra.Command {
 			if outputLoaded.Path != "" {
 				outputLine += fmt.Sprintf(" (%s)", outputLoaded.Path)
 			}
+			costLine := fmt.Sprintf("Cost estimate:       $%.4f", estCost)
+			if costUnknown {
+				costLine = "Cost estimate:       unknown"
+			}
 			lines = append(lines,
 				rulesLine,
 				outputLine,
 				fmt.Sprintf("Input tokens (est):  %d", inputTokens),
 				fmt.Sprintf("Output tokens (est): %d", outputTokens),
 				fmt.Sprintf("Context window:      %d", contextWindow),
-				fmt.Sprintf("Cost estimate:       $%.4f", estCost),
+				costLine,
 				fmt.Sprintf("Cache key:           %s", cacheKey),
 			)
 			for _, line := range lines {
