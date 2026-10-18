@@ -58,9 +58,9 @@ commitbrief --unstaged --dir app/Models    # narrow any scope to a directory
 ```
 
 Shipped providers: `anthropic`, `openai`, `gemini`, `ollama` (native
-API/local), `deepseek`, `mistral`, `cohere` (OpenAI-compatible), and
-`claude-cli`, `gemini-cli`, `codex-cli` (reuse a local CLI subscription, no
-extra API key). Models, context windows, and per-token pricing:
+API/local), `deepseek`, `mistral`, `cohere` (OpenAI-compatible), `openai-compatible` (any
+endpoint you point it at), and `claude-cli`, `gemini-cli`, `codex-cli` (reuse a
+local CLI subscription, no extra API key). Models, context windows, and per-token pricing:
 [Providers](https://commitbrief.com/docs/1.x/providers).
 
 ## Documentation
