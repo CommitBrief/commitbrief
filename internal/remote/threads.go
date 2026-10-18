@@ -26,6 +26,7 @@ type Comment struct {
 // thread, oldest first, so its last element is the thread's latest comment.
 type Thread struct {
 	NodeID       string
+	Path         string
 	Resolved     bool
 	Outdated     bool
 	CanResolve   bool
@@ -49,7 +50,7 @@ const reviewThreadsQuery = `query($owner:String!,$name:String!,$number:Int!,$end
       reviewThreads(first:100,after:$endCursor){
         pageInfo{hasNextPage endCursor}
         nodes{
-          id isResolved isOutdated viewerCanResolve viewerCanUnresolve viewerCanReply
+          id path isResolved isOutdated viewerCanResolve viewerCanUnresolve viewerCanReply
           comments(first:1){nodes{databaseId body viewerDidAuthor viewerCanUpdate}}
           recent: comments(last:10){nodes{databaseId body viewerDidAuthor}}
         }
@@ -67,6 +68,7 @@ type gqlComment struct {
 
 type gqlThread struct {
 	ID               string `json:"id"`
+	Path             string `json:"path"`
 	IsResolved       bool   `json:"isResolved"`
 	IsOutdated       bool   `json:"isOutdated"`
 	ViewerCanResolve bool   `json:"viewerCanResolve"`
@@ -137,6 +139,7 @@ func FetchThreads(ctx context.Context, r Runner, slug string, number int) ([]Thr
 			root := n.Comments.Nodes[0]
 			t := Thread{
 				NodeID:       n.ID,
+				Path:         n.Path,
 				Resolved:     n.IsResolved,
 				Outdated:     n.IsOutdated,
 				CanResolve:   n.ViewerCanResolve,

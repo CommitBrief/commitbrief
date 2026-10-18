@@ -391,7 +391,7 @@ func TestRemotePRSyncN(t *testing.T) {
 		s.active(g)
 		res := s.run(g)
 		wantWrites(t, s)
-		if res.StaleOpen != 1 {
+		if res.StaleOpen != 1 || res.StaleReason != "permission" {
 			t.Fatalf("res=%+v", res)
 		}
 	})
@@ -1065,3 +1065,83 @@ func TestRemotePRSyncInvariantsRandomRuns(t *testing.T) {
 }
 
 var _ = context.Background
+
+// ADR-0046 §Update 2026-10-18: a path-narrowed run touches only the threads
+// of the files it actually reviewed.
+func (s *ghSim) runScoped(inScope func(string) bool, groups ...Group) Result {
+	snap, err := FetchThreads(context.Background(), s, "o/r", 7)
+	if err != nil {
+		s.t.Fatalf("FetchThreads: %v", err)
+	}
+	s.reset()
+	return Sync(context.Background(), SyncParams{
+		Runner: s, Slug: "o/r", PRNumber: 7, CommitID: "abcdef0123456789",
+		Threads: snap, Groups: groups, InScope: inScope,
+	})
+}
+
+func TestRemotePRSyncScopedRun(t *testing.T) {
+	onlyA := func(p string) bool { return p == "a.go" }
+	t.Run("narrowed run does not resolve an out-of-scope thread", func(t *testing.T) {
+		s := newSim(t)
+		inScope := s.active(grp("a", 5, "x"))
+		outScope := s.active(grp("b", 7, "y"))
+		outScope.path = "b.go"
+		res := s.runScoped(onlyA)
+		wantWrites(t, s, "RESOLVE", "PATCH")
+		if !inScope.resolved || outScope.resolved || res.Resolved != 1 {
+			t.Fatalf("res=%+v inScope=%v outScope=%v", res, inScope.resolved, outScope.resolved)
+		}
+		if len(outScope.comments) != 1 {
+			t.Fatalf("out-of-scope thread got a reply: %d comments", len(outScope.comments))
+		}
+	})
+	t.Run("narrowed run does not reply gone on an out-of-scope thread", func(t *testing.T) {
+		s := newSim(t)
+		outScope := s.active(grp("b", 7, "y"))
+		outScope.path = "b.go"
+		outScope.canResolve = false
+		s.runScoped(onlyA)
+		wantWrites(t, s)
+	})
+	t.Run("nil scope keeps whole-PR behaviour", func(t *testing.T) {
+		s := newSim(t)
+		th := s.active(grp("b", 7, "y"))
+		th.path = "b.go"
+		res := s.runScoped(nil)
+		if !th.resolved || res.Resolved != 1 {
+			t.Fatalf("res=%+v", res)
+		}
+	})
+}
+
+func TestRemotePRSyncStaleReasonIsOneError(t *testing.T) {
+	g := grp("a", 5, "nil deref")
+	s := newSim(t)
+	s.active(g)
+	s.active(g)
+	s.active(g)
+	s.failResolve = true
+	res := s.run(g)
+	if res.StaleOpen != 2 || res.StaleReason == "" || res.StaleReason == "permission" {
+		t.Fatalf("res=%+v", res)
+	}
+	if len(res.Warnings) != 0 {
+		t.Fatalf("N1 failures must not warn per thread: %+v", res.Warnings)
+	}
+}
+
+// A moved finding whose replacement post is cut by the cap keeps its old
+// thread, and the summary still accounts for it.
+func TestRemotePRSyncMovedFindingCappedIsCounted(t *testing.T) {
+	none := func(c []render.Finding) []render.Finding { return nil }
+	g := grp("a", 5, "x")
+	s := newSim(t)
+	old := s.active(g)
+	old.outdated = true
+	res := s.runSel(none, g)
+	if res.Unchanged != 1 || res.Posted != 0 {
+		t.Fatalf("res=%+v", res)
+	}
+	wantWrites(t, s)
+}

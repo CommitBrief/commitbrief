@@ -17,6 +17,7 @@ import (
 // simThread is one review thread of the simulated PR.
 type simThread struct {
 	id           string
+	path         string
 	resolved     bool
 	outdated     bool
 	canResolve   bool
@@ -50,7 +51,7 @@ func (s *ghSim) newID() int64 { s.nextID++; return s.nextID }
 func (s *ghSim) add(body string) *simThread {
 	id := s.newID()
 	th := &simThread{
-		id: "T" + strconv.FormatInt(id, 10), canResolve: true, canUnresolve: true,
+		id: "T" + strconv.FormatInt(id, 10), path: "a.go", canResolve: true, canUnresolve: true,
 		canReply: true, canUpdate: true,
 		comments: []Comment{{ID: id, Body: body, ViewerDidAuthor: true, ViewerCanUpdate: true}},
 	}
@@ -113,7 +114,7 @@ func (s *ghSim) listJSON() []byte {
 			rc = append(rc, map[string]any{"databaseId": c.ID, "body": c.Body, "viewerDidAuthor": c.ViewerDidAuthor})
 		}
 		nodes = append(nodes, map[string]any{
-			"id": th.id, "isResolved": th.resolved, "isOutdated": th.outdated,
+			"id": th.id, "path": th.path, "isResolved": th.resolved, "isOutdated": th.outdated,
 			"viewerCanResolve": th.canResolve, "viewerCanUnresolve": th.canUnresolve, "viewerCanReply": th.canReply,
 			"comments": map[string]any{"nodes": []map[string]any{{
 				"databaseId": root.ID, "body": root.Body, "viewerDidAuthor": root.ViewerDidAuthor, "viewerCanUpdate": th.canUpdate,

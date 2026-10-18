@@ -26,6 +26,10 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 - `remote pr` ends with a one-line stderr summary:
   `Synced: N posted · M updated · K unchanged · R resolved · Q replied · H held`.
   If the review threads cannot be read, the run degrades to plain posting.
+- With `--file`, `--dir`, `--exclude-file` or `--exclude-dir`, `remote pr` only
+  syncs threads on the files it actually reviewed; threads on other files are left
+  alone, and a filter that matches no file skips the sync (the verdict is still
+  submitted).
 
 ## [1.19.0] - 2026-10-18
 

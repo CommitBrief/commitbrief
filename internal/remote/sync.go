@@ -4,6 +4,7 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -105,6 +106,9 @@ type Result struct {
 	// StaleOpen counts duplicate (non-canonical) threads that could not be
 	// resolved and were left open.
 	StaleOpen int
+	// StaleReason says why the duplicates stayed open: "permission" when the
+	// viewer may not resolve (or record), otherwise the first API error.
+	StaleReason string
 	// Unanchored are findings that could not be given an inline comment and
 	// must be listed in the review body instead.
 	Unanchored []render.Finding
@@ -121,6 +125,11 @@ type SyncParams struct {
 	Threads  []Thread
 	Groups   []Group
 	Select   func([]render.Finding) []render.Finding
+	// InScope reports whether a thread's file was part of this run's review.
+	// A nil InScope means the whole PR was reviewed. Threads outside the
+	// scope are never touched: a narrowed run (--file/--dir/--exclude-*) says
+	// nothing about files it did not look at (ADR-0046 §Update 2026-10-18).
+	InScope func(path string) bool
 }
 
 type threadOp int
@@ -209,6 +218,9 @@ func (s *syncer) plan() {
 		text, m, ok := SplitMarker(t.Root.Body)
 		if !ok || !t.Root.ViewerDidAuthor {
 			continue // not ours: never touched
+		}
+		if s.p.InScope != nil && !s.p.InScope(t.Path) {
+			continue // not reviewed this run: never touched
 		}
 		ti := &tinfo{t: t, m: m, text: text, postIdx: -1, group: groups[m.FP]}
 		ti.class, ti.rec = Classify(t, m)
@@ -385,13 +397,20 @@ func (s *syncer) flushPlain(ti *tinfo) {
 	}
 }
 
-func (s *syncer) resolveAndRecord(ti *tinfo) bool {
+// errNoPermission marks a resolve that was skipped because the viewer may not
+// resolve the thread or record the new state afterwards.
+var errNoPermission = errors.New("no permission")
+
+// resolveAndRecord resolves the thread and records `state=resolved`. A nil
+// error means the thread is now resolved; errNoPermission means nothing was
+// attempted; any other error is the failed resolve call. It never warns, so
+// each caller decides how a failure is reported.
+func (s *syncer) resolveAndRecord(ti *tinfo) error {
 	if !canResolve(ti.t) {
-		return false
+		return errNoPermission
 	}
 	if err := ResolveThread(s.ctx, s.p.Runner, ti.t.NodeID); err != nil {
-		s.warn("resolve", ti.ref(), err)
-		return false
+		return err
 	}
 	s.res.Resolved++
 	// Resolve first, record second: a failed resolve leaves the marker alone.
@@ -401,19 +420,37 @@ func (s *syncer) resolveAndRecord(ti *tinfo) bool {
 		s.warn("record", ti.ref(), err)
 	}
 	ti.newText = saved
-	return true
+	return nil
+}
+
+// warnResolve reports a failed resolve call; a missing permission is silent
+// here because the callers surface it their own way (gone reply, summary).
+func (s *syncer) warnResolve(ti *tinfo, err error) {
+	if err != nil && !errors.Is(err, errNoPermission) {
+		s.warn("resolve", ti.ref(), err)
+	}
 }
 
 func (s *syncer) executeThread(ti *tinfo) {
 	switch ti.op {
 	case opResolve:
-		if s.resolveAndRecord(ti) {
+		err := s.resolveAndRecord(ti)
+		if err == nil {
 			return
 		}
 		if ti.goneFall {
+			s.warnResolve(ti, err)
 			s.tryGone(ti)
-		} else {
-			s.res.StaleOpen++
+			return
+		}
+		// N1: one summary line carries the reason, not one warning per thread.
+		s.res.StaleOpen++
+		if errors.Is(err, errNoPermission) {
+			if s.res.StaleReason == "" {
+				s.res.StaleReason = "permission"
+			}
+		} else if s.res.StaleReason == "" || s.res.StaleReason == "permission" {
+			s.res.StaleReason = err.Error()
 		}
 	case opUnresolve:
 		g := ti.group
@@ -538,7 +575,27 @@ func (s *syncer) executePosts() {
 		s.res.Posted++
 		s.postOK[i] = true
 		if it.old != nil {
-			s.resolveAndRecord(it.old)
+			s.warnResolve(it.old, s.resolveAndRecord(it.old))
 		}
 	}
+	// P4 threads whose replacement comment never appeared (cap, unanchorable
+	// or failed POST) are still ours and still current: keep their body fresh
+	// and count them, so the summary adds up to the findings.
+	for i, it := range s.posts {
+		if it.old != nil && !s.postOK[i] {
+			s.keepOrUpdate(it.old, it.g)
+		}
+	}
+}
+
+// keepOrUpdate refreshes a still-current thread's body in place, or counts it
+// unchanged when it already matches or cannot be edited.
+func (s *syncer) keepOrUpdate(ti *tinfo, g *Group) {
+	if ti.text == g.Text || !ti.t.Root.ViewerCanUpdate {
+		s.res.Unchanged++
+		return
+	}
+	txt := g.Text
+	ti.newText = &txt
+	s.flushPlain(ti)
 }

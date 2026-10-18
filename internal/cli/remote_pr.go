@@ -644,44 +644,55 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 	verdict := computeVerdict(findings, threshold)
 
 	slug := meta.BaseSlug()
-	groups := buildSyncGroups(findings, anchors, whoami)
-	threads, readErr := remote.FetchThreads(ctx, runner, slug, meta.Number)
-	if readErr != nil {
-		prog.Info(cat.T("remote.sync_read_failed", readErr.Error()))
-		threads = nil
-	}
-	if len(groups) > 0 || len(threads) > 0 {
-		prog.Start(cat.T("remote.posting_comments", meta.Number))
-	}
-	res := remote.Sync(ctx, remote.SyncParams{
-		Runner:   runner,
-		Slug:     slug,
-		PRNumber: meta.Number,
-		CommitID: oid,
-		Threads:  threads,
-		Groups:   groups,
-		Select:   func(c []render.Finding) []render.Finding { return selectPostable(c, threshold) },
-	})
-	if len(groups) > 0 || len(threads) > 0 {
-		prog.Finish() // sync stage done
-	}
-	// Warnings are collected by Sync and emitted after the stage: prog.Info
-	// would terminate the active stage on the first one.
-	for _, w := range res.Warnings {
-		prog.Info(syncWarning(cat, w))
-	}
-	if res.StaleOpen > 0 {
-		prog.Info(cat.T("remote.sync_stale_open", res.StaleOpen))
-	}
-	if readErr != nil {
-		if res.Posted+res.PostFailed > 0 {
-			prog.Info(cat.T("remote.posted_summary", res.Posted, res.Posted+res.PostFailed, res.PostFailed))
-		}
+	var res remote.Result
+	var readErr error
+	scope, skipSync := syncScope(anchors)
+	if skipSync {
+		// A narrowed run that kept no file reviewed nothing: it must not
+		// post, update, resolve or reply (ADR-0046 §Update 2026-10-18).
+		prog.Info(cat.T("remote.sync_skipped_empty_scope"))
 	} else {
-		prog.Info(cat.T("remote.sync_summary", res.Posted, res.Updated, res.Unchanged, res.Resolved, res.Replied, res.Held))
-	}
-	if len(res.Unanchored) > 0 {
-		prog.Info(cat.T("remote.unanchored_appended", len(res.Unanchored)))
+		groups := buildSyncGroups(findings, anchors, whoami)
+		var threads []remote.Thread
+		threads, readErr = remote.FetchThreads(ctx, runner, slug, meta.Number)
+		if readErr != nil {
+			prog.Info(cat.T("remote.sync_read_failed", readErr.Error()))
+			threads = nil
+		}
+		if len(groups) > 0 || len(threads) > 0 {
+			prog.Start(cat.T("remote.posting_comments", meta.Number))
+		}
+		res = remote.Sync(ctx, remote.SyncParams{
+			Runner:   runner,
+			Slug:     slug,
+			PRNumber: meta.Number,
+			CommitID: oid,
+			Threads:  threads,
+			Groups:   groups,
+			Select:   func(c []render.Finding) []render.Finding { return selectPostable(c, threshold) },
+			InScope:  scope,
+		})
+		if len(groups) > 0 || len(threads) > 0 {
+			prog.Finish() // sync stage done
+		}
+		// Warnings are collected by Sync and emitted after the stage: prog.Info
+		// would terminate the active stage on the first one.
+		for _, w := range res.Warnings {
+			prog.Info(syncWarning(cat, w))
+		}
+		if res.StaleOpen > 0 {
+			prog.Info(cat.T("remote.sync_stale_open", res.StaleOpen, staleReason(cat, res.StaleReason)))
+		}
+		if readErr != nil {
+			if res.Posted+res.PostFailed > 0 {
+				prog.Info(cat.T("remote.posted_summary", res.Posted, res.Posted+res.PostFailed, res.PostFailed))
+			}
+		} else {
+			prog.Info(cat.T("remote.sync_summary", res.Posted, res.Updated, res.Unchanged, res.Resolved, res.Replied, res.Held))
+		}
+		if len(res.Unanchored) > 0 {
+			prog.Info(cat.T("remote.unanchored_appended", len(res.Unanchored)))
+		}
 	}
 
 	body := remote.BuildReviewBody(verdict, whoami)
@@ -702,6 +713,28 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		prog.Info(cat.T("remote.action_comment", meta.Number))
 	}
 	return nil
+}
+
+// syncScope decides which review threads a sync run may touch. Without a
+// path-narrowing flag the whole PR was reviewed and every thread is in scope
+// (nil). With one, only the files the run actually reviewed are in scope, and
+// an empty reviewed set means the sync is skipped altogether.
+func syncScope(anchors map[string]diff.FileAnchors) (scope func(string) bool, skip bool) {
+	if !pathsNarrowed() {
+		return nil, false
+	}
+	if len(anchors) == 0 {
+		return nil, true
+	}
+	return func(path string) bool { _, ok := anchors[path]; return ok }, false
+}
+
+// staleReason renders why duplicate threads stayed open.
+func staleReason(cat *i18n.Catalog, reason string) string {
+	if reason == "permission" {
+		return cat.T("remote.sync_stale_no_permission")
+	}
+	return reason
 }
 
 // syncWarning renders one sync warning for stderr.
@@ -767,14 +800,17 @@ func buildSyncGroups(findings []render.Finding, anchors map[string]diff.FileAnch
 				}
 			}
 		}
-		g.Text = remote.CommentText(g.Rep, whoami)
+		// The header shows the group's severity, the one the cap ranks it by.
+		head := g.Rep
+		head.Severity = g.Severity
+		g.Text = remote.CommentText(head, whoami)
 		if len(b.members) > 1 {
 			refs := make([]string, 0, len(b.members)-1)
 			for _, m := range b.members {
 				if m.File == g.Rep.File && m.Line == g.Rep.Line {
 					continue
 				}
-				refs = append(refs, m.PathRef())
+				refs = append(refs, m.PathRef()+" ("+m.Title+")")
 			}
 			if len(refs) > 0 {
 				g.Text += "\n\nAlso at: " + strings.Join(refs, ", ")

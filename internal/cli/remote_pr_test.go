@@ -485,8 +485,11 @@ func TestRemotePRBuildSyncGroupsFoldsByFingerprint(t *testing.T) {
 	if g.FP != fp || len(g.Members) != 2 || !g.Anchored || g.Rep.Line != 1 || g.Severity != render.SeverityHigh {
 		t.Fatalf("folded group = %+v", g)
 	}
-	if !strings.Contains(g.Text, "Also at: mock.go:999") {
-		t.Fatalf("group text lacks the other occurrence: %q", g.Text)
+	if !strings.Contains(g.Text, "Also at: mock.go:999 (t)") {
+		t.Fatalf("group text lacks the other occurrence with its title: %q", g.Text)
+	}
+	if !strings.HasPrefix(g.Text, "[HIGH]") {
+		t.Fatalf("header must carry the group severity: %q", g.Text)
 	}
 	if groups[1].FP != "" || groups[2].FP != "" {
 		t.Fatalf("unmanaged groups must carry no fingerprint")
@@ -551,5 +554,61 @@ func TestRemotePRSyncReadFailureDegradesToPosting(t *testing.T) {
 	}
 	if r.callCount("resolveReviewThread") != 0 {
 		t.Errorf("no thread writes without a snapshot; calls=%v", r.calls)
+	}
+}
+
+// scopedSnapshot builds a thread snapshot whose threads carry a path.
+func scopedSnapshot(t *testing.T, threads map[string]string) string {
+	t.Helper()
+	var nodes []string
+	n := 0
+	for path, fp := range threads {
+		n++
+		body, _ := json.Marshal("[INFO] - gone\nd\n\U0001F4A1 s @tester by #commitbrief\n<!-- commitbrief:fp=" + fp + " v=1 -->")
+		id := "T" + path
+		nodes = append(nodes, `{"id":"`+id+`","path":"`+path+`","isResolved":false,"isOutdated":false,"viewerCanResolve":true,"viewerCanUnresolve":true,"viewerCanReply":true,`+
+			`"comments":{"nodes":[{"databaseId":`+strconv.Itoa(n)+`,"body":`+string(body)+`,"viewerDidAuthor":true,"viewerCanUpdate":true}]},`+
+			`"recent":{"nodes":[{"databaseId":`+strconv.Itoa(n)+`,"body":`+string(body)+`,"viewerDidAuthor":true}]}}`)
+	}
+	return `{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[` + strings.Join(nodes, ",") + `]}}}}}`
+}
+
+func withGlobal(t *testing.T, g globalFlags) {
+	t.Helper()
+	saved := global
+	global = g
+	t.Cleanup(func() { global = saved })
+}
+
+func TestRemotePRSyncNarrowedRunLeavesOutOfScopeThreadAlone(t *testing.T) {
+	withGlobal(t, globalFlags{files: []string{"mock.go"}})
+	snapshot := scopedSnapshot(t, map[string]string{"mock.go": fpOfTest("a"), "other.go": fpOfTest("b")})
+	r := &fakeGH{threads: snapshot}
+	submitForTest(t, r, nil)
+	if r.callCount("id=Tmock.go") != 1 {
+		t.Errorf("in-scope vanished thread must be resolved once; calls=%v", r.calls)
+	}
+	if r.callCount("id=Tother.go") != 0 {
+		t.Errorf("out-of-scope thread must not be touched; calls=%v", r.calls)
+	}
+}
+
+func TestRemotePRSyncNarrowedEmptyScopeSkipsSync(t *testing.T) {
+	withGlobal(t, globalFlags{files: []string{"nothing-matches.go"}})
+	r := &fakeGH{threads: scopedSnapshot(t, map[string]string{"mock.go": fpOfTest("a")})}
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
+	prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
+	f := render.Finding{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "t", Description: "d", Suggestion: "s", Fingerprint: fpOfTest("a")}
+	err = submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
+		[]render.Finding{f}, map[string]diff.FileAnchors{}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog)
+	if err != nil {
+		t.Fatalf("submitPRReview: %v", err)
+	}
+	if r.callCount("graphql") != 0 || r.callCount("/comments") != 0 || r.callCount("PATCH") != 0 {
+		t.Errorf("an empty narrowed scope must skip the sync entirely; calls=%v", r.calls)
 	}
 }
