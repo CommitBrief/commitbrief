@@ -166,14 +166,20 @@ func stubGHOnPath(t *testing.T) {
 // fakeGH dispatches gh invocations by their args, so call order (including
 // the race-retry's repeated pr-view) doesn't matter.
 type fakeGH struct {
-	whoami     string
-	prMeta     string   // `pr view --json number,author,...`
-	commitsSeq []string // sequential `pr view --json commits` responses
-	commitsIdx int
-	diff       string
-	commentErr error
-	threads    string // `api graphql` review-thread snapshot (empty = none)
-	calls      []string
+	whoami      string
+	prMeta      string   // `pr view --json number,author,...`
+	commitsSeq  []string // sequential `pr view --json commits` responses
+	commitsIdx  int
+	diff        string
+	commentErr  error
+	threads     string // `api graphql` review-thread snapshot (empty = none)
+	reviews     string // `api graphql` reviews(last:100) response (empty = none)
+	reviewsErr  error
+	compare     string // `api repos/.../compare/a...b` JSON (empty = 404)
+	compareErr  error
+	compareDif  string // the same compare as a unified diff
+	compareDErr error
+	calls       []string
 }
 
 func (f *fakeGH) Run(_ context.Context, args ...string) ([]byte, error) {
@@ -181,6 +187,19 @@ func (f *fakeGH) Run(_ context.Context, args ...string) ([]byte, error) {
 	switch {
 	case len(args) >= 2 && args[0] == "api" && args[1] == "user":
 		return []byte(f.whoami + "\n"), nil
+	case len(args) >= 2 && args[0] == "api" && anyContains(args, "/compare/"):
+		if has(args, "Accept: application/vnd.github.diff") {
+			return []byte(f.compareDif), f.compareDErr
+		}
+		if f.compare == "" && f.compareErr == nil {
+			return nil, errors.New("gh: Not Found (HTTP 404)")
+		}
+		return []byte(f.compare), f.compareErr
+	case len(args) >= 2 && args[0] == "api" && args[1] == "graphql" && anyContains(args, "reviews(last:100)"):
+		if f.reviews == "" && f.reviewsErr == nil {
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviews":{"nodes":[]}}}}}`), nil
+		}
+		return []byte(f.reviews), f.reviewsErr
 	case has(args, "view") && jsonField(args) == "commits":
 		out := `{"commits":[{"oid":"stable"}]}`
 		if f.commitsIdx < len(f.commitsSeq) {
@@ -210,6 +229,15 @@ func (f *fakeGH) callCount(substr string) int {
 		}
 	}
 	return n
+}
+
+func anyContains(args []string, sub string) bool {
+	for _, a := range args {
+		if strings.Contains(a, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func has(args []string, want string) bool {
@@ -440,7 +468,7 @@ func TestSubmitPRReviewAnchorsAndFallsBack(t *testing.T) {
 	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
 	prog := ui.NewProgress(io.Discard, ui.ColorNever, true) // silent
 	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
-		findings, anchors, render.SeverityCritical, "tester", app, prog); err != nil {
+		prReviewResult{findings: findings, anchors: anchors}, render.SeverityCritical, "tester", app, prog); err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}
 
@@ -509,7 +537,7 @@ func submitForTest(t *testing.T, r *fakeGH, findings []render.Finding) {
 	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
 	prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
 	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
-		findings, parsed.Anchors(), render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog); err != nil {
+		prReviewResult{findings: findings, anchors: parsed.Anchors()}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog); err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}
 }
@@ -604,7 +632,7 @@ func TestRemotePRSyncNarrowedEmptyScopeSkipsSync(t *testing.T) {
 	prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
 	f := render.Finding{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "t", Description: "d", Suggestion: "s", Fingerprint: fpOfTest("a")}
 	err = submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
-		[]render.Finding{f}, map[string]diff.FileAnchors{}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog)
+		prReviewResult{findings: []render.Finding{f}, anchors: map[string]diff.FileAnchors{}}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog)
 	if err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}

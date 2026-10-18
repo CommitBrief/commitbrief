@@ -10,6 +10,18 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`remote pr --since-last-review`** (ADR-0046). Every review `remote pr` submits now
+  ends with a hidden `<!-- commitbrief:reviewed=<head sha> -->` marker. With the flag,
+  the next run reads CommitBrief's newest marked review and, when the PR head only moved
+  forward by plain commits, reviews just that range (`compare/<prev>...<head>` through
+  `gh`; local git is never written). When the head did not move it says so and posts
+  nothing. A missing marker, a force-push, a merge commit in the range, or a failed
+  compare request falls back to a full review with a one-line notice. Findings are still
+  anchored against the full PR diff; an incremental run resolves a vanished finding's
+  thread only when that thread is outdated and its file is in the new range, and never
+  approves while one of CommitBrief's threads is still open.
+
 ### Changed
 - **`remote pr` now syncs instead of re-posting** (ADR-0046). Each inline comment
   carries a hidden marker (`<!-- commitbrief:fp=<fingerprint> v=1 -->`) so the next
