@@ -48,6 +48,54 @@ func bindScopeFlags(cmd *cobra.Command) {
 	cmd.MarkFlagsMutuallyExclusive("staged", "unstaged")
 }
 
+// bindSarifFlag registers --sarif on a review entry point (the root review and
+// `diff`). It is a LOCAL flag, not a persistent one: SARIF is only meaningful
+// where a review runs, and a persistent flag would also appear on commands
+// that have no findings to describe (ADR-0047). Its conflicts with --json,
+// --markdown, --suggest-commit, --cli and --show-prompt are checked in validateSarifFlags rather
+// than with cobra's MarkFlagsMutuallyExclusive, which would panic on any
+// command that carries --json but not --sarif.
+func bindSarifFlag(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&global.sarif, "sarif", false, "emit SARIF 2.1.0 for GitHub Code Scanning instead of the review (use -o to write a file; API providers only; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)")
+}
+
+// validateSarifFlags rejects --sarif combined with another output mode. It
+// runs before anything costly so a misuse fails ahead of any provider call.
+func validateSarifFlags(app *appContext) error {
+	if !global.sarif {
+		return nil
+	}
+	// --cli selects a plain-text backend (ADR-0047 §1); --show-prompt prints
+	// the prompt and stops, so no SARIF document would ever be produced and a
+	// CI step redirecting stdout would upload a non-SARIF file.
+	if global.json || global.markdown || global.suggestCommit || global.cli != "" || global.showPrompt {
+		return errors.New(app.Catalog.T("sarif.output_conflict"))
+	}
+	return nil
+}
+
+// emitEmptySarif writes a valid SARIF log with an empty results[] for a diff
+// that is empty after filtering. Unlike a degraded run (which must fail
+// closed), "nothing to review" genuinely means "no findings", and the
+// upload-sarif step of a CI flow needs the file to exist to close stale
+// alerts for the files that left the diff.
+func emitEmptySarif(cmd *cobra.Command) error {
+	w, closer, err := openOutput(cmd)
+	if err != nil {
+		return err
+	}
+	defer closer()
+	return render.SARIF(w, render.Payload{})
+}
+
+// sarifDegradeError is the fail-closed refusal for a review whose findings
+// could not be recovered as structured data (ADR-0047 §4). An empty SARIF
+// results[] tells Code Scanning that every open alert is fixed, so a degraded
+// run must never produce a file that looks like a clean one.
+func sarifDegradeError(app *appContext) error {
+	return errors.New(app.Catalog.T("sarif.degraded"))
+}
+
 func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) error {
 	app, err := resolveContext(true)
 	if err != nil {
@@ -73,6 +121,10 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// fails on the spot rather than after the rules/architecture load.
 	commitFilter, err := buildCommitFilter(app.Catalog, scope, diffArgs)
 	if err != nil {
+		return err
+	}
+
+	if err := validateSarifFlags(app); err != nil {
 		return err
 	}
 
@@ -152,6 +204,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 		prog.Finish()
 		prog.Close()
 		infof("%s", app.Catalog.T("review.no_changes"))
+		if global.sarif {
+			return emitEmptySarif(cmd)
+		}
 		return nil
 	}
 	prog.Info(app.Catalog.T("progress.diff_stats",
@@ -256,6 +311,14 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// guarantees unreliable. See ADR-0009 supersession note and the
 	// clireview package.
 	_, plainText := prov.(provider.PlainTextEmitter)
+	// --sarif needs structured findings (ADR-0047 K5). A CLI provider returns
+	// pre-formatted prose, so there is nothing to convert; refuse before any
+	// provider call rather than write an empty "all clear" SARIF file.
+	if global.sarif && plainText {
+		sarifErr := errors.New(app.Catalog.T("sarif.plain_text_provider"))
+		prog.Fail(sarifErr)
+		return sarifErr
+	}
 	// --with-context (ADR-0017) only means anything for a CLI-backed
 	// provider: an API provider has no filesystem to read, so the flag is
 	// inert there. Reject it before any provider call rather than silently
@@ -373,7 +436,17 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			var findings []render.Finding
 			switch entry.Result.Format {
 			case cache.FormatJSON, "":
-				findings, _ = render.ParseFindings(entry.Result.Content)
+				var parseErr error
+				findings, parseErr = render.ParseFindings(entry.Result.Content)
+				if global.sarif && parseErr != nil {
+					return sarifDegradeError(app)
+				}
+			default:
+				// markdown-fallback / plain-text entries carry no findings
+				// array; SARIF would be an empty (all-clear) lie.
+				if global.sarif {
+					return sarifDegradeError(app)
+				}
 			}
 			findings = mergeFlaky(findings, flakyFindings)
 			findings = stampIdentity(parsed, findings)
@@ -506,11 +579,18 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	// warning. FormatMarkdownFallback is a degradation (API provider
 	// produced unparseable JSON despite the retry) and DOES warn.
 	var findings []render.Finding
+	// sarifRefused marks a run --sarif must fail closed on (ADR-0047 §4); the
+	// error is returned after the cache write so the degraded response is
+	// still stored exactly as it is without --sarif.
+	sarifRefused := false
 	switch format {
 	case cache.FormatJSON:
-		findings, _ = render.ParseFindings(content)
+		var parseErr error
+		findings, parseErr = render.ParseFindings(content)
+		sarifRefused = global.sarif && parseErr != nil
 	case cache.FormatMarkdownFallback:
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
+		sarifRefused = global.sarif
 	}
 	findings = mergeFlaky(findings, flakyFindings)
 	// Identity (ADR-0045): rule_id normalisation + fingerprint, after the
@@ -576,6 +656,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				},
 			},
 		})
+	}
+	if sarifRefused {
+		return sarifDegradeError(app)
 	}
 	if format == cache.FormatPlainText {
 		if err := emitPlainText(cmd, content); err != nil {
@@ -1166,6 +1249,13 @@ func renderResult(cmd *cobra.Command, content, outputTemplate string, findings [
 			payload.Findings = filterMinSeverity(payload.Findings)
 		}
 		return render.JSON(w, payload)
+	}
+
+	// SARIF is machine output like --json: full, unfiltered, no trailing
+	// blank line. --min-severity is display-only and must not hide a finding
+	// from Code Scanning; gating (--fail-on) already ran on the same set.
+	if global.sarif {
+		return render.SARIF(w, payload)
 	}
 
 	// Human render paths honour --min-severity (Cards / Markdown).

@@ -1,0 +1,833 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CommitBrief",
+          "semanticVersion": "1.19.0",
+          "informationUri": "https://commitbrief.com",
+          "rules": [
+            {
+              "id": "sec.injection",
+              "name": "sec.injection",
+              "shortDescription": {
+                "text": "Untrusted input reaches a query, shell, template or interpreter without neutralisation (SQL, command, LDAP, template)"
+              },
+              "fullDescription": {
+                "text": "Untrusted input reaches a query, shell, template or interpreter without neutralisation (SQL, command, LDAP, template)"
+              },
+              "help": {
+                "text": "Untrusted input reaches a query, shell, template or interpreter without neutralisation (SQL, command, LDAP, template)\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.xss",
+              "name": "sec.xss",
+              "shortDescription": {
+                "text": "Untrusted data is written into HTML or JS without context-appropriate escaping"
+              },
+              "fullDescription": {
+                "text": "Untrusted data is written into HTML or JS without context-appropriate escaping"
+              },
+              "help": {
+                "text": "Untrusted data is written into HTML or JS without context-appropriate escaping\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.path-traversal",
+              "name": "sec.path-traversal",
+              "shortDescription": {
+                "text": "A user-controlled path reaches the file system without being confined"
+              },
+              "fullDescription": {
+                "text": "A user-controlled path reaches the file system without being confined"
+              },
+              "help": {
+                "text": "A user-controlled path reaches the file system without being confined\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.ssrf",
+              "name": "sec.ssrf",
+              "shortDescription": {
+                "text": "A user-controlled URL or host is requested server-side without an allowlist"
+              },
+              "fullDescription": {
+                "text": "A user-controlled URL or host is requested server-side without an allowlist"
+              },
+              "help": {
+                "text": "A user-controlled URL or host is requested server-side without an allowlist\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.hardcoded-secret",
+              "name": "sec.hardcoded-secret",
+              "shortDescription": {
+                "text": "A credential, key or token literal is present in source"
+              },
+              "fullDescription": {
+                "text": "A credential, key or token literal is present in source"
+              },
+              "help": {
+                "text": "A credential, key or token literal is present in source\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.authz",
+              "name": "sec.authz",
+              "shortDescription": {
+                "text": "An authentication or authorisation check is missing or can be bypassed"
+              },
+              "fullDescription": {
+                "text": "An authentication or authorisation check is missing or can be bypassed"
+              },
+              "help": {
+                "text": "An authentication or authorisation check is missing or can be bypassed\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.unsafe-deserialization",
+              "name": "sec.unsafe-deserialization",
+              "shortDescription": {
+                "text": "Untrusted bytes are deserialised into objects or code"
+              },
+              "fullDescription": {
+                "text": "Untrusted bytes are deserialised into objects or code"
+              },
+              "help": {
+                "text": "Untrusted bytes are deserialised into objects or code\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.crypto-misuse",
+              "name": "sec.crypto-misuse",
+              "shortDescription": {
+                "text": "Weak algorithm, poor randomness, fixed IV or salt, or disabled TLS verification"
+              },
+              "fullDescription": {
+                "text": "Weak algorithm, poor randomness, fixed IV or salt, or disabled TLS verification"
+              },
+              "help": {
+                "text": "Weak algorithm, poor randomness, fixed IV or salt, or disabled TLS verification\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "sec.data-exposure",
+              "name": "sec.data-exposure",
+              "shortDescription": {
+                "text": "A secret or personal data is written to a log, an error or a response"
+              },
+              "fullDescription": {
+                "text": "A secret or personal data is written to a log, an error or a response"
+              },
+              "help": {
+                "text": "A secret or personal data is written to a log, an error or a response\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "sec",
+                  "security"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "correctness.nil-deref",
+              "name": "correctness.nil-deref",
+              "shortDescription": {
+                "text": "A value that may be nil, null, undefined or None is dereferenced"
+              },
+              "fullDescription": {
+                "text": "A value that may be nil, null, undefined or None is dereferenced"
+              },
+              "help": {
+                "text": "A value that may be nil, null, undefined or None is dereferenced\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "correctness"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "correctness.logic-error",
+              "name": "correctness.logic-error",
+              "shortDescription": {
+                "text": "A condition, operator or flow does not do what the code intends"
+              },
+              "fullDescription": {
+                "text": "A condition, operator or flow does not do what the code intends"
+              },
+              "help": {
+                "text": "A condition, operator or flow does not do what the code intends\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "correctness"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "correctness.boundary",
+              "name": "correctness.boundary",
+              "shortDescription": {
+                "text": "Off-by-one, empty, overflow or other boundary cases are handled wrongly"
+              },
+              "fullDescription": {
+                "text": "Off-by-one, empty, overflow or other boundary cases are handled wrongly"
+              },
+              "help": {
+                "text": "Off-by-one, empty, overflow or other boundary cases are handled wrongly\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "correctness"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "correctness.error-handling",
+              "name": "correctness.error-handling",
+              "shortDescription": {
+                "text": "An error is ignored, swallowed, wrapped wrongly or not propagated"
+              },
+              "fullDescription": {
+                "text": "An error is ignored, swallowed, wrapped wrongly or not propagated"
+              },
+              "help": {
+                "text": "An error is ignored, swallowed, wrapped wrongly or not propagated\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "correctness"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "correctness.resource-leak",
+              "name": "correctness.resource-leak",
+              "shortDescription": {
+                "text": "A file, connection, lock or goroutine is not released on every path"
+              },
+              "fullDescription": {
+                "text": "A file, connection, lock or goroutine is not released on every path"
+              },
+              "help": {
+                "text": "A file, connection, lock or goroutine is not released on every path\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "correctness"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "correctness.api-misuse",
+              "name": "correctness.api-misuse",
+              "shortDescription": {
+                "text": "A library or standard-library API is called against its contract"
+              },
+              "fullDescription": {
+                "text": "A library or standard-library API is called against its contract"
+              },
+              "help": {
+                "text": "A library or standard-library API is called against its contract\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "correctness"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "concurrency.race",
+              "name": "concurrency.race",
+              "shortDescription": {
+                "text": "Shared state is accessed concurrently without synchronisation"
+              },
+              "fullDescription": {
+                "text": "Shared state is accessed concurrently without synchronisation"
+              },
+              "help": {
+                "text": "Shared state is accessed concurrently without synchronisation\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "concurrency"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "concurrency.deadlock",
+              "name": "concurrency.deadlock",
+              "shortDescription": {
+                "text": "Lock ordering or a channel wait can block forever"
+              },
+              "fullDescription": {
+                "text": "Lock ordering or a channel wait can block forever"
+              },
+              "help": {
+                "text": "Lock ordering or a channel wait can block forever\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "concurrency"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "perf.algorithmic",
+              "name": "perf.algorithmic",
+              "shortDescription": {
+                "text": "Asymptotically poor algorithm or repeated work on a hot path"
+              },
+              "fullDescription": {
+                "text": "Asymptotically poor algorithm or repeated work on a hot path"
+              },
+              "help": {
+                "text": "Asymptotically poor algorithm or repeated work on a hot path\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "perf"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "perf.n-plus-one",
+              "name": "perf.n-plus-one",
+              "shortDescription": {
+                "text": "A per-item query or IO call inside a loop"
+              },
+              "fullDescription": {
+                "text": "A per-item query or IO call inside a loop"
+              },
+              "help": {
+                "text": "A per-item query or IO call inside a loop\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "perf"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "perf.allocation",
+              "name": "perf.allocation",
+              "shortDescription": {
+                "text": "Avoidable memory allocation or copying on a hot path"
+              },
+              "fullDescription": {
+                "text": "Avoidable memory allocation or copying on a hot path"
+              },
+              "help": {
+                "text": "Avoidable memory allocation or copying on a hot path\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "perf"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "api.breaking-change",
+              "name": "api.breaking-change",
+              "shortDescription": {
+                "text": "A public interface or contract changes incompatibly"
+              },
+              "fullDescription": {
+                "text": "A public interface or contract changes incompatibly"
+              },
+              "help": {
+                "text": "A public interface or contract changes incompatibly\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "api"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "test.missing",
+              "name": "test.missing",
+              "shortDescription": {
+                "text": "No test covers the changed behaviour"
+              },
+              "fullDescription": {
+                "text": "No test covers the changed behaviour"
+              },
+              "help": {
+                "text": "No test covers the changed behaviour\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "test"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "test.flaky",
+              "name": "test.flaky",
+              "shortDescription": {
+                "text": "Test depends on time, order, randomness or network (the ADR-0022 static pre-pass also produces this)"
+              },
+              "fullDescription": {
+                "text": "Test depends on time, order, randomness or network (the ADR-0022 static pre-pass also produces this)"
+              },
+              "help": {
+                "text": "Test depends on time, order, randomness or network (the ADR-0022 static pre-pass also produces this)\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "test"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "arch.boundary-violation",
+              "name": "arch.boundary-violation",
+              "shortDescription": {
+                "text": "The change violates a declared architectural constraint (architecture.json, ADR-0030)"
+              },
+              "fullDescription": {
+                "text": "The change violates a declared architectural constraint (architecture.json, ADR-0030)"
+              },
+              "help": {
+                "text": "The change violates a declared architectural constraint (architecture.json, ADR-0030)\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "arch"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "maint.complexity",
+              "name": "maint.complexity",
+              "shortDescription": {
+                "text": "Structure is hard to follow and could be simplified"
+              },
+              "fullDescription": {
+                "text": "Structure is hard to follow and could be simplified"
+              },
+              "help": {
+                "text": "Structure is hard to follow and could be simplified\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "maint"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "maint.duplication",
+              "name": "maint.duplication",
+              "shortDescription": {
+                "text": "Logic that should be shared has been copied"
+              },
+              "fullDescription": {
+                "text": "Logic that should be shared has been copied"
+              },
+              "help": {
+                "text": "Logic that should be shared has been copied\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "maint"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "maint.dead-code",
+              "name": "maint.dead-code",
+              "shortDescription": {
+                "text": "Unreachable or unused code"
+              },
+              "fullDescription": {
+                "text": "Unreachable or unused code"
+              },
+              "help": {
+                "text": "Unreachable or unused code\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "maint"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "style.naming",
+              "name": "style.naming",
+              "shortDescription": {
+                "text": "Misleading or inconsistent identifier"
+              },
+              "fullDescription": {
+                "text": "Misleading or inconsistent identifier"
+              },
+              "help": {
+                "text": "Misleading or inconsistent identifier\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "style"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "docs.mismatch",
+              "name": "docs.mismatch",
+              "shortDescription": {
+                "text": "A comment or document contradicts the code"
+              },
+              "fullDescription": {
+                "text": "A comment or document contradicts the code"
+              },
+              "help": {
+                "text": "A comment or document contradicts the code\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "docs"
+                ],
+                "precision": "medium"
+              }
+            },
+            {
+              "id": "general.other",
+              "name": "general.other",
+              "shortDescription": {
+                "text": "None of the above (the fallback)"
+              },
+              "fullDescription": {
+                "text": "None of the above (the fallback)"
+              },
+              "help": {
+                "text": "None of the above (the fallback)\n\nhttps://commitbrief.com/docs/1.x/rules"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "general"
+                ],
+                "precision": "medium"
+              }
+            }
+          ]
+        }
+      },
+      "automationDetails": {
+        "id": "commitbrief/"
+      },
+      "results": [
+        {
+          "ruleId": "sec.injection",
+          "ruleIndex": 0,
+          "level": "error",
+          "rank": 90,
+          "message": {
+            "text": "Token compared with == — Use a constant-time comparison.\nSuggestion: Use subtle.ConstantTimeCompare."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "internal/auth/token.go",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 42,
+                  "endLine": 47
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "commitbrief/v1": "aaaaaaaaaaaaaaaa"
+          },
+          "properties": {
+            "commitbrief/severity": "critical"
+          }
+        },
+        {
+          "ruleId": "correctness.error-handling",
+          "ruleIndex": 12,
+          "level": "warning",
+          "rank": 50,
+          "message": {
+            "text": "Error ignored — The error from Close is dropped."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "internal/store/db.go",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 10
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "commitbrief/v1": "bbbbbbbbbbbbbbbb"
+          },
+          "properties": {
+            "commitbrief/severity": "medium"
+          }
+        },
+        {
+          "ruleId": "docs.mismatch",
+          "ruleIndex": 28,
+          "level": "note",
+          "rank": 10,
+          "message": {
+            "text": "Stale section — The install section is outdated."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "commitbrief/v1": "cccccccccccccccc"
+          },
+          "properties": {
+            "commitbrief/file-level": true,
+            "commitbrief/severity": "info"
+          }
+        },
+        {
+          "ruleId": "general.other",
+          "ruleIndex": 29,
+          "level": "note",
+          "rank": 30,
+          "message": {
+            "text": "Odd naming — Name does not follow convention."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.go",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "commitbrief/v1": "dddddddddddddddd"
+          },
+          "properties": {
+            "commitbrief/severity": "low"
+          }
+        },
+        {
+          "ruleId": "docs.mismatch",
+          "ruleIndex": 28,
+          "level": "note",
+          "rank": 30,
+          "message": {
+            "text": "Odd path — The path needs percent-encoding."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "docs/C%23%20notes/100%25%3A%20a%3Fb.md",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "commitbrief/v1": "eeeeeeeeeeeeeeee"
+          },
+          "properties": {
+            "commitbrief/severity": "low"
+          }
+        }
+      ]
+    }
+  ]
+}
