@@ -176,6 +176,13 @@ func keepAndDropPaths(d diff.Diff) (diff.Diff, error) {
 	return diff.DropPaths(out, global.excludeFiles, global.excludeDirs)
 }
 
+// pathsNarrowed reports whether any --file/--dir/--exclude-* flag limits the
+// reviewed file set.
+func pathsNarrowed() bool {
+	return len(global.files) > 0 || len(global.dirs) > 0 ||
+		len(global.excludeFiles) > 0 || len(global.excludeDirs) > 0
+}
+
 // commitFilterLimit resolves the effective commit cap for reporting, so the
 // dry-run report names the number that actually applied rather than the
 // literal flag value (0 means "the default").

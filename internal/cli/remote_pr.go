@@ -20,6 +20,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/diff"
 	"github.com/CommitBrief/commitbrief/internal/git"
 	"github.com/CommitBrief/commitbrief/internal/guard"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/prompt"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/remote"
@@ -631,70 +632,71 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	return prReviewResult{findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency}, nil
 }
 
-// submitPRReview posts the selected inline comments and the review-level
-// verdict. Each finding is anchored to the side (RIGHT/LEFT) its line
-// actually lives on; findings whose line is outside the diff — or whose
-// POST is rejected — are not dropped but appended to the review summary
-// so the signal survives (ADR-0016 §9). Per-comment failures never abort
-// the verdict submission.
+// submitPRReview syncs the inline comments with the PR's existing review
+// threads and submits the review-level verdict (ADR-0046, ADR-0016). Each
+// fingerprint group is anchored to the side (RIGHT/LEFT) its line actually
+// lives on; findings that cannot get an inline comment are not dropped but
+// appended to the review summary so the signal survives (ADR-0016 §9).
+// Per-comment failures never abort the verdict submission, and a failed
+// thread read degrades to plain posting (no sync).
 func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, anchors map[string]diff.FileAnchors, threshold render.Severity, whoami string, app *appContext, prog *ui.Progress) error {
 	cat := app.Catalog
 	verdict := computeVerdict(findings, threshold)
-	postable := selectPostable(findings, threshold)
 
 	slug := meta.BaseSlug()
-	posted, failed := 0, 0
-	var unanchored []render.Finding
-	var failures []string
-	if len(postable) > 0 {
-		prog.Start(cat.T("remote.posting_comments", len(postable)))
-	}
-	for _, fnd := range postable {
-		fa, hasFile := anchors[fnd.File]
-		side, ok := "", false
-		if hasFile {
-			side, ok = fa.Resolve(fnd.Line, preferLeftSide(fnd))
+	var res remote.Result
+	var readErr error
+	scope, skipSync := syncScope(anchors)
+	if skipSync {
+		// A narrowed run that kept no file reviewed nothing: it must not
+		// post, update, resolve or reply (ADR-0046 §Update 2026-10-18).
+		prog.Info(cat.T("remote.sync_skipped_empty_scope"))
+	} else {
+		groups := buildSyncGroups(findings, anchors, whoami)
+		var threads []remote.Thread
+		threads, readErr = remote.FetchThreads(ctx, runner, slug, meta.Number)
+		if readErr != nil {
+			prog.Info(cat.T("remote.sync_read_failed", readErr.Error()))
+			threads = nil
 		}
-		if !ok {
-			// Line is not a postable position in the diff — a GitHub POST
-			// would 422. Keep it for the summary instead of losing it.
-			unanchored = append(unanchored, fnd)
-			continue
+		if len(groups) > 0 || len(threads) > 0 {
+			prog.Start(cat.T("remote.posting_comments", meta.Number))
 		}
-		err := remote.PostComment(ctx, runner, remote.CommentRequest{
-			RepoSlug: slug,
+		res = remote.Sync(ctx, remote.SyncParams{
+			Runner:   runner,
+			Slug:     slug,
 			PRNumber: meta.Number,
 			CommitID: oid,
-			Path:     fnd.File,
-			Line:     fnd.Line,
-			Side:     side,
-			Body:     remote.BuildCommentBody(fnd, whoami),
+			Threads:  threads,
+			Groups:   groups,
+			Select:   func(c []render.Finding) []render.Finding { return selectPostable(c, threshold) },
+			InScope:  scope,
 		})
-		if err != nil {
-			failed++
-			unanchored = append(unanchored, fnd)
-			// Collect rather than emit mid-loop: prog.Info would terminate
-			// the active posting stage on the first failure.
-			failures = append(failures, cat.T("remote.comment_failed", fnd.PathRef(), err.Error()))
-			continue
+		if len(groups) > 0 || len(threads) > 0 {
+			prog.Finish() // sync stage done
 		}
-		posted++
-	}
-	if len(postable) > 0 {
-		prog.Finish() // posting stage done
-	}
-	for _, msg := range failures {
-		prog.Info(msg)
-	}
-	if posted+failed > 0 {
-		prog.Info(cat.T("remote.posted_summary", posted, posted+failed, failed))
-	}
-	if len(unanchored) > 0 {
-		prog.Info(cat.T("remote.unanchored_appended", len(unanchored)))
+		// Warnings are collected by Sync and emitted after the stage: prog.Info
+		// would terminate the active stage on the first one.
+		for _, w := range res.Warnings {
+			prog.Info(syncWarning(cat, w))
+		}
+		if res.StaleOpen > 0 {
+			prog.Info(cat.T("remote.sync_stale_open", res.StaleOpen, staleReason(cat, res.StaleReason)))
+		}
+		if readErr != nil {
+			if res.Posted+res.PostFailed > 0 {
+				prog.Info(cat.T("remote.posted_summary", res.Posted, res.Posted+res.PostFailed, res.PostFailed))
+			}
+		} else {
+			prog.Info(cat.T("remote.sync_summary", res.Posted, res.Updated, res.Unchanged, res.Resolved, res.Replied, res.Held))
+		}
+		if len(res.Unanchored) > 0 {
+			prog.Info(cat.T("remote.unanchored_appended", len(res.Unanchored)))
+		}
 	}
 
 	body := remote.BuildReviewBody(verdict, whoami)
-	if section := remote.BuildUnanchoredSection(unanchored); section != "" {
+	if section := remote.BuildUnanchoredSection(res.Unanchored); section != "" {
 		body += "\n\n---\n\n" + section
 	}
 	prog.Start(cat.T("remote.submitting"))
@@ -711,6 +713,113 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		prog.Info(cat.T("remote.action_comment", meta.Number))
 	}
 	return nil
+}
+
+// syncScope decides which review threads a sync run may touch. Without a
+// path-narrowing flag the whole PR was reviewed and every thread is in scope
+// (nil). With one, only the files the run actually reviewed are in scope, and
+// an empty reviewed set means the sync is skipped altogether.
+func syncScope(anchors map[string]diff.FileAnchors) (scope func(string) bool, skip bool) {
+	if !pathsNarrowed() {
+		return nil, false
+	}
+	if len(anchors) == 0 {
+		return nil, true
+	}
+	return func(path string) bool { _, ok := anchors[path]; return ok }, false
+}
+
+// staleReason renders why duplicate threads stayed open.
+func staleReason(cat *i18n.Catalog, reason string) string {
+	if reason == "permission" {
+		return cat.T("remote.sync_stale_no_permission")
+	}
+	return reason
+}
+
+// syncWarning renders one sync warning for stderr.
+func syncWarning(cat *i18n.Catalog, w remote.Warning) string {
+	if w.Op == "post" && w.Err != nil {
+		return cat.T("remote.comment_failed", w.Ref, w.Err.Error())
+	}
+	if w.Err == nil {
+		return cat.T("remote.sync_no_permission", w.Op, w.Ref)
+	}
+	return cat.T("remote.sync_failed", w.Op, w.Ref, w.Err.Error())
+}
+
+// buildSyncGroups folds findings that share a fingerprint into one comment
+// group (ADR-0046 §3): the comment is anchored on the lowest anchorable line
+// and lists the other occurrences. A finding without a valid fingerprint is
+// its own unmanaged group.
+func buildSyncGroups(findings []render.Finding, anchors map[string]diff.FileAnchors, whoami string) []remote.Group {
+	type bucket struct {
+		fp      string
+		members []render.Finding
+	}
+	var order []*bucket
+	byFP := map[string]*bucket{}
+	for _, fnd := range findings {
+		if !remote.ValidFingerprint(fnd.Fingerprint) {
+			order = append(order, &bucket{members: []render.Finding{fnd}})
+			continue
+		}
+		b := byFP[fnd.Fingerprint]
+		if b == nil {
+			b = &bucket{fp: fnd.Fingerprint}
+			byFP[fnd.Fingerprint] = b
+			order = append(order, b)
+		}
+		b.members = append(b.members, fnd)
+	}
+
+	groups := make([]remote.Group, 0, len(order))
+	for _, b := range order {
+		sort.SliceStable(b.members, func(i, j int) bool {
+			if b.members[i].File != b.members[j].File {
+				return b.members[i].File < b.members[j].File
+			}
+			return b.members[i].Line < b.members[j].Line
+		})
+		resolve := func(m render.Finding) (string, bool) {
+			fa, ok := anchors[m.File]
+			if !ok {
+				return "", false
+			}
+			return fa.Resolve(m.Line, preferLeftSide(m))
+		}
+		g := remote.Group{FP: b.fp, Members: b.members, Rep: b.members[0], Severity: b.members[0].Severity}
+		found := false
+		for _, m := range b.members {
+			if severityRank[m.Severity] < severityRank[g.Severity] {
+				g.Severity = m.Severity
+			}
+			if !found {
+				if side, ok := resolve(m); ok {
+					g.Rep, g.Side, g.Anchored, found = m, side, true, true
+				}
+			}
+		}
+		// The header shows the group's severity, the one the cap ranks it by.
+		head := g.Rep
+		head.Severity = g.Severity
+		g.Text = remote.CommentText(head, whoami)
+		if len(b.members) > 1 {
+			refs := make([]string, 0, len(b.members)-1)
+			for _, m := range b.members {
+				if m.File == g.Rep.File && m.Line == g.Rep.Line {
+					continue
+				}
+				refs = append(refs, m.PathRef()+" ("+m.Title+")")
+			}
+			if len(refs) > 0 {
+				g.Text += "\n\nAlso at: " + strings.Join(refs, ", ")
+			}
+		}
+		g.Text = remote.NormalizeText(g.Text)
+		groups = append(groups, g)
+	}
+	return groups
 }
 
 // preferLeftSide reports whether a finding reads as being about removed
