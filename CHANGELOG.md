@@ -13,13 +13,16 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 ## [1.20.0] - 2026-10-19
 
 ### Added
-- **`remote pr --since-last-review`** (ADR-0046). Every review `remote pr` submits now
+- **`remote pr --since-last-review`** (ADR-0046). Every full-PR review `remote pr` submits now
   ends with a hidden `<!-- commitbrief:reviewed=<head sha> -->` marker. With the flag,
   the next run reads CommitBrief's newest marked review and, when the PR head only moved
   forward by plain commits, reviews just that range (`compare/<prev>...<head>` through
   `gh`; local git is never written). When the head did not move it says so and posts
-  nothing. A missing marker, a force-push, a merge commit in the range, or a failed
-  compare request falls back to a full review with a one-line notice. Findings are still
+  nothing. A missing marker, a force-push, a merge commit in the range, or any step that
+  cannot establish the range safely (unreadable review history, a commit list too long
+  to inspect, a failed compare or diff request) falls back to a full review with a
+  one-line notice. With `--no-post` the flag is ignored (no review history is
+  consulted) and an info line says so. Findings are still
   anchored against the full PR diff; an incremental run resolves a vanished finding's
   thread only when that thread is outdated and its file is in the new range, and never
   approves while one of CommitBrief's threads is still open. Only full-PR reviews
@@ -42,7 +45,10 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   `No longer present as of <sha>` / `Present again as of <sha>` reply instead,
   once per transition. Comments without a marker, written by someone else, or with
   an unknown marker version are never modified.
-- `remote pr` ends with a one-line stderr summary:
+- Comments posted by earlier versions carry no marker, so the first v1.20 run on a
+  pull request that was already reviewed posts its findings once more; from then on
+  threads are synced.
+- `remote pr` prints a one-line sync summary on stderr:
   `Synced: N posted · M updated · K unchanged · R resolved · Q replied · H held`.
   If the review threads cannot be read, the run degrades to plain posting.
 - With `--file`, `--dir`, `--exclude-file` or `--exclude-dir`, `remote pr` only
