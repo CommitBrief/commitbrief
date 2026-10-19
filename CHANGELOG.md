@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-10-19
+
 ### Added
 - **`remote pr --since-last-review`** (ADR-0046). Every review `remote pr` submits now
   ends with a hidden `<!-- commitbrief:reviewed=<head sha> -->` marker. With the flag,
@@ -2410,7 +2412,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.19.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/CommitBrief/commitbrief/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/CommitBrief/commitbrief/compare/v1.18.1...v1.19.0
 [1.18.1]: https://github.com/CommitBrief/commitbrief/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/CommitBrief/commitbrief/compare/v1.17.1...v1.18.0
