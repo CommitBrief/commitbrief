@@ -564,6 +564,11 @@ type prReviewResult struct {
 	// an incremental run may resolve, ADR-0046 §A.7 G1).
 	incremental bool
 	deltaPaths  map[string]bool
+	// deltaAnchors indexes the prev...head delta the model actually read. Its
+	// LEFT numbers are relative to prev, not to the PR base, so a finding on
+	// them cannot be pinned on the PR diff's LEFT side (ADR-0046 §Update
+	// 2026-10-19).
+	deltaAnchors map[string]diff.FileAnchors
 	// noNewCommits is set when the head moved back to the previously
 	// reviewed commit while the review was running (nothing left to do).
 	noNewCommits bool
@@ -631,6 +636,7 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	reviewed := parsed
 	incremental := false
 	var deltaPaths map[string]bool
+	var deltaAnchors map[string]diff.FileAnchors
 	if prev != "" {
 		delta, ok, derr := incrementalDelta(ctx, runner, slug, headOID, prev, app, prog)
 		if derr != nil {
@@ -643,7 +649,8 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 			}
 			reviewed, incremental = delta, true
 			deltaPaths = map[string]bool{}
-			for path := range delta.Anchors() {
+			deltaAnchors = delta.Anchors()
+			for path := range deltaAnchors {
 				deltaPaths[path] = true
 			}
 		}
@@ -697,7 +704,7 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	findings = stampIdentity(parsed, findings)
 	return prReviewResult{
 		findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency,
-		incremental: incremental, deltaPaths: deltaPaths,
+		incremental: incremental, deltaPaths: deltaPaths, deltaAnchors: deltaAnchors,
 	}, nil
 }
 
@@ -765,7 +772,7 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		// post, update, resolve or reply (ADR-0046 §Update 2026-10-18).
 		prog.Info(cat.T("remote.sync_skipped_empty_scope"))
 	} else {
-		groups := buildSyncGroups(findings, anchors, whoami)
+		groups := buildSyncGroups(findings, anchors, review.deltaAnchors, whoami)
 		var threads []remote.Thread
 		threads, readErr = remote.FetchThreads(ctx, runner, slug, meta.Number)
 		if readErr != nil {
@@ -826,9 +833,17 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 	if section := remote.BuildUnanchoredSection(res.Unanchored); section != "" {
 		body += "\n\n---\n\n" + section
 	}
-	// K8: every review records the head it was produced against, so the next
-	// --since-last-review run knows where to start.
-	body = remote.WithReviewedMarker(body, oid)
+	// K8: a review that covered the whole PR records the head it was produced
+	// against, so the next --since-last-review run knows where to start. A
+	// path-narrowed run (or one whose scope came out empty) saw only part of
+	// the PR: stamping it would let the next incremental run skip code nobody
+	// reviewed, so it leaves the marker to the last full review (ADR-0046
+	// §Update 2026-10-19). An empty OID leaves the body unchanged.
+	markerOID := oid
+	if pathsNarrowed() || skipSync {
+		markerOID = ""
+	}
+	body = remote.WithReviewedMarker(body, markerOID)
 	prog.Start(cat.T("remote.submitting"))
 	if err := remote.SubmitReview(ctx, runner, prID, f.repo, verdict, body); err != nil {
 		return err
@@ -882,7 +897,13 @@ func syncWarning(cat *i18n.Catalog, w remote.Warning) string {
 // group (ADR-0046 §3): the comment is anchored on the lowest anchorable line
 // and lists the other occurrences. A finding without a valid fingerprint is
 // its own unmanaged group.
-func buildSyncGroups(findings []render.Finding, anchors map[string]diff.FileAnchors, whoami string) []remote.Group {
+//
+// delta is non-nil only for an incremental run: the model then read the
+// prev...head delta, whose LEFT line numbers are relative to prev and mean
+// nothing on the PR diff's LEFT side. A finding that lives on the delta's
+// LEFT side is therefore left unanchored (it lands in the review body)
+// rather than pinned to an unrelated line (ADR-0046 §Update 2026-10-19).
+func buildSyncGroups(findings []render.Finding, anchors, delta map[string]diff.FileAnchors, whoami string) []remote.Group {
 	type bucket struct {
 		fp      string
 		members []render.Finding
@@ -916,7 +937,19 @@ func buildSyncGroups(findings []render.Finding, anchors map[string]diff.FileAnch
 			if !ok {
 				return "", false
 			}
-			return fa.Resolve(m.Line, preferLeftSide(m))
+			if delta != nil {
+				if preferLeftSide(m) {
+					return "", false
+				}
+				if da, ok := delta[m.File]; ok && da.Has(diff.SideLeft, m.Line) && !da.Has(diff.SideRight, m.Line) {
+					return "", false
+				}
+			}
+			side, ok := fa.Resolve(m.Line, preferLeftSide(m))
+			if ok && delta != nil && side == diff.SideLeft {
+				return "", false
+			}
+			return side, ok
 		}
 		g := remote.Group{FP: b.fp, Members: b.members, Rep: b.members[0], Severity: b.members[0].Severity}
 		found := false

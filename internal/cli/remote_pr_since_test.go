@@ -14,8 +14,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/git"
+	"github.com/CommitBrief/commitbrief/internal/i18n"
 	"github.com/CommitBrief/commitbrief/internal/provider/mock"
 	"github.com/CommitBrief/commitbrief/internal/remote"
+	"github.com/CommitBrief/commitbrief/internal/render"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
 const (
@@ -200,6 +205,9 @@ func TestSinceLastReviewFallsBackToFullReview(t *testing.T) {
 		{"force-push diverged", func(r *fakeGH) { r.compare = compareJSON("diverged", 1) }, "not an ancestor"},
 		{"force-push behind", func(r *fakeGH) { r.compare = compareJSON("behind", 1) }, "not an ancestor"},
 		{"compare 404", func(r *fakeGH) { r.compare = "" }, "could not compare"},
+		{"incomplete commit list", func(r *fakeGH) {
+			r.compare = `{"status":"ahead","total_commits":300,"commits":[{"sha":"c0","parents":[{"sha":"p0"}]},{"sha":"c1","parents":[{"sha":"p1"}]}]}`
+		}, "too many new commits to inspect"},
 		{"merge commit", func(r *fakeGH) { r.compare = compareJSON("ahead", 1, 2, 1) }, "merge commit"},
 		{"delta diff fails", func(r *fakeGH) { r.compareDErr = fmt.Errorf("diff too large") }, "could not fetch the diff"},
 		{"review lookup fails", func(r *fakeGH) { r.reviewsErr = fmt.Errorf("graphql down") }, "could not read earlier reviews"},
@@ -371,5 +379,190 @@ func TestSinceLastReviewThreadReadFailureBlocksApprove(t *testing.T) {
 	}
 	if r.callCount("--approve") != 0 || r.callCount("--comment") != 1 {
 		t.Errorf("an unreadable thread list cannot prove nothing is open; calls=%v", r.calls)
+	}
+}
+
+// withNarrowedPaths narrows the run with the given --file globs, keeping the
+// rest of the process-wide flags as newCLIEnv left them.
+func withNarrowedPaths(t *testing.T, files ...string) {
+	t.Helper()
+	g := global
+	g.files = files
+	withGlobal(t, g)
+}
+
+func TestSinceLastReviewNarrowedRunDoesNotAdvanceMarker(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	withNarrowedPaths(t, "new.go")
+	r := newSinceGH()
+	if _, err := sinceRun(t, e, r); err != nil {
+		t.Fatalf("narrowed since-last-review: %v", err)
+	}
+	if r.callCount("commitbrief:reviewed=") != 0 {
+		t.Errorf("a path-narrowed run must not write a reviewed marker; calls=%v", r.calls)
+	}
+	// It still continued from the last full review's marker and reviewed
+	// only the delta inside the narrowing.
+	if r.callCount("compare/"+prevOID+"..."+headOID) == 0 {
+		t.Errorf("the narrowed incremental run must start at the last full marker; calls=%v", r.calls)
+	}
+	if p := lastPrompt(t); !strings.Contains(p, "DeltaOnly") || strings.Contains(p, "FullOnly00") {
+		t.Errorf("narrowed incremental run must review just the delta inside the narrowing")
+	}
+}
+
+func TestSinceLastReviewNarrowedFullReviewDoesNotStampMarker(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	withNarrowedPaths(t, "old0*.go")
+	r := newSinceGH()
+	r.reviews = `{"data":{"repository":{"pullRequest":{"reviews":{"nodes":[]}}}}}`
+	if _, err := sinceRun(t, e, r); err != nil {
+		t.Fatalf("narrowed full review: %v", err)
+	}
+	if n := len(mock.Requests()); n != 1 {
+		t.Fatalf("want one provider call, got %d", n)
+	}
+	if r.callCount("commitbrief:reviewed=") != 0 {
+		t.Errorf("a narrowed full review must not claim the PR was reviewed; calls=%v", r.calls)
+	}
+}
+
+func TestSinceLastReviewEmptyScopeDoesNotStampMarker(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	withNarrowedPaths(t, "nothing-matches.go")
+	r := newSinceGH()
+	if _, err := sinceRun(t, e, r); err != nil {
+		t.Fatalf("empty-scope run: %v", err)
+	}
+	if r.callCount("commitbrief:reviewed=") != 0 {
+		t.Errorf("an empty-scope run reviewed nothing and must not write a marker; calls=%v", r.calls)
+	}
+}
+
+func TestUnnarrowedRunStampsMarkerNarrowedDoesNot(t *testing.T) {
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := diff.Parse(git.Diff{Content: sampleDiff, Origin: git.OriginDiff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(anchors map[string]diff.FileAnchors) *fakeGH {
+		r := &fakeGH{}
+		meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
+		prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
+		if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "abc1234",
+			prReviewResult{findings: []render.Finding{}, anchors: anchors}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog); err != nil {
+			t.Fatalf("submitPRReview: %v", err)
+		}
+		return r
+	}
+	if r := run(parsed.Anchors()); r.callCount(remote.ReviewedMarker("abc1234")) != 1 {
+		t.Errorf("an unnarrowed run must stamp the marker once; calls=%v", r.calls)
+	}
+	withNarrowedPaths(t, "mock.go")
+	if r := run(parsed.Anchors()); r.callCount("commitbrief:reviewed=") != 0 {
+		t.Errorf("a narrowed run must not stamp the marker; calls=%v", r.calls)
+	}
+}
+
+// Delta numbering: the new commit removes line 52 of f.go. Its LEFT number is
+// relative to prev, so on the PR diff (where f.go is one 60-line addition)
+// line 52 would silently point at an unrelated head line.
+const (
+	leftPRDiff = "diff --git a/f.go b/f.go\n" +
+		"new file mode 100644\n" +
+		"--- /dev/null\n" +
+		"+++ b/f.go\n" +
+		"@@ -0,0 +1,60 @@\n"
+	leftDelta = "diff --git a/f.go b/f.go\n" +
+		"--- a/f.go\n" +
+		"+++ b/f.go\n" +
+		"@@ -51,2 +51,1 @@\n" +
+		" kept\n" +
+		"-gone\n"
+)
+
+func leftFixtures(t *testing.T) (pr, delta map[string]diff.FileAnchors) {
+	t.Helper()
+	body := leftPRDiff + strings.Repeat("+line\n", 60)
+	p, err := diff.Parse(git.Diff{Content: body, Origin: git.OriginDiff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := diff.Parse(git.Diff{Content: leftDelta, Origin: git.OriginDiff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p.Anchors(), d.Anchors()
+}
+
+func TestBuildSyncGroupsIncrementalRoutesDeltaLeftFindingsToBody(t *testing.T) {
+	pr, delta := leftFixtures(t)
+	fnd := func(line int, snippet, title string) render.Finding {
+		return render.Finding{Severity: render.SeverityHigh, File: "f.go", Line: line, Snippet: snippet, Title: title, Description: "d", Suggestion: "s"}
+	}
+	cases := []struct {
+		name     string
+		finding  render.Finding
+		delta    map[string]diff.FileAnchors
+		anchored bool
+	}{
+		{"full review keeps the legacy anchor", fnd(52, "-gone", "t"), nil, true},
+		{"incremental: removed-code snippet", fnd(52, "-gone", "t"), delta, false},
+		{"incremental: line only on the delta LEFT side", fnd(52, "", "t"), delta, false},
+		{"incremental: line on the delta RIGHT side", fnd(51, "", "t"), delta, true},
+		{"incremental: added-code snippet", fnd(51, "+kept", "t"), delta, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			groups := buildSyncGroups([]render.Finding{tc.finding}, pr, tc.delta, "me")
+			if len(groups) != 1 {
+				t.Fatalf("want 1 group, got %d", len(groups))
+			}
+			g := groups[0]
+			if g.Anchored != tc.anchored {
+				t.Fatalf("Anchored = %v, want %v (side %q)", g.Anchored, tc.anchored, g.Side)
+			}
+			if g.Anchored && g.Side != diff.SideRight {
+				t.Errorf("an incremental anchor must be RIGHT, got %q", g.Side)
+			}
+		})
+	}
+}
+
+func TestSubmitIncrementalDeltaLeftFindingLandsInReviewBody(t *testing.T) {
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, delta := leftFixtures(t)
+	f := render.Finding{Severity: render.SeverityHigh, File: "f.go", Line: 52, Snippet: "-gone", Title: "removed guard", Description: "d", Suggestion: "s"}
+	r := &fakeGH{threads: threadsJSON()}
+	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
+	prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
+	err = submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "abc1234",
+		prReviewResult{
+			findings: []render.Finding{f}, anchors: pr,
+			incremental: true, deltaPaths: map[string]bool{"f.go": true}, deltaAnchors: delta,
+		}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog)
+	if err != nil {
+		t.Fatalf("submitPRReview: %v", err)
+	}
+	if r.callCount("/comments") != 0 {
+		t.Errorf("a delta-LEFT finding must not be posted inline; calls=%v", r.calls)
+	}
+	var body string
+	for _, c := range r.calls {
+		if strings.Contains(c, "Findings that could not be attached") {
+			body = c
+		}
+	}
+	if !strings.Contains(body, "removed guard") {
+		t.Errorf("the finding must be carried by the review body; calls=%v", r.calls)
 	}
 }

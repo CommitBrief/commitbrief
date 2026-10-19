@@ -505,7 +505,7 @@ func TestRemotePRBuildSyncGroupsFoldsByFingerprint(t *testing.T) {
 		{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "u", Description: "d", Suggestion: "s"},
 		{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "v", Description: "d", Suggestion: "s", Fingerprint: "bogus"},
 	}
-	groups := buildSyncGroups(findings, anchors, "me")
+	groups := buildSyncGroups(findings, anchors, nil, "me")
 	if len(groups) != 3 {
 		t.Fatalf("want 3 groups (1 folded + 2 unmanaged), got %d", len(groups))
 	}
