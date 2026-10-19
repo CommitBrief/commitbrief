@@ -66,6 +66,35 @@ type Provider struct {
 	LastRequest provider.Request
 }
 
+var (
+	recordedMu sync.Mutex
+	recorded   []provider.Request
+)
+
+func recordRequest(req provider.Request) {
+	recordedMu.Lock()
+	recorded = append(recorded, req)
+	recordedMu.Unlock()
+}
+
+// ResetRequests clears the process-wide request log. Tests that drive the
+// CLI through config-driven provider lookup cannot reach the Provider
+// instance the registry factory built, so every Review call is also logged
+// here; call ResetRequests first, then read Requests after the run.
+func ResetRequests() {
+	recordedMu.Lock()
+	recorded = nil
+	recordedMu.Unlock()
+}
+
+// Requests returns a copy of every request any mock Provider has served
+// since the last ResetRequests.
+func Requests() []provider.Request {
+	recordedMu.Lock()
+	defer recordedMu.Unlock()
+	return append([]provider.Request(nil), recorded...)
+}
+
 func New() *Provider {
 	return &Provider{
 		NameValue:        defaultName,
@@ -122,6 +151,7 @@ func (m *Provider) Review(ctx context.Context, req provider.Request) (provider.R
 	m.mu.Lock()
 	m.ReviewCalls++
 	m.LastRequest = req
+	recordRequest(req)
 	err := m.ReviewErr
 	content := m.ResponseContent
 	if req.FreeForm {

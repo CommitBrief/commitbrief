@@ -82,3 +82,13 @@ func (fa FileAnchors) Resolve(line int, preferLeft bool) (side string, ok bool) 
 	}
 	return "", false
 }
+
+// Has reports whether line is a postable position on the given side.
+func (fa FileAnchors) Has(side string, line int) bool {
+	set := fa.right
+	if side == SideLeft {
+		set = fa.left
+	}
+	_, ok := set[line]
+	return ok
+}

@@ -113,6 +113,13 @@ type Result struct {
 	// must be listed in the review body instead.
 	Unanchored []render.Finding
 	Warnings   []Warning
+	// OpenOurs counts CommitBrief threads that were already on the PR and are
+	// still open once the sync is done: untouched, held and out-of-scope
+	// ones, and threads left open by a failed resolve. Comments this run
+	// posted are not counted: the verdict already weighs the findings they
+	// carry. An incremental verdict that approves must not ignore OpenOurs
+	// (ADR-0046 §A.7b).
+	OpenOurs int
 }
 
 // SyncParams is the input of Sync. Select applies the loop cap (ADR-0016
@@ -130,6 +137,15 @@ type SyncParams struct {
 	// scope are never touched: a narrowed run (--file/--dir/--exclude-*) says
 	// nothing about files it did not look at (ADR-0046 §Update 2026-10-18).
 	InScope func(path string) bool
+	// Incremental marks a --since-last-review run: only the delta since the
+	// last review was re-reviewed, so a finding missing from Groups proves
+	// nothing about code outside that delta. In that mode a thread whose
+	// finding is gone is resolved only when it is active, outdated and its
+	// file is in InDiff (ADR-0046 §A.7b); every other thread is left alone.
+	Incremental bool
+	// InDiff reports whether a file is part of the incremental diff. It is
+	// consulted only when Incremental is set; nil then means no file is.
+	InDiff func(path string) bool
 }
 
 type threadOp int
@@ -153,6 +169,7 @@ type tinfo struct {
 	goneFall bool // resolve impossible -> reply "gone" (G1) instead of counting stale (N1)
 	back     bool // eligible for a "back" reply when it ends the run open
 	postIdx  int  // P4: index into posts, -1 when none
+	open     bool // still open on GitHub after the operations so far
 }
 
 func (ti *tinfo) ref() string {
@@ -177,6 +194,8 @@ type syncer struct {
 	posts []postItem
 	// postOK[i] is true once posts[i] was created.
 	postOK map[int]bool
+	// outOfScopeOpen counts our open threads the run did not review.
+	outOfScopeOpen int
 }
 
 // Sync reconciles the PR's CommitBrief review threads with the current
@@ -186,6 +205,12 @@ func Sync(ctx context.Context, p SyncParams) Result {
 	s := &syncer{ctx: ctx, p: p, postOK: map[int]bool{}}
 	s.plan()
 	s.execute()
+	s.res.OpenOurs = s.outOfScopeOpen
+	for _, ti := range s.infos {
+		if ti.open {
+			s.res.OpenOurs++
+		}
+	}
 	return s.res
 }
 
@@ -220,9 +245,12 @@ func (s *syncer) plan() {
 			continue // not ours: never touched
 		}
 		if s.p.InScope != nil && !s.p.InScope(t.Path) {
+			if !t.Resolved {
+				s.outOfScopeOpen++
+			}
 			continue // not reviewed this run: never touched
 		}
-		ti := &tinfo{t: t, m: m, text: text, postIdx: -1, group: groups[m.FP]}
+		ti := &tinfo{t: t, m: m, text: text, postIdx: -1, group: groups[m.FP], open: !t.Resolved}
 		ti.class, ti.rec = Classify(t, m)
 		if ti.rec != "" && !t.Root.ViewerCanUpdate {
 			s.warn("record", ti.ref(), nil)
@@ -264,10 +292,19 @@ func canResolve(t Thread) bool { return t.CanResolve && t.Root.ViewerCanUpdate }
 func (s *syncer) planNoFinding(ti *tinfo) {
 	switch ti.class {
 	case ClassActive:
+		if s.p.Incremental && !s.goneInDelta(ti.t) {
+			return // not re-reviewed: stays as it is
+		}
 		ti.op, ti.goneFall = opResolve, true // G1
 	case ClassHeld:
 		s.res.Held++ // G2
 	}
+}
+
+// goneInDelta reports whether an incremental run may treat a missing finding
+// as fixed: the thread's code changed (outdated) and its file is in the delta.
+func (s *syncer) goneInDelta(t Thread) bool {
+	return t.Outdated && s.p.InDiff != nil && s.p.InDiff(t.Path)
 }
 
 func (s *syncer) planNonCanonical(ti *tinfo) {
@@ -412,6 +449,7 @@ func (s *syncer) resolveAndRecord(ti *tinfo) error {
 	if err := ResolveThread(s.ctx, s.p.Runner, ti.t.NodeID); err != nil {
 		return err
 	}
+	ti.open = false
 	s.res.Resolved++
 	// Resolve first, record second: a failed resolve leaves the marker alone.
 	saved := ti.newText
@@ -464,6 +502,7 @@ func (s *syncer) executeThread(ti *tinfo) {
 			s.res.Unanchored = append(s.res.Unanchored, g.Members...)
 			return
 		}
+		ti.open = true
 		s.res.Updated++
 		if err := s.flush(ti, &mark{}); err != nil {
 			s.warn("record", ti.ref(), err)

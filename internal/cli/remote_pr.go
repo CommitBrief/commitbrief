@@ -33,6 +33,7 @@ type remotePRFlags struct {
 	requestChangesOn string
 	repo             string
 	noPost           bool
+	sinceLastReview  bool
 }
 
 func newRemotePRCmd() *cobra.Command {
@@ -49,7 +50,9 @@ func newRemotePRCmd() *cobra.Command {
 			"verdict is only approve (no findings / info-only) or comment; a\n" +
 			"request-changes verdict is opt-in via the --request-changes-on flag.\n" +
 			"The PR ID accepts gh-native forms: 42, owner/repo#42, or a full URL.\n" +
-			"See ADR-0016.",
+			"With --since-last-review only the commits added since CommitBrief's\n" +
+			"previous review of the PR are reviewed; it falls back to a full review\n" +
+			"whenever that range cannot be determined safely. See ADR-0016.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRemotePR(cmd, args[0], f, remote.NewRunner())
@@ -61,6 +64,8 @@ func newRemotePRCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.repo, "repo", "", "target repository owner/repo (overrides git context)")
 	cmd.Flags().BoolVar(&f.noPost, "no-post", false,
 		"review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review")
+	cmd.Flags().BoolVar(&f.sinceLastReview, "since-last-review", false,
+		"review only the commits added since CommitBrief's last review of this PR (full review when that range is unknown)")
 	return cmd
 }
 
@@ -195,13 +200,36 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		return err
 	}
 
-	res, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, model, loaded, meta.LastOID(), prog)
+	// --since-last-review: find the head CommitBrief last reviewed. Anything
+	// that stops us from using it (no marker, unreadable) means a full review
+	// plus one info line; an unchanged head means there is nothing to review.
+	prev := ""
+	if f.sinceLastReview {
+		recorded, lerr := remote.FetchLastReviewedOID(ctx, runner, meta.BaseSlug(), meta.Number)
+		switch {
+		case lerr != nil:
+			prog.Info(cat.T("remote.since_lookup_failed", lerr.Error()))
+		case recorded == "":
+			prog.Info(cat.T("remote.since_no_marker"))
+		case recorded == meta.LastOID():
+			prog.Info(cat.T("remote.since_no_new_commits"))
+			return nil
+		default:
+			prev = recorded
+		}
+	}
+
+	res, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, model, loaded, meta.LastOID(), meta.BaseSlug(), prev, prog)
 	if err != nil {
 		prog.Fail(err)
 		return err
 	}
+	if res.noNewCommits {
+		prog.Info(cat.T("remote.since_no_new_commits"))
+		return nil
+	}
 
-	if err := submitPRReview(ctx, runner, prID, f, meta, oid, res.findings, res.anchors, threshold, whoami, app, prog); err != nil {
+	if err := submitPRReview(ctx, runner, prID, f, meta, oid, res, threshold, whoami, app, prog); err != nil {
 		prog.Fail(err)
 		return err
 	}
@@ -254,6 +282,9 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 	// never submits. Note it only when the user explicitly set it.
 	if cmd.Flags().Changed("request-changes-on") {
 		infof("%s", cat.T("remote.no_post_request_changes_ignored"))
+	}
+	if f.sinceLastReview {
+		infof("%s", cat.T("remote.no_post_since_last_review_ignored"))
 	}
 	if err := remote.EnsureGH(); err != nil {
 		return errors.New(cat.T("remote.gh_missing"))
@@ -528,15 +559,31 @@ type prReviewResult struct {
 	anchors  map[string]diff.FileAnchors
 	usage    provider.Usage
 	latency  time.Duration
+	// incremental is true when the model only saw the prev...head delta;
+	// deltaPaths then holds the files that delta touched (the only threads
+	// an incremental run may resolve, ADR-0046 §A.7 G1).
+	incremental bool
+	deltaPaths  map[string]bool
+	// deltaAnchors indexes the prev...head delta the model actually read. Its
+	// LEFT numbers are relative to prev, not to the PR base, so a finding on
+	// them cannot be pinned on the PR diff's LEFT side (ADR-0046 §Update
+	// 2026-10-19).
+	deltaAnchors map[string]diff.FileAnchors
+	// noNewCommits is set when the head moved back to the previously
+	// reviewed commit while the review was running (nothing left to do).
+	noNewCommits bool
 }
 
 // reviewPRDiff fetches the PR diff, runs one review, and guards against a
 // race: if the PR head OID changed during the review it retries once,
 // then aborts (ADR-0016 §7). Returns the review result plus the OID it
 // was produced against (used to anchor inline comments).
-func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, lastOID string, prog *ui.Progress) (prReviewResult, string, error) {
+func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, lastOID, slug, prev string, prog *ui.Progress) (prReviewResult, string, error) {
 	for attempt := 0; ; attempt++ {
-		res, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, model, loaded, prog)
+		if prev != "" && prev == lastOID {
+			return prReviewResult{noNewCommits: true}, lastOID, nil
+		}
+		res, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, model, loaded, lastOID, slug, prev, prog)
 		if err != nil {
 			return prReviewResult{}, "", err
 		}
@@ -561,7 +608,7 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 // reviewOnePRDiff runs the structured review pipeline once against the
 // PR's current diff. Bot-mode: the secret scanner warns but never aborts
 // (ADR-0016 §3); the local-config guard and cost preflight are skipped.
-func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, prog *ui.Progress) (prReviewResult, error) {
+func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, headOID, slug, prev string, prog *ui.Progress) (prReviewResult, error) {
 	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
 	if err != nil {
 		return prReviewResult{}, err
@@ -581,17 +628,43 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	if parsed.Empty() {
 		return prReviewResult{findings: []render.Finding{}, anchors: map[string]diff.FileAnchors{}}, nil
 	}
-	diffText := parsed.String()
 	anchors := parsed.Anchors()
+
+	// Incremental: the model reads only the prev...head delta, while anchoring
+	// and identity stay on the full PR diff above (ADR-0046 §A.7b). Any doubt
+	// about the range falls back to the full review with an info line.
+	reviewed := parsed
+	incremental := false
+	var deltaPaths map[string]bool
+	var deltaAnchors map[string]diff.FileAnchors
+	if prev != "" {
+		delta, ok, derr := incrementalDelta(ctx, runner, slug, headOID, prev, app, prog)
+		if derr != nil {
+			return prReviewResult{}, derr
+		}
+		if ok {
+			if delta.Empty() {
+				// Only filtered-out files changed since the last review.
+				return prReviewResult{findings: []render.Finding{}, anchors: anchors, incremental: true, deltaPaths: map[string]bool{}}, nil
+			}
+			reviewed, incremental = delta, true
+			deltaPaths = map[string]bool{}
+			deltaAnchors = delta.Anchors()
+			for path := range deltaAnchors {
+				deltaPaths[path] = true
+			}
+		}
+	}
+	diffText := reviewed.String()
 
 	// "analyzing N files · X added · Y removed [· COMMITBRIEF.md loaded]" —
 	// the same status line the local review renders, emitted here as a tree
 	// info note. It also finishes the active fetch stage (info auto-finishes
 	// the stage above it), mirroring local review's diff-stats line.
 	prog.Info(render.StatusLine(render.Meta{
-		Files:        parsed.FileCount(),
-		LinesAdded:   parsed.AddedLines(),
-		LinesRemoved: parsed.DeletedLines(),
+		Files:        reviewed.FileCount(),
+		LinesAdded:   reviewed.AddedLines(),
+		LinesRemoved: reviewed.DeletedLines(),
 		RulesLoaded:  loaded.Source != rules.SourceDefault,
 	}))
 
@@ -608,7 +681,7 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	// The model sees the line-numbered diff so it copies line numbers
 	// instead of estimating them (see review.go); anchors above are built
 	// from the same parsed diff.
-	p := prompt.Build(loaded, app.Lang, parsed.NumberedString(), "")
+	p := prompt.Build(loaded, app.Lang, reviewed.NumberedString(), "")
 	req := provider.Request{
 		Model:        model,
 		SystemPrompt: p.System,
@@ -629,7 +702,53 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
 	findings = stampIdentity(parsed, findings)
-	return prReviewResult{findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency}, nil
+	return prReviewResult{
+		findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency,
+		incremental: incremental, deltaPaths: deltaPaths, deltaAnchors: deltaAnchors,
+	}, nil
+}
+
+// incrementalDelta returns the parsed, filtered prev...head diff when the
+// range can be reviewed on its own: prev must be an ancestor of head
+// (status "ahead", so no force-push), no new commit may be a merge commit
+// (a merge drags other people's code into the delta), the commit list must
+// be complete, and the diff itself must be retrievable. Otherwise ok is false
+// and one info line explains the fallback to a full review. An error is
+// returned only for an invalid --file/--dir glob. Nothing here writes to
+// local git (ADR-0019): everything comes from the GitHub API.
+func incrementalDelta(ctx context.Context, runner remote.Runner, slug, headOID, prev string, app *appContext, prog *ui.Progress) (diff.Diff, bool, error) {
+	cat := app.Catalog
+	cmp, err := remote.FetchCompare(ctx, runner, slug, prev, headOID)
+	switch {
+	case err != nil:
+		prog.Info(cat.T("remote.since_compare_failed", err.Error()))
+		return diff.Diff{}, false, nil
+	case !cmp.Ahead():
+		prog.Info(cat.T("remote.since_not_ahead", cmp.Status))
+		return diff.Diff{}, false, nil
+	case !cmp.Complete():
+		prog.Info(cat.T("remote.since_compare_incomplete"))
+		return diff.Diff{}, false, nil
+	case cmp.HasMerge():
+		prog.Info(cat.T("remote.since_merge_commit"))
+		return diff.Diff{}, false, nil
+	}
+	raw, err := remote.FetchCompareDiff(ctx, runner, slug, prev, headOID)
+	if err != nil {
+		prog.Info(cat.T("remote.since_diff_failed", err.Error()))
+		return diff.Diff{}, false, nil
+	}
+	delta, err := diff.Parse(git.Diff{Content: raw, Origin: git.OriginDiff})
+	if err != nil {
+		prog.Info(cat.T("remote.since_diff_failed", err.Error()))
+		return diff.Diff{}, false, nil
+	}
+	delta = diff.Filter(delta, buildMatcher(app.RepoRoot))
+	delta, err = keepAndDropPaths(delta)
+	if err != nil {
+		return diff.Diff{}, false, errors.New(cat.T("filter.glob.invalid", err.Error()))
+	}
+	return delta, true, nil
 }
 
 // submitPRReview syncs the inline comments with the PR's existing review
@@ -639,8 +758,9 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 // appended to the review summary so the signal survives (ADR-0016 §9).
 // Per-comment failures never abort the verdict submission, and a failed
 // thread read degrades to plain posting (no sync).
-func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, findings []render.Finding, anchors map[string]diff.FileAnchors, threshold render.Severity, whoami string, app *appContext, prog *ui.Progress) error {
+func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, review prReviewResult, threshold render.Severity, whoami string, app *appContext, prog *ui.Progress) error {
 	cat := app.Catalog
+	findings, anchors := review.findings, review.anchors
 	verdict := computeVerdict(findings, threshold)
 
 	slug := meta.BaseSlug()
@@ -652,7 +772,7 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		// post, update, resolve or reply (ADR-0046 §Update 2026-10-18).
 		prog.Info(cat.T("remote.sync_skipped_empty_scope"))
 	} else {
-		groups := buildSyncGroups(findings, anchors, whoami)
+		groups := buildSyncGroups(findings, anchors, review.deltaAnchors, whoami)
 		var threads []remote.Thread
 		threads, readErr = remote.FetchThreads(ctx, runner, slug, meta.Number)
 		if readErr != nil {
@@ -662,7 +782,7 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		if len(groups) > 0 || len(threads) > 0 {
 			prog.Start(cat.T("remote.posting_comments", meta.Number))
 		}
-		res = remote.Sync(ctx, remote.SyncParams{
+		params := remote.SyncParams{
 			Runner:   runner,
 			Slug:     slug,
 			PRNumber: meta.Number,
@@ -671,7 +791,14 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 			Groups:   groups,
 			Select:   func(c []render.Finding) []render.Finding { return selectPostable(c, threshold) },
 			InScope:  scope,
-		})
+		}
+		if review.incremental {
+			// An incremental run only re-examined the delta: it resolves just
+			// the gone findings whose file the delta touched (ADR-0046 §A.7).
+			params.Incremental = true
+			params.InDiff = func(path string) bool { return review.deltaPaths[path] }
+		}
+		res = remote.Sync(ctx, params)
 		if len(groups) > 0 || len(threads) > 0 {
 			prog.Finish() // sync stage done
 		}
@@ -695,10 +822,28 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		}
 	}
 
+	// An incremental run did not re-examine every file, so an approve is only
+	// honest when no open CommitBrief thread is left anywhere (held ones
+	// included). Without a readable thread list that cannot be known.
+	if review.incremental && verdict == remote.VerdictApprove && (res.OpenOurs > 0 || readErr != nil) {
+		verdict = remote.VerdictComment
+	}
+
 	body := remote.BuildReviewBody(verdict, whoami)
 	if section := remote.BuildUnanchoredSection(res.Unanchored); section != "" {
 		body += "\n\n---\n\n" + section
 	}
+	// K8: a review that covered the whole PR records the head it was produced
+	// against, so the next --since-last-review run knows where to start. A
+	// path-narrowed run (or one whose scope came out empty) saw only part of
+	// the PR: stamping it would let the next incremental run skip code nobody
+	// reviewed, so it leaves the marker to the last full review (ADR-0046
+	// §Update 2026-10-19). An empty OID leaves the body unchanged.
+	markerOID := oid
+	if pathsNarrowed() || skipSync {
+		markerOID = ""
+	}
+	body = remote.WithReviewedMarker(body, markerOID)
 	prog.Start(cat.T("remote.submitting"))
 	if err := remote.SubmitReview(ctx, runner, prID, f.repo, verdict, body); err != nil {
 		return err
@@ -752,7 +897,13 @@ func syncWarning(cat *i18n.Catalog, w remote.Warning) string {
 // group (ADR-0046 §3): the comment is anchored on the lowest anchorable line
 // and lists the other occurrences. A finding without a valid fingerprint is
 // its own unmanaged group.
-func buildSyncGroups(findings []render.Finding, anchors map[string]diff.FileAnchors, whoami string) []remote.Group {
+//
+// delta is non-nil only for an incremental run: the model then read the
+// prev...head delta, whose LEFT line numbers are relative to prev and mean
+// nothing on the PR diff's LEFT side. A finding that lives on the delta's
+// LEFT side is therefore left unanchored (it lands in the review body)
+// rather than pinned to an unrelated line (ADR-0046 §Update 2026-10-19).
+func buildSyncGroups(findings []render.Finding, anchors, delta map[string]diff.FileAnchors, whoami string) []remote.Group {
 	type bucket struct {
 		fp      string
 		members []render.Finding
@@ -786,7 +937,19 @@ func buildSyncGroups(findings []render.Finding, anchors map[string]diff.FileAnch
 			if !ok {
 				return "", false
 			}
-			return fa.Resolve(m.Line, preferLeftSide(m))
+			if delta != nil {
+				if preferLeftSide(m) {
+					return "", false
+				}
+				if da, ok := delta[m.File]; ok && da.Has(diff.SideLeft, m.Line) && !da.Has(diff.SideRight, m.Line) {
+					return "", false
+				}
+			}
+			side, ok := fa.Resolve(m.Line, preferLeftSide(m))
+			if ok && delta != nil && side == diff.SideLeft {
+				return "", false
+			}
+			return side, ok
 		}
 		g := remote.Group{FP: b.fp, Members: b.members, Rep: b.members[0], Severity: b.members[0].Severity}
 		found := false

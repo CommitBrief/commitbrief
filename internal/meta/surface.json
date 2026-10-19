@@ -1169,6 +1169,15 @@
       "scope": "command"
     },
     {
+      "command": "commitbrief remote pr",
+      "name": "since-last-review",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "review only the commits added since CommitBrief's last review of this PR (full review when that range is unknown)",
+      "scope": "command"
+    },
+    {
       "command": "commitbrief setup",
       "name": "alias",
       "type": "string",
