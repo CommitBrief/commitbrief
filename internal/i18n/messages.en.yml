@@ -107,6 +107,8 @@ rules.using_default: "ℹ Using built-in review rules. Run 'commitbrief init' to
 rules.output.using_default: "ℹ Using built-in output format. Create ~/.commitbrief/OUTPUT.md or <repo>/.commitbrief/OUTPUT.md to customize."
 
 common.error_prefix: "Error:"
+common.error.git_missing: "git not found on PATH. Install git and make sure it is on your PATH."
+common.error.not_a_repo: "Not inside a git repository."
 # yes/no vocabulary. Catalog-driven so non-English locales can map their
 # native accept-affirmative onto y/yes (Turkish: e/evet, etc.). The
 # default EN forms remain accepted everywhere — typing "y" in a Turkish

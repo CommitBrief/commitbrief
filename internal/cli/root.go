@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -286,9 +287,22 @@ func Execute() {
 		// resolveContext), so we honor only the --lang flag — the remaining
 		// chain steps need configs we cannot safely load here (ADR-0021).
 		cat := pickErrorCatalog()
-		fmt.Fprintln(os.Stderr, cat.T("common.error_prefix"), err)
+		fmt.Fprintln(os.Stderr, cat.T("common.error_prefix"), localizeGitError(cat, err))
 		os.Exit(1)
 	}
+}
+
+// localizeGitError maps the two sentinel git errors every command can surface
+// to their translated catalog message. Any other error is returned unchanged,
+// so its original text (and any wrapping context) still reaches the user.
+func localizeGitError(cat *i18n.Catalog, err error) string {
+	switch {
+	case errors.Is(err, git.ErrNoGitCLI):
+		return cat.T("common.error.git_missing")
+	case errors.Is(err, git.ErrNotARepo):
+		return cat.T("common.error.not_a_repo")
+	}
+	return err.Error()
 }
 
 // expandDefault decides the args cobra should run for a bare invocation.

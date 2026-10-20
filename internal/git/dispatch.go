@@ -2,10 +2,7 @@
 
 package git
 
-import (
-	"errors"
-	"log/slog"
-)
+import "log/slog"
 
 // DispatchRepo is the Repo the CLI layer holds. `exec git` (CLIRepo) is the
 // only diff backend (ADR-0002 §Update 2026-10-20, second entry). When no `git`
@@ -34,13 +31,11 @@ func Open(root string, opts DispatchOptions) (*DispatchRepo, error) {
 		logger = slog.Default()
 	}
 
+	// NewCLIRepo fails only with ErrNoGitCLI. Keep the field a nil
+	// *CLIRepo in that case (never a typed-nil behind an interface).
 	cli, cliErr := NewCLIRepo(detected)
 	if cliErr != nil {
-		if !errors.Is(cliErr, ErrNoGitCLI) {
-			return nil, cliErr
-		}
 		logger.Debug("git: git binary unavailable; diff operations will fail", "err", cliErr)
-		cli = nil
 	}
 
 	return &DispatchRepo{root: detected, cli: cli, logger: logger}, nil
