@@ -136,6 +136,13 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 		if selErr != nil {
 			return selErr
 		}
+		// Truncation is known once the selection returns; refuse the SARIF
+		// log now instead of after walking every selected commit's patch.
+		if global.sarif {
+			if err := leaksSarifIncomplete(app, leaks.Result{Truncated: sel.Truncated, WalkTruncated: sel.WalkTruncated}); err != nil {
+				return err
+			}
+		}
 		hist, sErr := leaks.ScanHistory(ctx, app.RepoRoot, sel, opts)
 		if sErr != nil {
 			return leaksError(app, sErr)
