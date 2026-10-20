@@ -26,6 +26,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/remote"
 	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/rules"
+	"github.com/CommitBrief/commitbrief/internal/suppress"
 	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
@@ -228,6 +229,13 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		prog.Info(cat.T("remote.since_no_new_commits"))
 		return nil
 	}
+	// Unknown-scope marker warnings print once, here, not per attempt of the
+	// head-race retry loop. Progress has no warning channel (Info is the
+	// tree's only note kind), and a raw stderr write would corrupt the live
+	// redraw, so Info is the right sink.
+	for _, w := range res.suppressWarnings {
+		prog.Info(cat.T(suppressWarningKey(w), w.Path, w.Line, w.Token))
+	}
 
 	if err := submitPRReview(ctx, runner, prID, f, meta, oid, res, threshold, whoami, app, prog); err != nil {
 		prog.Fail(err)
@@ -249,6 +257,7 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		}
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.FooterLine(footerMeta, res.findings))
 	}
+	signalControlFooter(cmd, app, 0, res.suppressed)
 	return nil
 }
 
@@ -421,6 +430,15 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 				findings, _ = render.ParseFindings(entry.Result.Content)
 			}
 			findings = stampIdentity(parsed, findings)
+			// Inline suppression is a TRUE removal here too (same helper as
+			// the posting path), so --fail-on and --json agree with what
+			// `remote pr` would post. The cache holds the raw provider
+			// response; what a marker hides is decided per run.
+			var supWarnings []suppress.Warning
+			findings, meta.Suppressed, supWarnings = suppressPRFindings(parsed, findings)
+			for _, w := range supWarnings {
+				warnT(cmd, app, suppressWarningKey(w), w.Path, w.Line, w.Token)
+			}
 			if entry.Result.Format == cache.FormatPlainText {
 				if err := emitPlainText(cmd, entry.Result.Content); err != nil {
 					return err
@@ -428,6 +446,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 			} else if err := renderResult(cmd, entry.Result.Content, outputLoaded.Content, findings, meta); err != nil {
 				return err
 			}
+			signalControlFooter(cmd, app, 0, meta.Suppressed)
 			handleCopyFlag(cmd, app, findings)
 			return applyFailOn(cmd, app, findings)
 		}
@@ -499,11 +518,18 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), cat.T("review.degraded"))
 	}
 	findings = stampIdentity(parsed, findings)
+	// Inline suppression, same helper as the posting path and the cache-hit
+	// branch above.
+	findings, suppressed, supWarnings := suppressPRFindings(parsed, findings)
+	for _, w := range supWarnings {
+		warnT(cmd, app, suppressWarningKey(w), w.Path, w.Line, w.Token)
+	}
 
 	meta := render.Meta{
 		Provider:      prov.Name(),
 		Model:         model,
 		Lang:          app.Lang.Code,
+		Suppressed:    suppressed,
 		Usage:         usage,
 		Cost:          resolvePricing(app.Config, prov, model).Cost(usage),
 		CostUnknown:   costIsUnknown(app.Config, prov, model),
@@ -547,6 +573,7 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 	} else if err := renderResult(cmd, content, outputLoaded.Content, findings, meta); err != nil {
 		return err
 	}
+	signalControlFooter(cmd, app, 0, suppressed)
 	handleCopyFlag(cmd, app, findings)
 	return applyFailOn(cmd, app, findings)
 }
@@ -572,6 +599,12 @@ type prReviewResult struct {
 	// noNewCommits is set when the head moved back to the previously
 	// reviewed commit while the review was running (nothing left to do).
 	noNewCommits bool
+	// suppressed counts findings dropped by an inline commitbrief-ignore
+	// marker (ADR-0027); reported once in the stderr footer.
+	suppressed int
+	// suppressWarnings carries unknown-scope marker warnings out of the
+	// (possibly retried) review so they print once, after the retry loop.
+	suppressWarnings []suppress.Warning
 }
 
 // reviewPRDiff fetches the PR diff, runs one review, and guards against a
@@ -702,10 +735,41 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
 	findings = stampIdentity(parsed, findings)
+
+	// Inline suppression (ADR-0027, ADR-0046 §Update 2026-10-20), shared with
+	// the --no-post path. A suppressed finding is dropped before sync, so its
+	// open thread from a previous run counts as gone and is resolved.
+	findings, suppressed, supWarnings := suppressPRFindings(parsed, findings)
 	return prReviewResult{
 		findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency,
 		incremental: incremental, deltaPaths: deltaPaths, deltaAnchors: deltaAnchors,
+		suppressed: suppressed, suppressWarnings: supWarnings,
 	}, nil
+}
+
+// suppressPRFindings applies inline commitbrief-ignore suppression (ADR-0027)
+// to a PR review's findings. It is the single implementation behind both the
+// posting path and the --no-post path, so a finding silenced by a marker is
+// silenced in both. Markers are read from parsed, the FULL (filtered) PR diff
+// rather than the delta an incremental run showed the model, so a marker added
+// in an earlier commit still counts. Baseline is deliberately not applied: it
+// is a user-private local file, not part of the PR under review. Warnings are
+// returned, not printed, because each caller owns its own stderr channel.
+func suppressPRFindings(parsed diff.Diff, findings []render.Finding) (kept []render.Finding, suppressed int, warnings []suppress.Warning) {
+	if findings == nil {
+		return nil, 0, nil
+	}
+	sup := suppress.ParseSuppressions(parsed)
+	kept, suppressed = suppress.Filter(findings, sup)
+	return kept, suppressed, sup.Warnings()
+}
+
+// suppressWarningKey picks the i18n key for one marker warning.
+func suppressWarningKey(w suppress.Warning) string {
+	if w.UnknownRule {
+		return "suppress.unknown_rule"
+	}
+	return "suppress.unknown_scope"
 }
 
 // incrementalDelta returns the parsed, filtered prev...head diff when the

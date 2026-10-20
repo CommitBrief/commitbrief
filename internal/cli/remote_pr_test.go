@@ -640,3 +640,285 @@ func TestRemotePRSyncNarrowedEmptyScopeSkipsSync(t *testing.T) {
 		t.Errorf("an empty narrowed scope must skip the sync entirely; calls=%v", r.calls)
 	}
 }
+
+// ---------- inline suppression (ADR-0027 / ADR-0046 §Update 2026-10-20) ----------
+
+// markedMockDiff adds mock.go whose first line carries the given marker text.
+// The mock provider's canned finding sits on mock.go:1, so a marker on that
+// line is what silences it. Markers are only read from ADDED lines, hence a
+// new-file diff rather than the context-only line 1 of sampleDiff.
+func markedMockDiff(marker string) string {
+	return "diff --git a/mock.go b/mock.go\n" +
+		"new file mode 100644\n" +
+		"index 0000000..2222222\n" +
+		"--- /dev/null\n" +
+		"+++ b/mock.go\n" +
+		"@@ -0,0 +1,2 @@\n" +
+		"+package mock // " + marker + "\n" +
+		"+var X = 1\n"
+}
+
+// runRemotePRCapture drives runRemotePR and returns everything written to
+// stderr, whether through the command's writer or the raw os.Stderr.
+func runRemotePRCapture(t *testing.T, e *cliEnv, f remotePRFlags, r *fakeGH) (string, error) {
+	t.Helper()
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(e.repoRoot)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldErr := os.Stderr
+	os.Stderr = pw
+	done := make(chan string)
+	go func() {
+		b, _ := io.ReadAll(pr)
+		done <- string(b)
+	}()
+
+	var errBuf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetErr(&errBuf)
+	runErr := runRemotePR(cmd, "42", f, r)
+
+	os.Stderr = oldErr
+	_ = pw.Close()
+	return errBuf.String() + <-done, runErr
+}
+
+func TestRemotePRInlineSuppressSkipsComment(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	r := &fakeGH{
+		whoami:     "tester",
+		prMeta:     prMetaJSON("contributor", "stable"),
+		commitsSeq: []string{`{"commits":[{"oid":"stable"}]}`},
+		diff:       markedMockDiff("commitbrief-ignore: accepted"),
+	}
+	out, err := runRemotePRCapture(t, e, remotePRFlags{requestChangesOn: "critical"}, r)
+	if err != nil {
+		t.Fatalf("remote pr: %v", err)
+	}
+	if got := r.callCount("/comments"); got != 0 {
+		t.Errorf("a finding on a commitbrief-ignore line must not be posted; calls=%v", r.calls)
+	}
+	if !strings.Contains(out, "1 suppressed") {
+		t.Errorf("want the suppressed footer on stderr, got:\n%s", out)
+	}
+	if r.callCount("--approve") != 1 {
+		t.Errorf("with nothing left to post the review still approves; calls=%v", r.calls)
+	}
+}
+
+// Control: the same PR without the marker does post, so the test above is
+// proving the marker and not a vacuous absence.
+func TestRemotePRInlineSuppressControlPostsWithoutMarker(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	r := &fakeGH{
+		whoami:     "tester",
+		prMeta:     prMetaJSON("contributor", "stable"),
+		commitsSeq: []string{`{"commits":[{"oid":"stable"}]}`},
+		diff:       markedMockDiff("no marker here"),
+	}
+	out, err := runRemotePRCapture(t, e, remotePRFlags{requestChangesOn: "critical"}, r)
+	if err != nil {
+		t.Fatalf("remote pr: %v", err)
+	}
+	if r.callCount("/comments") != 1 {
+		t.Errorf("want 1 inline comment without a marker; calls=%v", r.calls)
+	}
+	if strings.Contains(out, "suppressed") {
+		t.Errorf("no suppressed footer expected, got:\n%s", out)
+	}
+}
+
+func TestRemotePRInlineSuppressResolvesOpenThread(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	diffText := markedMockDiff("commitbrief-ignore: accepted")
+	parsed, perr := diff.Parse(git.Diff{Content: diffText, Origin: git.OriginDiff})
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	// The thread an earlier, marker-less run opened for the very same finding.
+	fp := stampIdentity(parsed, []render.Finding{{File: "mock.go", Line: 1}})[0].Fingerprint
+	r := &fakeGH{
+		whoami:     "tester",
+		prMeta:     prMetaJSON("contributor", "stable"),
+		commitsSeq: []string{`{"commits":[{"oid":"stable"}]}`},
+		diff:       diffText,
+		threads:    scopedSnapshot(t, map[string]string{"mock.go": fp}),
+	}
+	if _, err := runRemotePRCapture(t, e, remotePRFlags{requestChangesOn: "critical"}, r); err != nil {
+		t.Fatalf("remote pr: %v", err)
+	}
+	if r.callCount("/pulls/42/comments ") != 0 {
+		t.Errorf("the suppressed finding must not be re-posted; calls=%v", r.calls)
+	}
+	if r.callCount("resolveReviewThread") != 1 || r.callCount("id=Tmock.go") != 1 {
+		t.Errorf("the earlier thread must be resolved once; calls=%v", r.calls)
+	}
+}
+
+func TestRemotePRInlineSuppressUnknownScopeWarns(t *testing.T) {
+	newGH := func() *fakeGH {
+		return &fakeGH{
+			whoami:     "tester",
+			prMeta:     prMetaJSON("contributor", "stable"),
+			commitsSeq: []string{`{"commits":[{"oid":"stable"}]}`},
+			diff:       markedMockDiff("commitbrief-ignore[bogus]: typo"),
+		}
+	}
+
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	out, err := runRemotePRCapture(t, e, remotePRFlags{}, newGH())
+	if err != nil {
+		t.Fatalf("remote pr: %v", err)
+	}
+	if !strings.Contains(out, "commitbrief-ignore[bogus]") || !strings.Contains(out, "mock.go:1") {
+		t.Errorf("want the unknown-scope warning on stderr, got:\n%s", out)
+	}
+
+	// --quiet silences both the warning and the footer.
+	withGlobal(t, globalFlags{color: "never", quiet: true})
+	r := newGH()
+	out, err = runRemotePRCapture(t, e, remotePRFlags{}, r)
+	if err != nil {
+		t.Fatalf("remote pr --quiet: %v", err)
+	}
+	if strings.Contains(out, "commitbrief-ignore") || strings.Contains(out, "suppressed") {
+		t.Errorf("--quiet must silence the warning and footer, got:\n%s", out)
+	}
+	if r.callCount("/comments") != 0 {
+		t.Errorf("an unknown-scope marker still suppresses (fail-open); calls=%v", r.calls)
+	}
+}
+
+// runRemotePRNoPost drives `remote pr --no-post` and returns stdout, stderr
+// and the command error.
+func runRemotePRNoPost(t *testing.T, e *cliEnv, r *fakeGH) (stdout, stderr string, err error) {
+	t.Helper()
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(e.repoRoot)
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	var out, errBuf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	err = runRemotePR(cmd, "42", remotePRFlags{noPost: true}, r)
+	return out.String(), errBuf.String(), err
+}
+
+// The preview must agree with what `remote pr` would post: a finding silenced
+// by an inline marker neither trips --fail-on nor appears in --json, and
+// meta.suppressed reports it. Each case runs twice — the first run is a live
+// provider call, the second replays the cache — because both exits of
+// runRemotePRLocal apply the suppression.
+func TestRemotePRNoPostInlineSuppressFailOnAndJSON(t *testing.T) {
+	cases := []struct {
+		name           string
+		marker         string
+		wantFailOn     bool
+		wantFindings   int
+		wantSuppressed int
+	}{
+		{"marker silences the finding", "commitbrief-ignore: accepted", false, 0, 1},
+		{"control without marker still gates", "no marker here", true, 1, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newCLIEnv(t)
+			stubGHOnPath(t)
+			withGlobal(t, globalFlags{color: "never", json: true, failOn: "info"})
+			for i, wantCached := range []bool{false, true} {
+				r := &fakeGH{diff: markedMockDiff(tc.marker)}
+				stdout, stderr, err := runRemotePRNoPost(t, e, r)
+				if tc.wantFailOn != (err != nil) {
+					t.Fatalf("run %d: fail-on error = %v, want error=%v\nstderr=%s", i, err, tc.wantFailOn, stderr)
+				}
+				var doc struct {
+					Findings []json.RawMessage `json:"findings"`
+					Meta     struct {
+						Cached     bool `json:"cached"`
+						Suppressed int  `json:"suppressed"`
+					} `json:"meta"`
+				}
+				if jerr := json.Unmarshal([]byte(stdout), &doc); jerr != nil {
+					t.Fatalf("run %d: stdout is not JSON: %v\n%s", i, jerr, stdout)
+				}
+				if doc.Meta.Cached != wantCached {
+					t.Errorf("run %d: meta.cached = %v, want %v", i, doc.Meta.Cached, wantCached)
+				}
+				if doc.Meta.Suppressed != tc.wantSuppressed {
+					t.Errorf("run %d: meta.suppressed = %d, want %d", i, doc.Meta.Suppressed, tc.wantSuppressed)
+				}
+				if len(doc.Findings) != tc.wantFindings {
+					t.Errorf("run %d: findings = %d, want %d", i, len(doc.Findings), tc.wantFindings)
+				}
+				if n := r.callCount("/comments"); n != 0 {
+					t.Errorf("run %d: --no-post must not write to GitHub; calls=%v", i, r.calls)
+				}
+			}
+		})
+	}
+}
+
+// Human mode: the stderr footer reports the count, unknown-scope markers warn,
+// and --quiet silences both — on the live and the cached exit alike.
+func TestRemotePRNoPostInlineSuppressFooterAndWarning(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	diffText := markedMockDiff("commitbrief-ignore[bogus]: typo")
+	for i, label := range []string{"live", "cached"} {
+		withGlobal(t, globalFlags{color: "never"})
+		_, stderr, err := runRemotePRNoPost(t, e, &fakeGH{diff: diffText})
+		if err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		if !strings.Contains(stderr, "commitbrief-ignore[bogus]") || !strings.Contains(stderr, "mock.go:1") {
+			t.Errorf("%s: want the unknown-scope warning, got:\n%s", label, stderr)
+		}
+		if !strings.Contains(stderr, "1 suppressed") {
+			t.Errorf("%s: want the suppressed footer, got:\n%s", label, stderr)
+		}
+
+		withGlobal(t, globalFlags{color: "never", quiet: true})
+		_, stderr, err = runRemotePRNoPost(t, e, &fakeGH{diff: diffText})
+		if err != nil {
+			t.Fatalf("%s --quiet (%d): %v", label, i, err)
+		}
+		if strings.Contains(stderr, "commitbrief-ignore") || strings.Contains(stderr, "suppressed") {
+			t.Errorf("%s: --quiet must silence warning and footer, got:\n%s", label, stderr)
+		}
+	}
+}
+
+// A head-race retry re-runs the whole review, but the unknown-scope warning
+// is carried out of it and printed once, not once per attempt.
+func TestRemotePRInlineSuppressWarnsOnceAcrossRaceRetry(t *testing.T) {
+	e := newCLIEnv(t)
+	stubGHOnPath(t)
+	r := &fakeGH{
+		whoami:     "tester",
+		prMeta:     prMetaJSON("contributor", "stable"),
+		commitsSeq: []string{`{"commits":[{"oid":"moved1"}]}`, `{"commits":[{"oid":"moved1"}]}`},
+		diff:       markedMockDiff("commitbrief-ignore[bogus]: typo"),
+	}
+	out, err := runRemotePRCapture(t, e, remotePRFlags{}, r)
+	if err != nil {
+		t.Fatalf("remote pr: %v", err)
+	}
+	if r.callCount("diff") < 2 {
+		t.Fatalf("the race must force a second review attempt; calls=%v", r.calls)
+	}
+	if n := strings.Count(out, "commitbrief-ignore[bogus]"); n != 1 {
+		t.Errorf("want the warning exactly once across the retry, got %d:\n%s", n, out)
+	}
+}

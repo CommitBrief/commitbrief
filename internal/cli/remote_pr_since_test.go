@@ -566,3 +566,46 @@ func TestSubmitIncrementalDeltaLeftFindingLandsInReviewBody(t *testing.T) {
 		t.Errorf("the finding must be carried by the review body; calls=%v", r.calls)
 	}
 }
+
+// markerDiffPR is a PR whose earlier commits already carry a suppression
+// marker on mock.go:1 (where the mock provider's canned finding lands), plus
+// the file the newest commit adds.
+func markerDiffPR(marker string) string {
+	return markedMockDiff(marker) + newFileDiff("new.go", "DeltaOnly")
+}
+
+// The marker lives in an earlier commit, outside the prev...head delta the
+// model reads, yet it must still silence the finding: markers are parsed from
+// the full PR diff.
+func TestSinceLastReviewRemotePRInlineSuppressMarkerOutsideDelta(t *testing.T) {
+	run := func(t *testing.T, marker string) *fakeGH {
+		t.Helper()
+		e := newCLIEnv(t)
+		stubGHOnPath(t)
+		r := newSinceGH()
+		r.diff = markerDiffPR(marker)
+		if _, err := sinceRun(t, e, r); err != nil {
+			t.Fatalf("since-last-review: %v", err)
+		}
+		if r.callCount("compare/"+prevOID+"..."+headOID) == 0 {
+			t.Fatalf("the run was not incremental; calls=%v", r.calls)
+		}
+		if p := lastPrompt(t); strings.Contains(p, "commitbrief-ignore") {
+			t.Fatalf("the marker must be outside the delta the model read")
+		}
+		return r
+	}
+
+	t.Run("with marker", func(t *testing.T) {
+		r := run(t, "commitbrief-ignore: accepted earlier")
+		if got := r.callCount("/comments"); got != 0 {
+			t.Errorf("a marker outside the delta must still suppress; calls=%v", r.calls)
+		}
+	})
+	t.Run("control without marker", func(t *testing.T) {
+		r := run(t, "nothing to see")
+		if got := r.callCount("/comments"); got != 1 {
+			t.Errorf("without a marker the finding is posted; calls=%v", r.calls)
+		}
+	})
+}
