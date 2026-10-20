@@ -69,7 +69,7 @@ func newLeaksCmd() *cobra.Command {
 	flags.BoolVar(&f.noWorktree, "no-worktree", false, "skip the working-tree half")
 	flags.BoolVar(&f.noHistory, "no-history", false, "skip the commit-history half")
 	flags.BoolVar(&f.patterns, "patterns", false, "list the effective pattern set (built-ins + configured) and exit")
-	bindSarifFlagUsage(cmd, "emit the findings as SARIF 2.1.0 for GitHub Code Scanning (category commitbrief/leaks/; use -o to write a file; the human report goes to stderr; not with --json/--patterns)")
+	bindSarifFlagUsage(cmd, "emit the findings as SARIF 2.1.0 for GitHub Code Scanning (category commitbrief/leaks/; use -o to write a file; the human report goes to stderr; not with --json/--patterns, and refused on a partial scan: --no-worktree/--no-history, path or commit filters, a range, or a history window cut by --max-commits)")
 	return cmd
 }
 
@@ -85,6 +85,12 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 		// --patterns prints a name list, not findings; there is nothing to
 		// convert, and a CI step redirecting stdout would upload a non-SARIF file.
 		return errors.New(app.Catalog.T("leaks.sarif_patterns_conflict"))
+	}
+	if global.sarif && leaksScanNarrowed(f, args) {
+		// Fail closed (ADR-0047 §4): Code Scanning treats a result missing from
+		// a category as fixed, and every leaks run shares one category, so a
+		// partial scan would close alerts it never looked at.
+		return errors.New(app.Catalog.T("leaks.sarif_narrowed"))
 	}
 	tctx, tcancel := app.withTimeout(cmd.Context())
 	defer tcancel()
@@ -138,6 +144,12 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 	}
 	result.Sort()
 
+	if global.sarif && result.Truncated {
+		// Same reasoning as the narrowing check above: a commit that fell out
+		// of the --max-commits window would silently close its alert.
+		return errors.New(app.Catalog.T("leaks.sarif_truncated", leaksCommitLimit()))
+	}
+
 	findings := leakFindings(result, userPatterns)
 
 	if global.json {
@@ -145,7 +157,7 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 	}
 	reportOut := cmd.OutOrStdout()
 	if global.sarif {
-		if err := emitLeaksSarif(cmd, result, userPatterns); err != nil {
+		if err := emitLeaksSarif(cmd, result, findings); err != nil {
 			return err
 		}
 		// stdout (or -o) belongs to the SARIF document; the coverage line, the
@@ -171,8 +183,15 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 // is personal data the alert does not need. No partial fingerprint is written:
 // a leak has no diff symbol (see leakFindings), and upload-sarif derives its
 // own location hash.
-func emitLeaksSarif(cmd *cobra.Command, res leaks.Result, userPatterns []guard.UserSecretPattern) error {
-	findings := leakFindings(res, userPatterns)
+func emitLeaksSarif(cmd *cobra.Command, res leaks.Result, findings []render.Finding) error {
+	// findings is leakFindings(res): the two slices are 1:1 and in the same
+	// order, which the parallel extra slice below relies on. The titles and
+	// descriptions are rewritten for SARIF, so work on a copy -- the human
+	// report that follows still wants the originals.
+	if len(findings) != len(res.Findings) {
+		return errors.New("leaks: findings and scan results are out of step")
+	}
+	findings = append([]render.Finding(nil), findings...)
 	extra := make([]map[string]any, len(findings))
 	for i, origin := range res.Findings {
 		patterns := append([]string(nil), origin.Patterns...)
@@ -200,6 +219,19 @@ func leakSarifDescription(f leaks.Finding) string {
 	}
 	return fmt.Sprintf("Matched in commit %s. The line may no longer be in the working "+
 		"tree, but it remains in the repository's history.", f.Short)
+}
+
+// leaksScanNarrowed reports whether the invocation scans less than the whole
+// repository: a skipped half, a path or commit filter, or an explicit range.
+// --max-commits is not a narrowing flag; it only sizes the history window, and
+// a window that turns out too small is caught separately through Truncated.
+func leaksScanNarrowed(f leaksFlags, args []string) bool {
+	return f.noWorktree || f.noHistory || len(args) > 0 ||
+		len(global.files) > 0 || len(global.dirs) > 0 ||
+		len(global.excludeFiles) > 0 || len(global.excludeDirs) > 0 ||
+		len(global.authors) > 0 || len(global.committers) > 0 ||
+		strings.TrimSpace(global.startDate) != "" || strings.TrimSpace(global.endDate) != "" ||
+		strings.TrimSpace(global.text) != ""
 }
 
 // leaksGate turns findings into the exit code.

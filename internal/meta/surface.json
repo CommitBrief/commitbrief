@@ -1133,7 +1133,7 @@
       "type": "bool",
       "default": "false",
       "no_opt_def_val": "true",
-      "usage": "emit the findings as SARIF 2.1.0 for GitHub Code Scanning (category commitbrief/leaks/; use -o to write a file; the human report goes to stderr; not with --json/--patterns)",
+      "usage": "emit the findings as SARIF 2.1.0 for GitHub Code Scanning (category commitbrief/leaks/; use -o to write a file; the human report goes to stderr; not with --json/--patterns, and refused on a partial scan: --no-worktree/--no-history, path or commit filters, a range, or a history window cut by --max-commits)",
       "scope": "command"
     },
     {

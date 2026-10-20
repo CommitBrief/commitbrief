@@ -19,12 +19,22 @@ func leakSarifEnv(t *testing.T) *cliEnv {
 	return e
 }
 
+// leakSarifWorktreeEnv returns a repo whose credential is staged but never
+// committed, so only the working-tree half of the scan can see it and a
+// full (un-narrowed) scan stays free of history hits.
+func leakSarifWorktreeEnv(t *testing.T) *cliEnv {
+	t.Helper()
+	e := newCLIEnv(t)
+	stageSecretIntoRepo(t, e.repoRoot, "conf.yml", "key: "+leakKey+"\n")
+	return e
+}
+
 func TestLeaksSarifWorktreeHit(t *testing.T) {
-	e := leakSarifEnv(t)
+	e := leakSarifWorktreeEnv(t)
 	out := filepath.Join(t.TempDir(), "leaks.sarif")
 
 	// The default --fail-on any still fails the run after the file is written.
-	if err := e.run("leaks", "--no-history", "--sarif", "-o", out); err == nil {
+	if err := e.run("leaks", "--sarif", "-o", out); err == nil {
 		t.Fatal("a found credential must still fail the run")
 	}
 	data, err := os.ReadFile(out)
@@ -69,7 +79,7 @@ func TestLeaksSarifHistoryHitCarriesCommit(t *testing.T) {
 	gitCmd(t, e.repoRoot, "commit", "-q", "-m", "scrub")
 	out := filepath.Join(t.TempDir(), "leaks.sarif")
 
-	if err := e.run("leaks", "--no-worktree", "--sarif", "-o", out); err == nil {
+	if err := e.run("leaks", "--sarif", "-o", out); err == nil {
 		t.Fatal("the history hit must fail the run")
 	}
 	data, err := os.ReadFile(out)
@@ -114,9 +124,9 @@ func TestLeaksSarifCleanRepoWritesEmptyResults(t *testing.T) {
 }
 
 func TestLeaksSarifToStdoutIsOneDocument(t *testing.T) {
-	e := leakSarifEnv(t)
+	e := leakSarifWorktreeEnv(t)
 
-	if err := e.run("leaks", "--no-history", "--sarif", "--fail-on", "none"); err != nil {
+	if err := e.run("leaks", "--sarif", "--fail-on", "none"); err != nil {
 		t.Fatalf("--fail-on none must report without failing: %v", err)
 	}
 	if n := len(sarifResults(t, e.out.Bytes())); n != 1 {
@@ -169,5 +179,76 @@ func TestLeaksSarifConflicts(t *testing.T) {
 				t.Errorf("a refused invocation must write nothing to stdout:\n%s", e.out.String())
 			}
 		})
+	}
+}
+
+// A narrowed scan would publish a partial result set under the single
+// commitbrief/leaks/ category, and Code Scanning closes every alert missing
+// from a category as fixed. Each narrowing flag is refused up front.
+func TestLeaksSarifRejectsNarrowedScans(t *testing.T) {
+	cases := map[string][]string{
+		"no-history":   {"--no-history"},
+		"no-worktree":  {"--no-worktree"},
+		"file":         {"--file", "*.yml"},
+		"dir":          {"--dir", "src"},
+		"exclude-file": {"--exclude-file", "*.md"},
+		"exclude-dir":  {"--exclude-dir", "vendor"},
+		"author":       {"--author", "someone"},
+		"committer":    {"--committer", "someone"},
+		"start-date":   {"--start-date", "2020-01-01"},
+		"end-date":     {"--end-date", "2030-01-01"},
+		"text":         {"--text", "scrub"},
+		"range":        {"main"},
+	}
+	for name, extra := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := leakSarifEnv(t)
+			out := filepath.Join(t.TempDir(), "leaks.sarif")
+			args := append([]string{"leaks", "--sarif", "-o", out}, extra...)
+
+			if err := e.run(args...); err == nil {
+				t.Fatalf("%v must be refused", args)
+			}
+			if _, statErr := os.Stat(out); statErr == nil {
+				t.Error("a refused narrowed scan must not write a SARIF file")
+			}
+			if strings.TrimSpace(e.out.String()) != "" {
+				t.Errorf("a refused invocation must write nothing to stdout:\n%s", e.out.String())
+			}
+		})
+	}
+}
+
+// --max-commits is a window size, not a narrowing filter: a scan that fits
+// the window still writes SARIF, while one the window cuts short fails
+// closed with a hint to enlarge it.
+func TestLeaksSarifTruncatedHistoryFailsClosed(t *testing.T) {
+	e := leakSarifEnv(t)
+	for i := 0; i < 3; i++ {
+		writeFile(t, filepath.Join(e.repoRoot, "extra.txt"), strings.Repeat("x\n", i+1))
+		gitCmd(t, e.repoRoot, "add", "extra.txt")
+		gitCmd(t, e.repoRoot, "commit", "-q", "-m", "more")
+	}
+	out := filepath.Join(t.TempDir(), "leaks.sarif")
+
+	err := e.run("leaks", "--sarif", "-o", out, "--max-commits", "2")
+	if err == nil {
+		t.Fatal("a truncated history scan must fail the run")
+	}
+	if !strings.Contains(err.Error(), "--max-commits") {
+		t.Errorf("the error should hint at --max-commits, got: %v", err)
+	}
+	if _, statErr := os.Stat(out); statErr == nil {
+		t.Error("no SARIF file may be written for a truncated scan")
+	}
+
+	// A window large enough for the whole history writes the log again.
+	e2 := leakSarifEnv(t)
+	out2 := filepath.Join(t.TempDir(), "leaks.sarif")
+	if err := e2.run("leaks", "--sarif", "-o", out2, "--max-commits", "50"); err == nil {
+		t.Fatal("the credential must still fail the gate")
+	}
+	if _, statErr := os.Stat(out2); statErr != nil {
+		t.Errorf("a complete scan must write SARIF: %v", statErr)
 	}
 }

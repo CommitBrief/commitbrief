@@ -172,3 +172,35 @@ func warnT(cmd *cobra.Command, app *appContext, key string, args ...any) {
 	}
 	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T(key, args...))
 }
+
+// degradeProbeKey is the context key under which a caller of the shared review
+// seam (runReviewForMCP) installs a *bool that the pipeline sets when the
+// review it ran, or replayed from the cache, was a degraded one.
+type degradeProbeKey struct{}
+
+// withDegradeProbe returns a context carrying a degrade probe and the probe
+// itself. Read the probe only after the review has returned.
+//
+// The schema-v1 document cannot answer this on its own: meta.degrade_reason is
+// stamped on a live degrade only, and a cache replay of the same degraded
+// response carries findings from the static flaky pre-pass next to an empty
+// content, which is indistinguishable from a clean review that found only
+// those. The pipeline knows, so it says so.
+func withDegradeProbe(ctx context.Context) (context.Context, *bool) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	probe := new(bool)
+	return context.WithValue(ctx, degradeProbeKey{}, probe), probe
+}
+
+// markReviewDegraded records on the context's degrade probe, if there is one,
+// that the review is degraded (the model response never parsed into findings).
+func markReviewDegraded(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	if probe, ok := ctx.Value(degradeProbeKey{}).(*bool); ok && probe != nil {
+		*probe = true
+	}
+}

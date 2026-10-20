@@ -252,6 +252,43 @@ func TestGuardSarifRunModeDegradedFailsClosed(t *testing.T) {
 	}
 }
 
+// A degraded live review is cached as a markdown-fallback entry. The replay
+// carries no meta.degrade_reason, and the static flaky findings make the
+// findings list non-nil, so the JSON alone looks like a clean flaky-only
+// review. The seam's degrade probe must still fail the run closed: an
+// offending subset written under commitbrief/guard/ would close every open
+// LLM-sourced alert in that category.
+func TestGuardSarifRunModeDegradedCacheReplayWithFlakyFailsClosed(t *testing.T) {
+	e := newCLIEnv(t)
+	setSarifFake(t, "I could not produce structured output, sorry.")
+	stageSecretIntoRepo(t, e.repoRoot, "worker_test.go", "package app\n\nimport \"time\"\n\nfunc TestJob() {\n\ttime.Sleep(2 * time.Second)\n}\n")
+	pol, _, out := guardSarifFiles(t, guardPolicy, passReviewJSON)
+	args := []string{"guard", "--policy", pol, "--provider", "sarif-fake", "--sarif", "-o", out}
+
+	// First run: live degrade (cache miss, entry stored).
+	if err := e.run(args...); err == nil {
+		t.Fatal("the live degraded review must fail the command")
+	}
+	if _, statErr := os.Stat(out); statErr == nil {
+		t.Fatal("no SARIF file may be written for a live degraded review")
+	}
+	liveCalls := sarifCallCount() // the live degrade path retries once
+	if liveCalls == 0 {
+		t.Fatal("the first run must reach the provider")
+	}
+
+	// Second run: cache replay of the degraded entry, flaky findings present.
+	if err := e.run(args...); err == nil {
+		t.Fatalf("a degraded cache replay must fail the command\nstderr:\n%s", e.errOut.String())
+	}
+	if got := sarifCallCount(); got != liveCalls {
+		t.Fatalf("provider calls after the second run = %d, want %d (the replay must come from the cache)", got, liveCalls)
+	}
+	if _, statErr := os.Stat(out); statErr == nil {
+		t.Error("no SARIF file may be written for a degraded cache replay")
+	}
+}
+
 func TestGuardWithoutSarifIsUnchanged(t *testing.T) {
 	// The verdict stays on stdout when --sarif is absent.
 	e := newCLIEnv(t)

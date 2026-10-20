@@ -446,12 +446,18 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			case cache.FormatJSON, "":
 				var parseErr error
 				findings, parseErr = render.ParseFindings(entry.Result.Content)
+				if parseErr != nil {
+					markReviewDegraded(ctx)
+				}
 				if global.sarif && parseErr != nil {
 					return sarifDegradeError(app)
 				}
 			default:
 				// markdown-fallback / plain-text entries carry no findings
 				// array; SARIF would be an empty (all-clear) lie.
+				if entry.Result.Format == cache.FormatMarkdownFallback {
+					markReviewDegraded(ctx)
+				}
 				if global.sarif {
 					return sarifDegradeError(app)
 				}
@@ -597,9 +603,13 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	case cache.FormatJSON:
 		var parseErr error
 		findings, parseErr = render.ParseFindings(content)
+		if parseErr != nil {
+			markReviewDegraded(ctx)
+		}
 		sarifRefused = global.sarif && parseErr != nil
 	case cache.FormatMarkdownFallback:
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
+		markReviewDegraded(ctx)
 		sarifRefused = global.sarif
 	}
 	findings = mergeFlaky(findings, flakyFindings)

@@ -103,7 +103,7 @@ func runGuard(cmd *cobra.Command) error {
 		return err
 	}
 
-	reviewJSON, err := guardReviewJSON(cmd)
+	reviewJSON, seamDegraded, err := guardReviewJSON(cmd)
 	if err != nil {
 		return err
 	}
@@ -117,8 +117,11 @@ func runGuard(cmd *cobra.Command) error {
 	if global.sarif {
 		// Fail closed (ADR-0047 §4): ParseFindings reads a degraded review as
 		// "no findings", and an empty results[] would tell Code Scanning every
-		// open guard alert is fixed. Refuse before anything is written.
-		if reviewDocDegraded(reviewJSON, findings) {
+		// open guard alert is fixed. Refuse before anything is written. In
+		// run-mode the pipeline itself reports a degrade (seamDegraded), which
+		// also covers a cache replay; the document check is the only signal
+		// --from-json has.
+		if seamDegraded || reviewDocDegraded(reviewJSON, findings) {
 			return sarifDegradeError(app)
 		}
 		if err := writeGuardSarif(cmd, pol.Offending(findings)); err != nil {
@@ -155,6 +158,11 @@ func writeGuardSarif(cmd *cobra.Command, offending []render.Finding) error {
 // on a live degrade; ParseFindings ignores both, so a degraded document reads
 // as an empty finding list. A document that carries findings is never degraded
 // (older documents may keep a vestigial content next to them).
+//
+// This is a heuristic over a finished document and cannot see a cached replay
+// of a degraded response that also carries static flaky findings (no
+// degrade_reason, empty content, non-empty findings). Run-mode does not rely
+// on it alone: guardReviewJSON takes the degrade signal from the pipeline.
 func reviewDocDegraded(reviewJSON string, findings []render.Finding) bool {
 	var doc struct {
 		Content string `json:"content"`
@@ -185,7 +193,9 @@ func resolveGuardPolicyPath(cmd *cobra.Command, repoRoot string) string {
 // guardReviewJSON returns the schema-v1 review document: from --from-json in
 // consume-mode, or by running the review pipeline in run-mode (the shared
 // runReviewForMCP seam, with no fail-on so the gate — not the review — decides).
-func guardReviewJSON(cmd *cobra.Command) (string, error) {
+// The bool reports that the pipeline itself ran or replayed a degraded review;
+// it is always false in consume-mode, where there is no pipeline to ask.
+func guardReviewJSON(cmd *cobra.Command) (string, bool, error) {
 	if guardOpts.fromJSON != "" {
 		var data []byte
 		var err error
@@ -195,9 +205,9 @@ func guardReviewJSON(cmd *cobra.Command) (string, error) {
 			data, err = os.ReadFile(guardOpts.fromJSON)
 		}
 		if err != nil {
-			return "", fmt.Errorf("read review json: %w", err)
+			return "", false, fmt.Errorf("read review json: %w", err)
 		}
-		return string(data), nil
+		return string(data), false, nil
 	}
 
 	args := reviewToolArgs{
@@ -231,16 +241,17 @@ func guardReviewJSON(cmd *cobra.Command) (string, error) {
 	// warnings (e.g. the legacy baseline notice) to this command's stderr,
 	// honoring the user's own --quiet.
 	quiet := global.quiet
-	ctx := withWarningSink(cmd.Context(), func(line string) {
+	ctx, degraded := withDegradeProbe(cmd.Context())
+	ctx = withWarningSink(ctx, func(line string) {
 		if !quiet {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), line)
 		}
 	}, nil)
 	_, reviewJSON, err := runReviewForMCP(ctx, args)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return reviewJSON, nil
+	return reviewJSON, *degraded, nil
 }
 
 // renderGuardVerdict writes the verdict: the JSON object in --json mode, or a
