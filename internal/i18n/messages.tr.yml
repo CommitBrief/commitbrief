@@ -340,6 +340,7 @@ map.truncated: "⚠  graf %d commit'te kesildi; daha fazlası için --max-commit
 leaks.scanned: "%d dosya, %d commit tarandı."
 leaks.skipped: "%d dosya atlandı: ikili ya da boyut sınırının üstünde."
 leaks.truncated: "⚠  geçmiş %d commit'te kesildi; daha geriye gitmek için --max-commits kullanın."
+leaks.walk_truncated: "⚠  geçmiş, commit taramasının kapsayabileceğinden uzun; yalnızca en yeni %d commit incelendi, daha eski geçmiş taranmadı."
 leaks.clean: "Kimlik bilgisi bulunamadı."
 leaks.found: "%d olası kimlik bilgisi bulundu. Bunları döndürün (rotate) — git geçmişindeki bir anahtar mevcut tüm klonlarda erişilebilir kalır."
 leaks.nothing_to_scan: "--no-worktree ve --no-history birlikte kullanılınca taranacak bir şey kalmıyor."
