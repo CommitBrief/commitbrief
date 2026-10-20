@@ -2,95 +2,64 @@
 
 package git
 
-import (
-	"errors"
-	"log/slog"
-)
+import "log/slog"
 
+// DispatchRepo is the Repo the CLI layer holds. `exec git` (CLIRepo) is the
+// only diff backend (ADR-0002 §Update 2026-10-20, second entry). When no `git`
+// binary is on PATH the repo still opens — commands that never ask for a diff
+// keep working — and every diff method reports ErrNoGitCLI.
 type DispatchRepo struct {
-	primary  Repo
-	fallback Repo
-	logger   *slog.Logger
+	root   string
+	cli    *CLIRepo // nil when no `git` binary is on PATH
+	logger *slog.Logger
 }
 
 type DispatchOptions struct {
 	Logger *slog.Logger
 }
 
+// Open resolves the repository root enclosing root (ErrNotARepo when there is
+// none) and binds the `git` CLI backend when the binary is available.
 func Open(root string, opts DispatchOptions) (*DispatchRepo, error) {
 	detected, err := FindRepo(root)
 	if err != nil {
 		return nil, err
 	}
-	root = detected
 
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	primary, primErr := NewGoGitRepo(root)
-	if primErr != nil && !errors.Is(primErr, ErrNotARepo) {
-		logger.Debug("git: go-git open failed", "err", primErr)
-	}
-	fallback, fbErr := NewCLIRepo(root)
-
-	switch {
-	case primary == nil && fallback == nil:
-		if errors.Is(primErr, ErrNotARepo) {
-			return nil, ErrNotARepo
-		}
-		if errors.Is(fbErr, ErrNoGitCLI) && primErr != nil {
-			return nil, ErrNoGitCLI
-		}
-		return nil, errors.Join(primErr, fbErr)
-	case primary == nil:
-		logger.Debug("git: go-git unavailable; using CLI only", "err", primErr)
-	case fallback == nil:
-		logger.Debug("git: git binary unavailable; using go-git only", "err", fbErr)
+	// NewCLIRepo fails only with ErrNoGitCLI. Keep the field a nil
+	// *CLIRepo in that case (never a typed-nil behind an interface).
+	cli, cliErr := NewCLIRepo(detected)
+	if cliErr != nil {
+		logger.Debug("git: git binary unavailable; diff operations will fail", "err", cliErr)
 	}
 
-	return &DispatchRepo{
-		primary:  primary,
-		fallback: fallback,
-		logger:   logger,
-	}, nil
+	return &DispatchRepo{root: detected, cli: cli, logger: logger}, nil
 }
 
-func (d *DispatchRepo) Root() string {
-	if d.primary != nil {
-		return d.primary.Root()
-	}
-	return d.fallback.Root()
-}
+func (d *DispatchRepo) Root() string { return d.root }
 
 func (d *DispatchRepo) StagedDiff() (Diff, error) {
-	return d.dispatch("StagedDiff", func(r Repo) (Diff, error) { return r.StagedDiff() })
+	if d.cli == nil {
+		return Diff{}, ErrNoGitCLI
+	}
+	return d.cli.StagedDiff()
 }
 
 func (d *DispatchRepo) UnstagedDiff() (Diff, error) {
-	return d.dispatch("UnstagedDiff", func(r Repo) (Diff, error) { return r.UnstagedDiff() })
+	if d.cli == nil {
+		return Diff{}, ErrNoGitCLI
+	}
+	return d.cli.UnstagedDiff()
 }
 
 func (d *DispatchRepo) Diff(args []string) (Diff, error) {
-	return d.dispatch("Diff", func(r Repo) (Diff, error) { return r.Diff(args) })
-}
-
-func (d *DispatchRepo) dispatch(op string, call func(Repo) (Diff, error)) (Diff, error) {
-	if d.primary != nil {
-		diff, err := call(d.primary)
-		if err == nil {
-			return diff, nil
-		}
-		if !errors.Is(err, ErrUnsupported) {
-			d.logger.Debug("git: primary failed; falling back to CLI", "op", op, "err", err)
-		}
-		if d.fallback == nil {
-			return Diff{}, err
-		}
-	}
-	if d.fallback == nil {
+	if d.cli == nil {
 		return Diff{}, ErrNoGitCLI
 	}
-	return call(d.fallback)
+	return d.cli.Diff(args)
 }

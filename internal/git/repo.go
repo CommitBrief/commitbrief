@@ -32,16 +32,13 @@ type Repo interface {
 	// Diff is the generic `git diff <args>` passthrough used by the
 	// `commitbrief diff` subcommand. args are forwarded verbatim
 	// after `--no-color --no-ext-diff` so the renderer/parser see
-	// stable unified-diff output. Backends that can't faithfully
-	// implement arbitrary git arg combinations may return
-	// ErrUnsupported; the DispatchRepo then falls through to the
-	// CLI path.
+	// stable unified-diff output. Without a `git` binary on PATH the
+	// implementation returns ErrNoGitCLI.
 	Diff(args []string) (Diff, error)
 	Root() string
 }
 
 var (
-	ErrUnsupported = errors.New("git: operation not supported on this backend")
-	ErrNotARepo    = errors.New("git: not inside a git repository")
-	ErrNoGitCLI    = errors.New("git: `git` binary not on PATH and go-git fallback unavailable")
+	ErrNotARepo = errors.New("git: not inside a git repository")
+	ErrNoGitCLI = errors.New("git: `git` binary not found on PATH")
 )

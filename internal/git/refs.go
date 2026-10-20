@@ -15,8 +15,9 @@ import (
 //
 // Read-only, `git for-each-ref` + `git rev-list --left-right --count`. Like the
 // rest of internal/git's newer surface these are package-level functions beside
-// the Repo interface rather than methods on it: go-git implements none of them,
-// so widening the interface would only add ErrUnsupported stubs (ADR-0035 §E).
+// the Repo interface rather than methods on it: they are not part of the diff
+// contract, so widening the interface would only grow it for no caller's benefit
+// (ADR-0035 §E).
 
 // maxBranches bounds how many refs a topology view will describe. A repo with
 // thousands of stale remote branches would otherwise spend a `git rev-list` per

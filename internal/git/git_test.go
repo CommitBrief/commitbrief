@@ -59,33 +59,6 @@ func TestFindRepoGitFileNotDir(t *testing.T) {
 	}
 }
 
-func TestGoGitWorkingTreeOpsReturnUnsupported(t *testing.T) {
-	f := newSimpleRepo(t)
-	g, err := NewGoGitRepo(f.dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cases := map[string]func() (Diff, error){
-		"StagedDiff":   g.StagedDiff,
-		"UnstagedDiff": g.UnstagedDiff,
-		"Diff":         func() (Diff, error) { return g.Diff([]string{"HEAD"}) },
-	}
-	for name, fn := range cases {
-		_, err := fn()
-		if !errors.Is(err, ErrUnsupported) {
-			t.Errorf("%s err = %v, want ErrUnsupported", name, err)
-		}
-	}
-}
-
-func TestGoGitNotARepo(t *testing.T) {
-	tmp := t.TempDir()
-	_, err := NewGoGitRepo(tmp)
-	if !errors.Is(err, ErrNotARepo) {
-		t.Errorf("err = %v, want ErrNotARepo", err)
-	}
-}
-
 func TestCLIStagedDiff(t *testing.T) {
 	requireGitCLI(t)
 	f := newSimpleRepo(t)
@@ -127,14 +100,13 @@ func TestCLIUnstagedDiff(t *testing.T) {
 	}
 }
 
-func TestDispatchPrefersPrimaryFallsToFallback(t *testing.T) {
+func TestDispatchStagedDiff(t *testing.T) {
 	requireGitCLI(t)
 	f := newSimpleRepo(t)
 	repo, err := Open(f.dir, DispatchOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// StagedDiff: go-git returns ErrUnsupported → falls to CLI
 	mustWrite(t, f.dir, "new.txt", "new file\n")
 	cli, err := NewCLIRepo(f.dir)
 	if err != nil {
@@ -147,8 +119,62 @@ func TestDispatchPrefersPrimaryFallsToFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StagedDiff via dispatch: %v", err)
 	}
+	if staged.Origin != OriginStaged {
+		t.Errorf("Origin = %q, want %q", staged.Origin, OriginStaged)
+	}
 	if !strings.Contains(staged.Content, "new file") {
-		t.Errorf("StagedDiff via fallback missing content; got:\n%s", staged.Content)
+		t.Errorf("StagedDiff missing content; got:\n%s", staged.Content)
+	}
+}
+
+func TestDispatchDiffPassthrough(t *testing.T) {
+	requireGitCLI(t)
+	f := newSimpleRepo(t)
+	repo, err := Open(f.dir, DispatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := repo.Diff([]string{f.firstCommit.String(), f.mainCommit.String()})
+	if err != nil {
+		t.Fatalf("Diff via dispatch: %v", err)
+	}
+	if d.Origin != OriginDiff {
+		t.Errorf("Origin = %q, want %q", d.Origin, OriginDiff)
+	}
+	if !strings.Contains(d.Content, "hello again") {
+		t.Errorf("Diff missing expected line; got:\n%s", d.Content)
+	}
+}
+
+// Without a `git` binary the repo still opens (non-diff commands keep working)
+// but every diff method reports ErrNoGitCLI.
+func TestDispatchNoGitCLI(t *testing.T) {
+	f := newSimpleRepo(t) // fixture is built with go-git, so no git binary needed
+	t.Setenv("PATH", t.TempDir())
+
+	repo, err := Open(f.dir, DispatchOptions{})
+	if err != nil {
+		t.Fatalf("Open without git on PATH: %v", err)
+	}
+	if repo.Root() != f.dir {
+		t.Errorf("Root() = %q, want %q", repo.Root(), f.dir)
+	}
+	cases := map[string]func() (Diff, error){
+		"StagedDiff":   repo.StagedDiff,
+		"UnstagedDiff": repo.UnstagedDiff,
+		"Diff":         func() (Diff, error) { return repo.Diff([]string{"HEAD"}) },
+	}
+	for name, fn := range cases {
+		if _, err := fn(); !errors.Is(err, ErrNoGitCLI) {
+			t.Errorf("%s err = %v, want ErrNoGitCLI", name, err)
+		}
+	}
+}
+
+func TestNewCLIRepoNoGitCLI(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if _, err := NewCLIRepo(t.TempDir()); !errors.Is(err, ErrNoGitCLI) {
+		t.Errorf("err = %v, want ErrNoGitCLI", err)
 	}
 }
 
@@ -182,31 +208,7 @@ func TestDiffOrigin(t *testing.T) {
 	}
 }
 
-func TestRenameDefaultBranchToMain(t *testing.T) {
-	f := newSimpleRepo(t)
-	f.renameDefaultBranchToMain(t)
-	g, err := NewGoGitRepo(f.dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Resolving "main" should now succeed and point at the tip commit.
-	ref, err := g.repo.Reference("refs/heads/main", true)
-	if err != nil {
-		t.Fatalf("resolve main after rename: %v", err)
-	}
-	if ref.Hash() != f.mainCommit {
-		t.Errorf("main = %s, want %s", ref.Hash(), f.mainCommit)
-	}
-}
-
-// ---------- Dispatcher CLI-fallback coverage ----------
-//
-// The dispatcher prefers go-git; methods that the go-git backend returns
-// ErrUnsupported for (worktree operations and the Diff passthrough)
-// must transparently fall through to CLIRepo. These tests verify each
-// fallback path end-to-end.
-
-func TestDispatchUnstagedFallsToCLI(t *testing.T) {
+func TestDispatchUnstagedDiff(t *testing.T) {
 	requireGitCLI(t)
 	f := newSimpleRepo(t)
 	mustWrite(t, f.dir, "hello.txt", "hello world\nhello again\nhello unstaged tail\n")
@@ -232,4 +234,3 @@ func TestDispatchUnstagedFallsToCLI(t *testing.T) {
 // Ensure DispatchRepo satisfies Repo
 var _ Repo = (*DispatchRepo)(nil)
 var _ Repo = (*CLIRepo)(nil)
-var _ Repo = (*GoGitRepo)(nil)
