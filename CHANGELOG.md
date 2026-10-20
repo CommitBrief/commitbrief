@@ -10,6 +10,56 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-10-20
+
+### Added
+- **`commitbrief guard --sarif`** writes the policy's offending findings as a SARIF 2.1.0
+  log (category `commitbrief/guard/`), so a Code Scanning upload shows exactly what
+  blocked the gate. Waived findings are not written; a passing policy writes
+  `results: []`. The verdict goes to stderr and the exit code is unchanged. It fails
+  closed: a review that degraded (a response that never parsed into structured
+  findings, fresh or replayed from cache) produces an error and no file, because an
+  empty `results[]` would tell Code Scanning every open alert is fixed.
+- **`commitbrief leaks --sarif`** writes credential hits as a SARIF 2.1.0 log (category
+  `commitbrief/leaks/`, rule `sec.hardcoded-secret`; pattern names in the message and in
+  `properties["commitbrief/patterns"]`, the commit in `properties["commitbrief/commit"]`
+  for history hits). The matched text, snippets and author e-mail are never written.
+  It is exclusive with `--json` and `--patterns`, and it fails closed on anything that
+  would make the log incomplete: a narrowing flag (`--no-history`, `--no-worktree`,
+  `--file`, `--dir`, `--exclude-file`, `--exclude-dir`, the commit filters or a git
+  range) is a usage error, and a history scan cut short by `--max-commits` or by the
+  10000-commit walk ceiling writes no file and exits 1.
+- `leaks` reports when the commit walk hit the 10000-commit ceiling, and `leaks --json`
+  carries it as `meta.walk_truncated`.
+- A cached review that degraded now reports `meta.degrade_reason` on a cache hit too
+  (additive; the cache key and `schema` are unchanged).
+
+### Changed
+- **`remote pr` honours inline suppression markers.** `commitbrief-ignore: reason` and
+  `commitbrief-ignore[<rule_id>|<severity>]: reason` silence findings in the posted
+  review exactly as they do in the local run, including `--no-post` previews, which
+  also print the suppressed count. The baseline is not applied to `remote pr`. When a
+  finding becomes suppressed, its previously posted thread is resolved by the usual
+  sync.
+- `leaks` truncation notices (`--max-commits` and the walk ceiling) are now printed under
+  `--quiet` as well; they used to stay silent.
+- The "git is not installed" and "not inside a git repository" errors are localized
+  (EN `Not inside a git repository.`, replacing `git: not inside a git repository`),
+  including on the progress `[fail]` line.
+
+### Fixed
+- Commands that read a diff no longer panic with a nil-pointer dereference when `git` is
+  not on `PATH`; they exit with the localized "git not found" error. This also affects
+  already released versions.
+- A history of exactly 10000 commits was treated as truncated by the commit walk
+  (off-by-one at `walkLimit`), which made the `leaks` truncation check report a false
+  positive.
+
+### Internal
+- Removed the go-git diff backend and the dead diff methods from the `Repo` interface;
+  `git` on `PATH` is the only diff backend. go-git stays in use for ignore-pattern
+  matching only.
+
 ## [1.20.0] - 2026-10-19
 
 ### Added
@@ -2418,7 +2468,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.20.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.21.0...HEAD
+[1.21.0]: https://github.com/CommitBrief/commitbrief/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/CommitBrief/commitbrief/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/CommitBrief/commitbrief/compare/v1.18.1...v1.19.0
 [1.18.1]: https://github.com/CommitBrief/commitbrief/compare/v1.18.0...v1.18.1
