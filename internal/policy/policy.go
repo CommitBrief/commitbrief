@@ -211,6 +211,23 @@ func anyEntry(entries []string, id string) bool {
 // all five severities, and Violations are ordered critical→info, then "total",
 // then one "rule:<id>" per denied finding, alphabetically by id.
 func (p *Policy) Evaluate(findings []render.Finding) Verdict {
+	v, _ := p.evaluate(findings)
+	return v
+}
+
+// Offending returns the findings that cause a violation, in input order: those
+// at a severity whose cap is exceeded, those matching rules.deny, and -- when
+// the total cap is exceeded -- every non-waived finding (no single finding is
+// to blame for an overflow, so all of them are). Findings waived by rules.allow
+// are never returned. A passing policy yields nil. It shares evaluate with
+// Evaluate, so the two can never disagree about what failed.
+func (p *Policy) Offending(findings []render.Finding) []render.Finding {
+	_, off := p.evaluate(findings)
+	return off
+}
+
+// evaluate is the single implementation behind Evaluate and Offending.
+func (p *Policy) evaluate(findings []render.Finding) (Verdict, []render.Finding) {
 	order := []render.Severity{
 		render.SeverityCritical, render.SeverityHigh, render.SeverityMedium,
 		render.SeverityLow, render.SeverityInfo,
@@ -226,6 +243,7 @@ func (p *Policy) Evaluate(findings []render.Finding) Verdict {
 	// narrower deny entry (fail-closed).
 	var denied []string // canonical rule id of each denied finding
 	var kept []render.Finding
+	var keptDenied []bool // parallel to kept
 	waived := 0
 	for _, f := range findings {
 		id, _ := rules.NormaliseRuleID(f.RuleID)
@@ -238,23 +256,27 @@ func (p *Policy) Evaluate(findings []render.Finding) Verdict {
 			continue
 		}
 		kept = append(kept, f)
+		keptDenied = append(keptDenied, isDenied)
 	}
 	for _, f := range kept {
 		counts[string(f.Severity)]++
 	}
 
 	var violations []Violation
+	exceeded := map[string]bool{} // severities whose cap is exceeded
 	for _, sev := range order {
 		max, ok := p.Thresholds[sev]
 		if !ok || max == nil {
 			continue // unlimited
 		}
 		if actual := counts[string(sev)]; actual > *max {
+			exceeded[string(sev)] = true
 			violations = append(violations, Violation{Severity: string(sev), Allowed: *max, Actual: actual})
 		}
 	}
 	total := len(kept)
-	if p.Total != nil && total > *p.Total {
+	totalExceeded := p.Total != nil && total > *p.Total
+	if totalExceeded {
 		violations = append(violations, Violation{Severity: "total", Allowed: *p.Total, Actual: total})
 	}
 
@@ -269,13 +291,20 @@ func (p *Policy) Evaluate(findings []render.Finding) Verdict {
 		violations = append(violations, Violation{Severity: "rule:" + id, Allowed: 0, Actual: 1})
 	}
 
+	var offending []render.Finding
+	for i, f := range kept {
+		if totalExceeded || keptDenied[i] || exceeded[string(f.Severity)] {
+			offending = append(offending, f)
+		}
+	}
+
 	return Verdict{
 		Passed:     len(violations) == 0,
 		Counts:     counts,
 		Total:      total,
 		Violations: violations,
 		Waived:     waived,
-	}
+	}, offending
 }
 
 func severityRank(s string) int {

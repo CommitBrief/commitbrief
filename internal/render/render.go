@@ -93,8 +93,9 @@ type Meta struct {
 	// on this live review (0 or 1); DegradeReason is a stable snake-case tag
 	// ("malformed-json" / "schema" / "empty" / "retry-error") set only when the
 	// review degraded to markdown-fallback. Both are additive optional JSON
-	// meta fields (omitempty) plus verbose-footer lines; both are zero on a
-	// cache replay, which made no provider call.
+	// meta fields (omitempty) plus verbose-footer lines. Retries is zero on a
+	// cache replay (no provider call was made); DegradeReason is replayed from
+	// the cache entry, so a degraded response stays marked as degraded.
 	Retries       int
 	DegradeReason string
 

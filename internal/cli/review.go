@@ -56,7 +56,13 @@ func bindScopeFlags(cmd *cobra.Command) {
 // than with cobra's MarkFlagsMutuallyExclusive, which would panic on any
 // command that carries --json but not --sarif.
 func bindSarifFlag(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&global.sarif, "sarif", false, "emit SARIF 2.1.0 for GitHub Code Scanning instead of the review (use -o to write a file; API providers only; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)")
+	bindSarifFlagUsage(cmd, "emit SARIF 2.1.0 for GitHub Code Scanning instead of the review (use -o to write a file; API providers only; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)")
+}
+
+// bindSarifFlagUsage is bindSarifFlag with a command-specific help string, for
+// the commands (guard, leaks) that emit SARIF under their own category.
+func bindSarifFlagUsage(cmd *cobra.Command, usage string) {
+	cmd.Flags().BoolVar(&global.sarif, "sarif", false, usage)
 }
 
 // validateSarifFlags rejects --sarif combined with another output mode. It
@@ -430,6 +436,10 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				LinesRemoved:    parsed.DeletedLines(),
 				RulesLoaded:     loaded.Source != rules.SourceDefault,
 				FilteredCommits: len(selection.Commits),
+				// A replay of a degraded response stays marked as degraded
+				// (ADR-0031 §Update 2026-10-20): without it guard --from-json
+				// cannot tell the replay from a clean review.
+				DegradeReason: cachedDegradeReason(entry.Result),
 			}
 			// Parse Findings unless the entry was written in markdown-fallback
 			// or plain-text mode — in those cases the cached Content is
@@ -440,12 +450,18 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 			case cache.FormatJSON, "":
 				var parseErr error
 				findings, parseErr = render.ParseFindings(entry.Result.Content)
+				if parseErr != nil {
+					markReviewDegraded(ctx)
+				}
 				if global.sarif && parseErr != nil {
 					return sarifDegradeError(app)
 				}
 			default:
 				// markdown-fallback / plain-text entries carry no findings
 				// array; SARIF would be an empty (all-clear) lie.
+				if entry.Result.Format == cache.FormatMarkdownFallback {
+					markReviewDegraded(ctx)
+				}
 				if global.sarif {
 					return sarifDegradeError(app)
 				}
@@ -591,9 +607,13 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	case cache.FormatJSON:
 		var parseErr error
 		findings, parseErr = render.ParseFindings(content)
+		if parseErr != nil {
+			markReviewDegraded(ctx)
+		}
 		sarifRefused = global.sarif && parseErr != nil
 	case cache.FormatMarkdownFallback:
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), app.Catalog.T("review.degraded"))
+		markReviewDegraded(ctx)
 		sarifRefused = global.sarif
 	}
 	findings = mergeFlaky(findings, flakyFindings)
@@ -652,8 +672,9 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 				Lang:             app.Lang.Code,
 			},
 			Result: cache.Result{
-				Content: content,
-				Format:  format,
+				Content:       content,
+				Format:        format,
+				DegradeReason: degrade,
 				Tokens: cache.Tokens{
 					Input:  usage.InputTokens,
 					Output: usage.OutputTokens,
@@ -1096,6 +1117,29 @@ func degradeReason(err error) string {
 	default:
 		return "schema"
 	}
+}
+
+// cachedDegradeReason returns the meta.degrade_reason a cache replay reports
+// (ADR-0031 §Update 2026-10-20): the reason stored with a markdown-fallback
+// entry, or one derived from the cached content when the entry predates the
+// stored field or its JSON no longer parses. It is empty for a clean replay
+// and for plain-text entries, which are never a degrade.
+func cachedDegradeReason(r cache.Result) string {
+	switch r.Format {
+	case cache.FormatJSON, "":
+		if _, err := render.ParseFindings(r.Content); err != nil {
+			return degradeReason(err)
+		}
+	case cache.FormatMarkdownFallback:
+		if r.DegradeReason != "" {
+			return r.DegradeReason
+		}
+		if _, err := render.ParseFindings(r.Content); err != nil {
+			return degradeReason(err)
+		}
+		return "schema"
+	}
+	return ""
 }
 
 // fetchDiff is the single diff-acquisition seam every command funnels

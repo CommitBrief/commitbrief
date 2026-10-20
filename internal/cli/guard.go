@@ -70,6 +70,7 @@ func newGuardCmd() *cobra.Command {
 	f.StringVar(&guardOpts.fromJSON, "from-json", "", "evaluate a prior schema-v1 review JSON (a file path, or - for stdin) instead of running a review")
 	f.BoolVar(&guardOpts.unstaged, "unstaged", false, "run-mode: review the unstaged working tree instead of the staged index")
 	f.StringSliceVar(&guardOpts.diff, "diff", nil, "run-mode: review an arbitrary `git diff` range (e.g. main...HEAD); repeatable")
+	bindSarifFlagUsage(cmd, "emit the findings that breach the policy as SARIF 2.1.0 for GitHub Code Scanning (category commitbrief/guard/; use -o to write a file; the verdict goes to stderr; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)")
 	return cmd
 }
 
@@ -81,6 +82,10 @@ func newGuardCmd() *cobra.Command {
 func runGuard(cmd *cobra.Command) error {
 	app, err := resolveContext(false)
 	if err != nil {
+		return err
+	}
+	// A misused --sarif fails before the policy is read or any provider call.
+	if err := validateSarifFlags(app); err != nil {
 		return err
 	}
 	// Bounds the whole gate, including the review it drives through the MCP
@@ -98,7 +103,7 @@ func runGuard(cmd *cobra.Command) error {
 		return err
 	}
 
-	reviewJSON, err := guardReviewJSON(cmd)
+	reviewJSON, seamDegraded, err := guardReviewJSON(cmd)
 	if err != nil {
 		return err
 	}
@@ -108,13 +113,69 @@ func runGuard(cmd *cobra.Command) error {
 	}
 
 	verdict := pol.Evaluate(findings)
-	if err := renderGuardVerdict(cmd, app, verdict); err != nil {
+	verdictOut := cmd.OutOrStdout()
+	if global.sarif {
+		// Fail closed (ADR-0047 §4): ParseFindings reads a degraded review as
+		// "no findings", and an empty results[] would tell Code Scanning every
+		// open guard alert is fixed. Refuse before anything is written. In
+		// run-mode the pipeline itself reports a degrade (seamDegraded), which
+		// also covers a cache replay; the document check is the only signal
+		// --from-json has.
+		if seamDegraded || reviewDocDegraded(reviewJSON, findings) {
+			return sarifDegradeError(app)
+		}
+		if err := writeGuardSarif(cmd, pol.Offending(findings)); err != nil {
+			return err
+		}
+		// stdout (or -o) belongs to the SARIF document; the human verdict
+		// moves to stderr. The exit code still comes from the verdict.
+		verdictOut = cmd.ErrOrStderr()
+	}
+	if err := renderGuardVerdict(verdictOut, app, verdict); err != nil {
 		return err
 	}
 	if !verdict.Passed {
 		return fmt.Errorf("%s", app.Catalog.T("guard.blocked", len(verdict.Violations)))
 	}
 	return nil
+}
+
+// writeGuardSarif writes the findings that cause a violation as SARIF under the
+// guard category (stdout, or -o). A passing policy passes none and so writes
+// results: [], which is the truthful "nothing to fix" for this category.
+func writeGuardSarif(cmd *cobra.Command, offending []render.Finding) error {
+	w, closer, err := openOutput(cmd)
+	if err != nil {
+		return err
+	}
+	defer closer()
+	return render.SARIFWithCategory(w, offending, render.SARIFCategoryGuard, nil)
+}
+
+// reviewDocDegraded reports whether a schema-v1 review document is a degraded
+// run rather than a clean one. render.JSON puts the raw model response in
+// content only when the findings never parsed, and stamps meta.degrade_reason
+// on a degraded review, live or replayed from the cache (ADR-0031 §Update
+// 2026-10-20); ParseFindings ignores both, so a degraded document reads as an
+// empty finding list. meta.degrade_reason is the reliable signal: a degraded
+// response that also carries static flaky findings has empty content and
+// non-empty findings, so the content check alone would miss it. Documents
+// written before the cache replayed the reason lack it; run-mode does not
+// depend on that, guardReviewJSON also takes the signal from the pipeline.
+func reviewDocDegraded(reviewJSON string, findings []render.Finding) bool {
+	var doc struct {
+		Content string `json:"content"`
+		Meta    struct {
+			DegradeReason string `json:"degrade_reason"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal([]byte(reviewJSON), &doc); err != nil {
+		return true // cannot prove it is clean; fail closed
+	}
+	if doc.Meta.DegradeReason != "" {
+		return true
+	}
+	return len(findings) == 0 && strings.TrimSpace(doc.Content) != ""
 }
 
 // resolveGuardPolicyPath joins the default policy file to the repo root so
@@ -131,7 +192,9 @@ func resolveGuardPolicyPath(cmd *cobra.Command, repoRoot string) string {
 // guardReviewJSON returns the schema-v1 review document: from --from-json in
 // consume-mode, or by running the review pipeline in run-mode (the shared
 // runReviewForMCP seam, with no fail-on so the gate — not the review — decides).
-func guardReviewJSON(cmd *cobra.Command) (string, error) {
+// The bool reports that the pipeline itself ran or replayed a degraded review;
+// it is always false in consume-mode, where there is no pipeline to ask.
+func guardReviewJSON(cmd *cobra.Command) (string, bool, error) {
 	if guardOpts.fromJSON != "" {
 		var data []byte
 		var err error
@@ -141,9 +204,9 @@ func guardReviewJSON(cmd *cobra.Command) (string, error) {
 			data, err = os.ReadFile(guardOpts.fromJSON)
 		}
 		if err != nil {
-			return "", fmt.Errorf("read review json: %w", err)
+			return "", false, fmt.Errorf("read review json: %w", err)
 		}
-		return string(data), nil
+		return string(data), false, nil
 	}
 
 	args := reviewToolArgs{
@@ -177,22 +240,23 @@ func guardReviewJSON(cmd *cobra.Command) (string, error) {
 	// warnings (e.g. the legacy baseline notice) to this command's stderr,
 	// honoring the user's own --quiet.
 	quiet := global.quiet
-	ctx := withWarningSink(cmd.Context(), func(line string) {
+	ctx, degraded := withDegradeProbe(cmd.Context())
+	ctx = withWarningSink(ctx, func(line string) {
 		if !quiet {
 			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), line)
 		}
 	}, nil)
 	_, reviewJSON, err := runReviewForMCP(ctx, args)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return reviewJSON, nil
+	return reviewJSON, *degraded, nil
 }
 
 // renderGuardVerdict writes the verdict: the JSON object in --json mode, or a
-// human summary otherwise. Both go to stdout (the command's primary output).
-func renderGuardVerdict(cmd *cobra.Command, app *appContext, v policy.Verdict) error {
-	out := cmd.OutOrStdout()
+// human summary otherwise. Both go to out: stdout normally, stderr when --sarif
+// has claimed stdout for the SARIF document.
+func renderGuardVerdict(out io.Writer, app *appContext, v policy.Verdict) error {
 	if global.json {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")

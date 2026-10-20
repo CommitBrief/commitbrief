@@ -307,7 +307,13 @@ func TestSarifFlagIsNotPersistent(t *testing.T) {
 	if root.PersistentFlags().Lookup("sarif") != nil {
 		t.Error("--sarif must be a local flag, not persistent")
 	}
-	for _, name := range []string{"guard", "leaks", "map", "mcp", "commit"} {
+	for _, name := range []string{"guard", "leaks"} {
+		sub, _, err := root.Find([]string{name})
+		if err != nil || sub == root || sub.Flags().Lookup("sarif") == nil {
+			t.Errorf("%s should carry --sarif (err=%v)", name, err)
+		}
+	}
+	for _, name := range []string{"map", "mcp", "commit"} {
 		sub, _, err := root.Find([]string{name})
 		if err != nil || sub == root {
 			continue

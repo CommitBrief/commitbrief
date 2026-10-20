@@ -5,6 +5,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -68,6 +69,7 @@ func newLeaksCmd() *cobra.Command {
 	flags.BoolVar(&f.noWorktree, "no-worktree", false, "skip the working-tree half")
 	flags.BoolVar(&f.noHistory, "no-history", false, "skip the commit-history half")
 	flags.BoolVar(&f.patterns, "patterns", false, "list the effective pattern set (built-ins + configured) and exit")
+	bindSarifFlagUsage(cmd, "emit the findings as SARIF 2.1.0 for GitHub Code Scanning (category commitbrief/leaks/; use -o to write a file; the human report goes to stderr; not with --json/--patterns, and refused on a partial scan: --no-worktree/--no-history, path or commit filters, a range, or a history window cut by --max-commits)")
 	return cmd
 }
 
@@ -75,6 +77,20 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 	app, err := resolveContext(true)
 	if err != nil {
 		return err
+	}
+	if err := validateSarifFlags(app); err != nil {
+		return err
+	}
+	if global.sarif && f.patterns {
+		// --patterns prints a name list, not findings; there is nothing to
+		// convert, and a CI step redirecting stdout would upload a non-SARIF file.
+		return errors.New(app.Catalog.T("leaks.sarif_patterns_conflict"))
+	}
+	if global.sarif && leaksScanNarrowed(f, args) {
+		// Fail closed (ADR-0047 §4): Code Scanning treats a result missing from
+		// a category as fixed, and every leaks run shares one category, so a
+		// partial scan would close alerts it never looked at.
+		return errors.New(app.Catalog.T("leaks.sarif_narrowed"))
 	}
 	tctx, tcancel := app.withTimeout(cmd.Context())
 	defer tcancel()
@@ -120,6 +136,13 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 		if selErr != nil {
 			return selErr
 		}
+		// Truncation is known once the selection returns; refuse the SARIF
+		// log now instead of after walking every selected commit's patch.
+		if global.sarif {
+			if err := leaksSarifIncomplete(app, leaks.Result{Truncated: sel.Truncated, WalkTruncated: sel.WalkTruncated}); err != nil {
+				return err
+			}
+		}
 		hist, sErr := leaks.ScanHistory(ctx, app.RepoRoot, sel, opts)
 		if sErr != nil {
 			return leaksError(app, sErr)
@@ -128,15 +151,109 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 	}
 	result.Sort()
 
+	if global.sarif {
+		if err := leaksSarifIncomplete(app, result); err != nil {
+			return err
+		}
+	}
+
 	findings := leakFindings(result, userPatterns)
 
 	if global.json {
 		return emitLeaksJSON(cmd, app, findings, result)
 	}
-	if err := writeLeaksReport(cmd, app, result, findings); err != nil {
+	reportOut := cmd.OutOrStdout()
+	if global.sarif {
+		if err := emitLeaksSarif(cmd, result, findings); err != nil {
+			return err
+		}
+		// stdout (or -o) belongs to the SARIF document; the coverage line, the
+		// skipped/truncated notices and the findings list move to stderr. The
+		// gate below still decides the exit code.
+		reportOut = cmd.ErrOrStderr()
+	}
+	if err := writeLeaksReport(reportOut, app, result, findings); err != nil {
 		return err
 	}
 	return leaksGate(app, findings)
+}
+
+// leaksSarifIncomplete refuses a SARIF log for a history scan that did not
+// reach every commit (same reasoning as the narrowing check: a commit that fell
+// out of the scan would silently close its alert). The two causes need
+// different advice: the --max-commits window can be raised, the commit walk's
+// own ceiling cannot, so --max-commits would be a misleading hint there.
+func leaksSarifIncomplete(app *appContext, res leaks.Result) error {
+	switch {
+	case res.WalkTruncated:
+		return errors.New(app.Catalog.T("leaks.sarif_walk_truncated"))
+	case res.Truncated:
+		return errors.New(app.Catalog.T("leaks.sarif_truncated", leaksCommitLimit()))
+	}
+	return nil
+}
+
+// emitLeaksSarif writes the scan as SARIF under the leaks category (ADR-0036,
+// ADR-0047). A clean scan writes results: [], which is the truthful "nothing
+// found" for this category.
+//
+// The document never carries the matched text (ADR-0007): the message names
+// the patterns and, for a history hit, the commit; the same facts are
+// machine-readable in properties["commitbrief/patterns"] and
+// properties["commitbrief/commit"]. The commit author is left out on purpose
+// -- the SARIF file is uploaded to a code-hosting service, and an author name
+// is personal data the alert does not need. No partial fingerprint is written:
+// a leak has no diff symbol (see leakFindings), and upload-sarif derives its
+// own location hash.
+func emitLeaksSarif(cmd *cobra.Command, res leaks.Result, findings []render.Finding) error {
+	// findings is leakFindings(res): the two slices are 1:1 and in the same
+	// order, which the parallel extra slice below relies on. The titles and
+	// descriptions are rewritten for SARIF, so work on a copy -- the human
+	// report that follows still wants the originals.
+	if len(findings) != len(res.Findings) {
+		return errors.New("leaks: findings and scan results are out of step")
+	}
+	findings = append([]render.Finding(nil), findings...)
+	extra := make([]map[string]any, len(findings))
+	for i, origin := range res.Findings {
+		patterns := append([]string(nil), origin.Patterns...)
+		findings[i].Title = "Hardcoded secret (" + strings.Join(patterns, ", ") + ")"
+		findings[i].Description = leakSarifDescription(origin)
+		extra[i] = map[string]any{"commitbrief/patterns": patterns}
+		if origin.FromHistory() {
+			extra[i]["commitbrief/commit"] = origin.Short
+		}
+	}
+
+	w, closer, err := openOutput(cmd)
+	if err != nil {
+		return err
+	}
+	defer closer()
+	return render.SARIFWithCategory(w, findings, render.SARIFCategoryLeaks, extra)
+}
+
+// leakSarifDescription is the SARIF message body: where the hit was found, with
+// no author and no matched text.
+func leakSarifDescription(f leaks.Finding) string {
+	if !f.FromHistory() {
+		return "Matched in the working tree."
+	}
+	return fmt.Sprintf("Matched in commit %s. The line may no longer be in the working "+
+		"tree, but it remains in the repository's history.", f.Short)
+}
+
+// leaksScanNarrowed reports whether the invocation scans less than the whole
+// repository: a skipped half, a path or commit filter, or an explicit range.
+// --max-commits is not a narrowing flag; it only sizes the history window, and
+// a window that turns out too small is caught separately through Truncated.
+func leaksScanNarrowed(f leaksFlags, args []string) bool {
+	return f.noWorktree || f.noHistory || len(args) > 0 ||
+		len(global.files) > 0 || len(global.dirs) > 0 ||
+		len(global.excludeFiles) > 0 || len(global.excludeDirs) > 0 ||
+		len(global.authors) > 0 || len(global.committers) > 0 ||
+		strings.TrimSpace(global.startDate) != "" || strings.TrimSpace(global.endDate) != "" ||
+		strings.TrimSpace(global.text) != ""
 }
 
 // leaksGate turns findings into the exit code.
@@ -260,9 +377,7 @@ func emitLeaksJSON(cmd *cobra.Command, app *appContext, findings []render.Findin
 // writeLeaksReport renders the human view: a coverage line, then one line per
 // finding. Debug-grade tabular output, English, matching dry-run and cache
 // stats.
-func writeLeaksReport(cmd *cobra.Command, app *appContext, res leaks.Result, findings []render.Finding) error {
-	w := cmd.OutOrStdout()
-
+func writeLeaksReport(w io.Writer, app *appContext, res leaks.Result, findings []render.Finding) error {
 	if !global.quiet {
 		if _, err := fmt.Fprintln(w, app.Catalog.T("leaks.scanned",
 			res.FilesScanned, res.CommitsScanned)); err != nil {

@@ -44,6 +44,13 @@ type Result struct {
 	// pre-ADR-0014 cache entries; they'll be invalidated next request
 	// anyway via the system-prompt SHA change (ADR-0014 §6).
 	Format string `json:"format,omitempty"`
+
+	// DegradeReason is the stable snake-case reason (ADR-0031) a
+	// "markdown-fallback" entry was written with, so a cache replay can stamp
+	// meta.degrade_reason exactly as the live call did. Empty for every other
+	// format, and for fallback entries written before this field existed (the
+	// replay then derives a reason from Content). Not a cache-key input.
+	DegradeReason string `json:"degrade_reason,omitempty"`
 }
 
 type Tokens struct {

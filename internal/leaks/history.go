@@ -28,7 +28,7 @@ func ScanHistory(ctx context.Context, repoRoot string, sel git.Selection, opts O
 		return Result{}, err
 	}
 
-	res := Result{Truncated: sel.Truncated}
+	res := Result{Truncated: sel.Truncated, WalkTruncated: sel.WalkTruncated}
 	matcher := opts.Matcher
 
 	for _, commit := range sel.Commits {

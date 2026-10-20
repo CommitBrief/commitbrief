@@ -317,3 +317,91 @@ func TestVersion1PolicyWithoutRulesIsUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func titled(sev render.Severity, id, title string) render.Finding {
+	f := ruled(sev, id)
+	f.Title = title
+	return f
+}
+
+func titles(fs []render.Finding) []string {
+	var out []string
+	for _, f := range fs {
+		out = append(out, f.Title)
+	}
+	return out
+}
+
+func TestOffendingPassingPolicyReturnsNothing(t *testing.T) {
+	p := mustParse(t, "version: 1\nthresholds:\n  critical: 0\n  medium: 2\n")
+	if got := p.Offending([]render.Finding{finding(render.SeverityMedium), finding(render.SeverityLow)}); len(got) != 0 {
+		t.Fatalf("a passing policy has no offending findings, got %v", titles(got))
+	}
+}
+
+func TestOffendingSeverityCapReturnsOnlyThatSeverity(t *testing.T) {
+	p := mustParse(t, "version: 1\nthresholds:\n  critical: 0\n  medium: 5\n")
+	got := p.Offending([]render.Finding{
+		titled(render.SeverityMedium, "style.naming", "m1"),
+		titled(render.SeverityCritical, "sec.injection", "c1"),
+		titled(render.SeverityLow, "style.naming", "l1"),
+		titled(render.SeverityCritical, "sec.xss", "c2"),
+	})
+	want := []string{"c1", "c2"}
+	if g := titles(got); len(g) != 2 || g[0] != want[0] || g[1] != want[1] {
+		t.Fatalf("offending = %v, want %v (input order, cap-exceeded severity only)", g, want)
+	}
+}
+
+func TestOffendingDenyReturnsDeniedFindings(t *testing.T) {
+	p := mustParse(t, "version: 1\nrules:\n  deny: [sec.*]\n")
+	got := p.Offending([]render.Finding{
+		titled(render.SeverityLow, "style.naming", "ok"),
+		titled(render.SeverityLow, "sec.xss", "bad"),
+	})
+	if g := titles(got); len(g) != 1 || g[0] != "bad" {
+		t.Fatalf("offending = %v, want [bad]", g)
+	}
+}
+
+func TestOffendingTotalExceededReturnsAllNonWaived(t *testing.T) {
+	p := mustParse(t, "version: 1\ntotal: 1\nrules:\n  allow: [style.naming]\n")
+	got := p.Offending([]render.Finding{
+		titled(render.SeverityLow, "style.naming", "waived"),
+		titled(render.SeverityLow, "docs.mismatch", "a"),
+		titled(render.SeverityInfo, "docs.mismatch", "b"),
+	})
+	if g := titles(got); len(g) != 2 || g[0] != "a" || g[1] != "b" {
+		t.Fatalf("offending = %v, want [a b] (waived finding never returned)", g)
+	}
+}
+
+func TestOffendingNeverReturnsWaived(t *testing.T) {
+	p := mustParse(t, "version: 1\nthresholds:\n  high: 0\nrules:\n  allow: [style.naming]\n")
+	got := p.Offending([]render.Finding{
+		titled(render.SeverityHigh, "style.naming", "waived"),
+		titled(render.SeverityHigh, "sec.injection", "kept"),
+	})
+	if g := titles(got); len(g) != 1 || g[0] != "kept" {
+		t.Fatalf("offending = %v, want [kept]", g)
+	}
+}
+
+func TestOffendingAgreesWithEvaluate(t *testing.T) {
+	cases := []string{
+		"version: 1\n",
+		"version: 1\nthresholds:\n  high: 0\n",
+		"version: 1\ntotal: 0\n",
+		"version: 1\nrules:\n  deny: [sec.injection]\n",
+	}
+	fs := []render.Finding{
+		titled(render.SeverityHigh, "sec.injection", "x"),
+		titled(render.SeverityLow, "style.naming", "y"),
+	}
+	for _, body := range cases {
+		p := mustParse(t, body)
+		if passed := p.Evaluate(fs).Passed; passed != (len(p.Offending(fs)) == 0) {
+			t.Errorf("%q: Evaluate.Passed=%v but Offending=%v", body, passed, titles(p.Offending(fs)))
+		}
+	}
+}

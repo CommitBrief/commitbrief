@@ -86,8 +86,13 @@ type Result struct {
 	// Skipped counts files passed over as binary or oversized. Reported, never
 	// silent — a scanner that quietly ignores half a repo is worse than none.
 	Skipped int
-	// Truncated is set when the commit walk hit its cap.
+	// Truncated is set when the matching commits outnumbered the requested
+	// window (--max-commits), so the oldest ones were not scanned.
 	Truncated bool
+	// WalkTruncated is set when the commit walk itself hit its fixed internal
+	// ceiling (git.Selection.WalkTruncated): older commits were never even
+	// listed, and no --max-commits value can reach them.
+	WalkTruncated bool
 }
 
 // Merge folds another Result into this one, concatenating findings and summing
@@ -99,6 +104,7 @@ func (r Result) Merge(other Result) Result {
 		CommitsScanned: r.CommitsScanned + other.CommitsScanned,
 		Skipped:        r.Skipped + other.Skipped,
 		Truncated:      r.Truncated || other.Truncated,
+		WalkTruncated:  r.WalkTruncated || other.WalkTruncated,
 	}
 }
 
