@@ -9,10 +9,7 @@ type Origin string
 const (
 	OriginStaged   Origin = "staged"
 	OriginUnstaged Origin = "unstaged"
-	OriginFile     Origin = "file"
 	OriginCommit   Origin = "commit"
-	OriginRange    Origin = "range"
-	OriginBranch   Origin = "branch"
 	OriginDiff     Origin = "diff" // `commitbrief diff <args...>` passthrough
 	// OriginFiltered marks a diff assembled from an explicitly selected set
 	// of commits (the --author / --start-date / --end-date / --text filters).
@@ -32,10 +29,6 @@ func (d Diff) Empty() bool { return d.Content == "" }
 type Repo interface {
 	StagedDiff() (Diff, error)
 	UnstagedDiff() (Diff, error)
-	FileDiff(path string) (Diff, error)
-	CommitDiff(hash string) (Diff, error)
-	RangeDiff(target, feature string) (Diff, error)
-	BranchDiff(target string) (Diff, error)
 	// Diff is the generic `git diff <args>` passthrough used by the
 	// `commitbrief diff` subcommand. args are forwarded verbatim
 	// after `--no-color --no-ext-diff` so the renderer/parser see

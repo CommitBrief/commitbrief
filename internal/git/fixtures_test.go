@@ -49,12 +49,9 @@ func mustCommit(t *testing.T, w *gogit.Worktree, paths []string, msg string) plu
 	return hash
 }
 
-// newSimpleRepo creates a repo with two commits on main and a feature branch
-// diverged from the first commit:
+// newSimpleRepo creates a repo with two commits:
 //
-//	main:    A — B (mainCommit; updates hello.txt)
-//	feature: A — C (featureCommit; adds extra.txt)
-//	             \— mergeBase = A (firstCommit)
+//	A (firstCommit; adds hello.txt) — B (mainCommit; updates hello.txt)
 func newSimpleRepo(t *testing.T) *fixture {
 	t.Helper()
 	dir := t.TempDir()
@@ -75,36 +72,6 @@ func newSimpleRepo(t *testing.T) *fixture {
 		repo:        repo,
 		firstCommit: first,
 		mainCommit:  main,
-	}
-}
-
-func (f *fixture) createFeatureBranch(t *testing.T, name string) plumbing.Hash {
-	t.Helper()
-	w, err := f.repo.Worktree()
-	if err != nil {
-		t.Fatalf("worktree: %v", err)
-	}
-	if err := w.Checkout(&gogit.CheckoutOptions{
-		Hash:   f.firstCommit,
-		Create: true,
-		Branch: plumbing.NewBranchReferenceName(name),
-	}); err != nil {
-		t.Fatalf("checkout feature: %v", err)
-	}
-	mustWrite(t, f.dir, "extra.txt", "extra content\n")
-	return mustCommit(t, w, []string{"extra.txt"}, "add extra")
-}
-
-func (f *fixture) checkoutMain(t *testing.T) {
-	t.Helper()
-	w, err := f.repo.Worktree()
-	if err != nil {
-		t.Fatalf("worktree: %v", err)
-	}
-	if err := w.Checkout(&gogit.CheckoutOptions{
-		Hash: f.mainCommit,
-	}); err != nil {
-		t.Fatalf("checkout main: %v", err)
 	}
 }
 
