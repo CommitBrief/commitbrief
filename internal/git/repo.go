@@ -32,10 +32,6 @@ func (d Diff) Empty() bool { return d.Content == "" }
 type Repo interface {
 	StagedDiff() (Diff, error)
 	UnstagedDiff() (Diff, error)
-	FileDiff(path string) (Diff, error)
-	CommitDiff(hash string) (Diff, error)
-	RangeDiff(target, feature string) (Diff, error)
-	BranchDiff(target string) (Diff, error)
 	// Diff is the generic `git diff <args>` passthrough used by the
 	// `commitbrief diff` subcommand. args are forwarded verbatim
 	// after `--no-color --no-ext-diff` so the renderer/parser see

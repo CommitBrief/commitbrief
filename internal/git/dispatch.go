@@ -72,22 +72,6 @@ func (d *DispatchRepo) UnstagedDiff() (Diff, error) {
 	return d.dispatch("UnstagedDiff", func(r Repo) (Diff, error) { return r.UnstagedDiff() })
 }
 
-func (d *DispatchRepo) FileDiff(path string) (Diff, error) {
-	return d.dispatch("FileDiff", func(r Repo) (Diff, error) { return r.FileDiff(path) })
-}
-
-func (d *DispatchRepo) CommitDiff(hash string) (Diff, error) {
-	return d.dispatch("CommitDiff", func(r Repo) (Diff, error) { return r.CommitDiff(hash) })
-}
-
-func (d *DispatchRepo) RangeDiff(target, feature string) (Diff, error) {
-	return d.dispatch("RangeDiff", func(r Repo) (Diff, error) { return r.RangeDiff(target, feature) })
-}
-
-func (d *DispatchRepo) BranchDiff(target string) (Diff, error) {
-	return d.dispatch("BranchDiff", func(r Repo) (Diff, error) { return r.BranchDiff(target) })
-}
-
 func (d *DispatchRepo) Diff(args []string) (Diff, error) {
 	return d.dispatch("Diff", func(r Repo) (Diff, error) { return r.Diff(args) })
 }
