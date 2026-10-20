@@ -58,17 +58,25 @@ func TestLeaksWalkTruncatedNoticeInHumanReport(t *testing.T) {
 	}
 }
 
-func TestLeaksWalkTruncatedNoticeSilencedByQuiet(t *testing.T) {
+func TestLeaksTruncationNoticesShownUnderQuiet(t *testing.T) {
 	global = globalFlags{color: "never", quiet: true}
 	t.Cleanup(func() { global = globalFlags{color: "never"} })
 
-	var buf bytes.Buffer
 	app := leaksWalkApp(t, "en")
-	if err := writeLeaksReport(&buf, app, leaks.Result{WalkTruncated: true}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(buf.String(), "⚠") {
-		t.Errorf("--quiet must silence the notice, got:\n%s", buf.String())
+	for name, res := range map[string]leaks.Result{
+		"walk":        {WalkTruncated: true},
+		"max-commits": {Truncated: true},
+	} {
+		var buf bytes.Buffer
+		if err := writeLeaksReport(&buf, app, res, nil); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(buf.String(), "⚠") {
+			t.Errorf("%s: --quiet must not hide truncation, got:\n%s", name, buf.String())
+		}
+		if strings.Contains(buf.String(), "Scanned") {
+			t.Errorf("%s: --quiet must still silence the coverage line, got:\n%s", name, buf.String())
+		}
 	}
 }
 
