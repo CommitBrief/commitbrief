@@ -18,13 +18,15 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   blocked the gate. Waived findings are not written; a passing policy writes
   `results: []`. The verdict goes to stderr and the exit code is unchanged. It fails
   closed: a review that degraded (a response that never parsed into structured
-  findings, fresh or replayed from cache) produces an error and no file, because an
-  empty `results[]` would tell Code Scanning every open alert is fixed.
+  findings, fresh or replayed from cache, or a `--from-json` document marked as
+  degraded) produces an error and no file, because an empty `results[]` would tell Code
+  Scanning every open alert is fixed.
 - **`commitbrief leaks --sarif`** writes credential hits as a SARIF 2.1.0 log (category
   `commitbrief/leaks/`, rule `sec.hardcoded-secret`; pattern names in the message and in
   `properties["commitbrief/patterns"]`, the commit in `properties["commitbrief/commit"]`
   for history hits). The matched text, snippets and author e-mail are never written.
-  It is exclusive with `--json` and `--patterns`, and it fails closed on anything that
+  It is exclusive with `--patterns` and with the other output modes (`--json`,
+  `--markdown`, `--suggest-commit`, `--cli`, `--show-prompt`), and it fails closed on anything that
   would make the log incomplete: a narrowing flag (`--no-history`, `--no-worktree`,
   `--file`, `--dir`, `--exclude-file`, `--exclude-dir`, the commit filters or a git
   range) is a usage error, and a history scan cut short by `--max-commits` or by the
@@ -40,7 +42,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   review exactly as they do in the local run, including `--no-post` previews, which
   also print the suppressed count. The baseline is not applied to `remote pr`. When a
   finding becomes suppressed, its previously posted thread is resolved by the usual
-  sync.
+  sync. Suppressed findings no longer count toward `--fail-on` or the request-changes
+  verdict.
 - `leaks` truncation notices (`--max-commits` and the walk ceiling) are now printed under
   `--quiet` as well; they used to stay silent.
 - The "git is not installed" and "not inside a git repository" errors are localized
