@@ -199,20 +199,6 @@ func TestRenameDefaultBranchToMain(t *testing.T) {
 	}
 }
 
-func TestCheckoutMainHelper(t *testing.T) {
-	f := newSimpleRepo(t)
-	_ = f.createFeatureBranch(t, "feature")
-	// Worktree is now on feature with extra.txt present.
-	if _, err := os.Stat(filepath.Join(f.dir, "extra.txt")); err != nil {
-		t.Fatalf("expected extra.txt on feature branch: %v", err)
-	}
-	f.checkoutMain(t)
-	// After checkout to main, extra.txt should be gone.
-	if _, err := os.Stat(filepath.Join(f.dir, "extra.txt")); !os.IsNotExist(err) {
-		t.Errorf("extra.txt should be absent on main; stat err = %v", err)
-	}
-}
-
 // ---------- Dispatcher CLI-fallback coverage ----------
 //
 // The dispatcher prefers go-git; methods that the go-git backend returns

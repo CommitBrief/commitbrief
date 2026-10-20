@@ -9,10 +9,7 @@ type Origin string
 const (
 	OriginStaged   Origin = "staged"
 	OriginUnstaged Origin = "unstaged"
-	OriginFile     Origin = "file"
 	OriginCommit   Origin = "commit"
-	OriginRange    Origin = "range"
-	OriginBranch   Origin = "branch"
 	OriginDiff     Origin = "diff" // `commitbrief diff <args...>` passthrough
 	// OriginFiltered marks a diff assembled from an explicitly selected set
 	// of commits (the --author / --start-date / --end-date / --text filters).
