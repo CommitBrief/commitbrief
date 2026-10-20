@@ -75,6 +75,12 @@ type jsonMeta struct {
 	// v1 always produced. It tells a consumer how many commits' patches the
 	// reviewed diff was assembled from.
 	FilteredCommits int `json:"filtered_commits,omitempty"`
+
+	// History-walk ceiling (ADR-0036 §Update 2026-10-20). Additive optional
+	// boolean, emitted only as true by `leaks` when the commit walk stopped at
+	// its fixed ceiling and older history was not scanned; every other
+	// producer omits it, so the v1 meta shape is unchanged.
+	WalkTruncated bool `json:"walk_truncated,omitempty"`
 }
 
 type jsonUsage struct {
@@ -115,6 +121,7 @@ func JSON(w io.Writer, p Payload) error {
 			RetryCount:      p.Meta.Retries,
 			DegradeReason:   p.Meta.DegradeReason,
 			FilteredCommits: p.Meta.FilteredCommits,
+			WalkTruncated:   p.Meta.WalkTruncated,
 			Usage: jsonUsage{
 				InputTokens:       p.Meta.Usage.InputTokens,
 				OutputTokens:      p.Meta.Usage.OutputTokens,

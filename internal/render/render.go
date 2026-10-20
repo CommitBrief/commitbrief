@@ -104,4 +104,9 @@ type Meta struct {
 	// Zero — and therefore omitted from JSON — for every ordinary
 	// staged/unstaged/range review, which has no commit set to report.
 	FilteredCommits int
+
+	// WalkTruncated is set by `leaks` when the history walk hit its fixed
+	// commit ceiling, so older history was never scanned (ADR-0036 §Update
+	// 2026-10-20). Optional additive JSON meta field, omitted when false.
+	WalkTruncated bool
 }

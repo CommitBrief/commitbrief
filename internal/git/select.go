@@ -35,17 +35,21 @@ import (
 // users expect — AND across filter kinds, OR within one kind — with no
 // dependence on that surprising git behavior.
 
+// walkLimit bounds phase A itself: at most this many commits are inspected.
+// Even without patches, an unbounded `git log` on a 100k-commit repo is
+// megabytes of metadata for nothing. Phase A asks git for one commit more
+// than this, and only a surplus commit (history genuinely longer than the
+// limit) sets Selection.WalkTruncated, so the caller can say so out loud
+// rather than silently reviewing a subset. A repository with exactly
+// walkLimit commits is therefore fully inspected and not flagged. It is a
+// variable only so tests can exercise the boundary without 10000 commits.
+var walkLimit = 10000
+
 const (
 	// DefaultMaxCommits bounds how many matching commits are folded into one
 	// review. A broad filter (`--author me` on a year-old repo) would
 	// otherwise assemble a diff far past any model's context window.
 	DefaultMaxCommits = 200
-
-	// walkLimit bounds phase A itself. Even without patches, an unbounded
-	// `git log` on a 100k-commit repo is megabytes of metadata for nothing.
-	// Hitting it sets Selection.WalkTruncated so the caller can say so out
-	// loud rather than silently reviewing a subset.
-	walkLimit = 10000
 
 	// showBatch caps how many hashes go into one `git show` argv, keeping us
 	// clear of the platform argument-length limit on a large selection.
@@ -124,8 +128,9 @@ type Selection struct {
 	Walked int
 	// Truncated is set when more commits matched than MaxCommits allowed.
 	Truncated bool
-	// WalkTruncated is set when phase A itself hit walkLimit, meaning older
-	// history was never inspected at all.
+	// WalkTruncated is set when the history held more than walkLimit commits,
+	// meaning the older ones were never inspected at all. Exactly walkLimit
+	// commits is not truncation.
 	WalkTruncated bool
 }
 
@@ -209,7 +214,14 @@ func SelectCommits(ctx context.Context, repoRoot string, f CommitFilter) (Select
 	if err != nil {
 		return Selection{}, err
 	}
-	sel := Selection{Walked: len(walked), WalkTruncated: len(walked) >= walkLimit}
+	// walkCommits fetched one commit past the limit purely to tell "exactly
+	// walkLimit" from "more than walkLimit"; drop it so at most walkLimit
+	// commits are processed.
+	sel := Selection{WalkTruncated: len(walked) > walkLimit}
+	if sel.WalkTruncated {
+		walked = walked[:walkLimit]
+	}
+	sel.Walked = len(walked)
 
 	matched := make([]CommitMeta, 0, len(walked))
 	seen := make(map[string]struct{}, len(walked))
@@ -321,10 +333,15 @@ func matchAny(needles []string, haystacks ...string) bool {
 	return false
 }
 
-// walkCommits is phase A: metadata only, no patches.
+// WalkLimit reports the fixed ceiling on how many commits one selection
+// inspects (see walkLimit), for callers that tell the user when it was hit.
+func WalkLimit() int { return walkLimit }
+
+// walkCommits is phase A: metadata only, no patches. It returns up to
+// walkLimit+1 commits; the extra one is the caller's truncation probe.
 func walkCommits(ctx context.Context, bin, repoRoot string, f CommitFilter, revs []string) ([]CommitMeta, error) {
 	args := []string{"log", "--no-color", "--name-status", selectRecordFormat,
-		fmt.Sprintf("-n%d", walkLimit)}
+		fmt.Sprintf("-n%d", walkLimit+1)}
 	args = append(args, dateArgs(f)...)
 	if !f.Merges {
 		args = append(args, "--no-merges")

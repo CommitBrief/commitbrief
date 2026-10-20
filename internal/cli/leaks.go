@@ -367,6 +367,10 @@ func emitLeaksJSON(cmd *cobra.Command, app *appContext, findings []render.Findin
 			Files:        res.FilesScanned,
 			LinesAdded:   0,
 			LinesRemoved: 0,
+			// Additive meta flag (omitted when false): a consumer such as
+			// `guard --from-json` can tell a complete history scan from one
+			// that stopped at the commit walk ceiling.
+			WalkTruncated: res.WalkTruncated,
 		},
 	}); err != nil {
 		return err
@@ -388,9 +392,18 @@ func writeLeaksReport(w io.Writer, app *appContext, res leaks.Result, findings [
 			// or "no findings" is misleading.
 			_, _ = fmt.Fprintln(w, app.Catalog.T("leaks.skipped", res.Skipped))
 		}
-		if res.Truncated {
-			_, _ = fmt.Fprintln(w, app.Catalog.T("leaks.truncated", leaksCommitLimit()))
-		}
+	}
+	// Truncation goes out regardless of --quiet, as in the review path: a
+	// quiet run must never turn "only part of the history was scanned" into a
+	// bare "no credentials found".
+	if res.Truncated {
+		_, _ = fmt.Fprintln(w, app.Catalog.T("leaks.truncated", leaksCommitLimit()))
+	}
+	if res.WalkTruncated {
+		// The commit walk's own ceiling, which --max-commits cannot lift:
+		// older history was never inspected, so "no findings" is not a
+		// statement about it.
+		_, _ = fmt.Fprintln(w, app.Catalog.T("leaks.walk_truncated", git.WalkLimit()))
 	}
 
 	if len(findings) == 0 {

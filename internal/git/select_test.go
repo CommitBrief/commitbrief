@@ -309,6 +309,46 @@ func TestSelectCommitsTruncatesAtMaxCommits(t *testing.T) {
 	}
 }
 
+// withWalkLimit lowers the phase-A ceiling for one test.
+func withWalkLimit(t *testing.T, n int) {
+	t.Helper()
+	old := walkLimit
+	walkLimit = n
+	t.Cleanup(func() { walkLimit = old })
+}
+
+// TestSelectCommitsWalkLimitBoundary pins the off-by-one: a history of exactly
+// walkLimit commits was fully inspected and must not be reported as cut, while
+// one commit more must be, and then only walkLimit commits are processed.
+// The filter repo has three non-merge commits on main.
+func TestSelectCommitsWalkLimitBoundary(t *testing.T) {
+	r := newFilterRepo(t)
+	f := CommitFilter{Since: day("2026-01-01")}
+
+	cases := []struct {
+		name          string
+		limit         int
+		wantTruncated bool
+		wantWalked    int
+	}{
+		{"limit above history", 4, false, 3},
+		{"limit equals history", 3, false, 3},
+		{"limit one below history", 2, true, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withWalkLimit(t, tc.limit)
+			sel := mustSelect(t, r.dir, f)
+			if sel.WalkTruncated != tc.wantTruncated {
+				t.Fatalf("WalkTruncated = %v, want %v", sel.WalkTruncated, tc.wantTruncated)
+			}
+			if sel.Walked != tc.wantWalked || len(sel.Commits) != tc.wantWalked {
+				t.Fatalf("Walked = %d, commits = %d, want %d", sel.Walked, len(sel.Commits), tc.wantWalked)
+			}
+		})
+	}
+}
+
 func TestSelectCommitsNoMatchIsNotAnError(t *testing.T) {
 	r := newFilterRepo(t)
 	sel := mustSelect(t, r.dir, CommitFilter{Authors: []string{"nobody"}})
