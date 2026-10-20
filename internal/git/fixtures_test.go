@@ -10,14 +10,12 @@ import (
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 type fixture struct {
 	dir         string
-	repo        *gogit.Repository
 	firstCommit plumbing.Hash
 	mainCommit  plumbing.Hash
 }
@@ -69,33 +67,8 @@ func newSimpleRepo(t *testing.T) *fixture {
 	main := mustCommit(t, w, []string{"hello.txt"}, "update hello")
 	return &fixture{
 		dir:         dir,
-		repo:        repo,
 		firstCommit: first,
 		mainCommit:  main,
-	}
-}
-
-// configureMainBranch ensures HEAD is on `main` instead of go-git's default
-// `master`, matching the conventions assumed by modern test repos and CI.
-func (f *fixture) renameDefaultBranchToMain(t *testing.T) {
-	t.Helper()
-	if err := f.repo.Storer.SetReference(plumbing.NewHashReference(
-		plumbing.NewBranchReferenceName("main"), f.mainCommit,
-	)); err != nil {
-		t.Fatalf("set main ref: %v", err)
-	}
-	if err := f.repo.Storer.SetReference(plumbing.NewSymbolicReference(
-		plumbing.HEAD, plumbing.NewBranchReferenceName("main"),
-	)); err != nil {
-		t.Fatalf("set HEAD: %v", err)
-	}
-	cfg, err := f.repo.Config()
-	if err != nil {
-		t.Fatalf("config: %v", err)
-	}
-	cfg.Branches["main"] = &config.Branch{Name: "main"}
-	if err := f.repo.SetConfig(cfg); err != nil {
-		t.Fatalf("setconfig: %v", err)
 	}
 }
 
