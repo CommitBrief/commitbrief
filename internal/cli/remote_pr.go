@@ -26,6 +26,7 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/remote"
 	"github.com/CommitBrief/commitbrief/internal/render"
 	"github.com/CommitBrief/commitbrief/internal/rules"
+	"github.com/CommitBrief/commitbrief/internal/suppress"
 	"github.com/CommitBrief/commitbrief/internal/ui"
 )
 
@@ -249,6 +250,7 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		}
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.FooterLine(footerMeta, res.findings))
 	}
+	signalControlFooter(cmd, app, 0, res.suppressed)
 	return nil
 }
 
@@ -572,6 +574,9 @@ type prReviewResult struct {
 	// noNewCommits is set when the head moved back to the previously
 	// reviewed commit while the review was running (nothing left to do).
 	noNewCommits bool
+	// suppressed counts findings dropped by an inline commitbrief-ignore
+	// marker (ADR-0027); reported once in the stderr footer.
+	suppressed int
 }
 
 // reviewPRDiff fetches the PR diff, runs one review, and guards against a
@@ -702,9 +707,27 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
 	}
 	findings = stampIdentity(parsed, findings)
+
+	// Inline suppression (ADR-0027, ADR-0046 §Update 2026-10-20). Markers are
+	// read from the FULL (filtered) PR diff, not from `reviewed`, so an
+	// incremental run still honors a marker added in an earlier commit even
+	// though the model only saw the delta. A suppressed finding is dropped
+	// before sync, so its open thread from a previous run counts as gone and
+	// is resolved. Baseline is deliberately not applied here: it is a
+	// user-private local file, not part of the PR under review.
+	sup := suppress.ParseSuppressions(parsed)
+	for _, w := range sup.Warnings() {
+		key := "suppress.unknown_scope"
+		if w.UnknownRule {
+			key = "suppress.unknown_rule"
+		}
+		prog.Info(app.Catalog.T(key, w.Path, w.Line, w.Token))
+	}
+	findings, suppressed := suppress.Filter(findings, sup)
 	return prReviewResult{
 		findings: findings, anchors: anchors, usage: outcome.Usage, latency: latency,
 		incremental: incremental, deltaPaths: deltaPaths, deltaAnchors: deltaAnchors,
+		suppressed: suppressed,
 	}, nil
 }
 
