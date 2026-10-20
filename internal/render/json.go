@@ -64,8 +64,8 @@ type jsonMeta struct {
 	// omitempty discipline as baselined/suppressed: RetryCount is emitted only
 	// when a repair retry ran; DegradeReason only when the review degraded to
 	// markdown-fallback. A clean first-attempt review omits both, so schema
-	// stays 1 and the byte-for-byte v1 meta shape is unchanged. Both are
-	// live-call-only (a cache replay reports neither).
+	// stays 1 and the byte-for-byte v1 meta shape is unchanged. RetryCount is
+	// live-call-only; DegradeReason is also replayed from the cache entry.
 	RetryCount    int    `json:"retry_count,omitempty"`
 	DegradeReason string `json:"degrade_reason,omitempty"`
 

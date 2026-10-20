@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/CommitBrief/commitbrief/internal/cache"
 )
 
 // sarifCategory returns runs[0].automationDetails.id of a SARIF document.
@@ -253,11 +255,10 @@ func TestGuardSarifRunModeDegradedFailsClosed(t *testing.T) {
 }
 
 // A degraded live review is cached as a markdown-fallback entry. The replay
-// carries no meta.degrade_reason, and the static flaky findings make the
-// findings list non-nil, so the JSON alone looks like a clean flaky-only
-// review. The seam's degrade probe must still fail the run closed: an
-// offending subset written under commitbrief/guard/ would close every open
-// LLM-sourced alert in that category.
+// carries meta.degrade_reason (ADR-0031 §Update 2026-10-20) and the seam's
+// degrade probe is the second line of defence: either way the run must fail
+// closed, because an offending subset written under commitbrief/guard/ would
+// close every open LLM-sourced alert in that category.
 func TestGuardSarifRunModeDegradedCacheReplayWithFlakyFailsClosed(t *testing.T) {
 	e := newCLIEnv(t)
 	setSarifFake(t, "I could not produce structured output, sorry.")
@@ -286,6 +287,89 @@ func TestGuardSarifRunModeDegradedCacheReplayWithFlakyFailsClosed(t *testing.T) 
 	}
 	if _, statErr := os.Stat(out); statErr == nil {
 		t.Error("no SARIF file may be written for a degraded cache replay")
+	}
+}
+
+// The cache replay of a degraded response reports the same meta.degrade_reason
+// the live call did (ADR-0031 §Update 2026-10-20), so the JSON document alone
+// is enough for `guard --from-json` to fail closed -- including when static
+// flaky findings sit next to the empty content.
+func TestGuardSarifFromJSONCacheReplayDegradedFailsClosed(t *testing.T) {
+	e := newCLIEnv(t)
+	setSarifFake(t, "I could not produce structured output, sorry.")
+	stageSecretIntoRepo(t, e.repoRoot, "worker_test.go", "package app\n\nimport \"time\"\n\nfunc TestJob() {\n\ttime.Sleep(2 * time.Second)\n}\n")
+
+	reviewDoc := func(wantCached bool) string {
+		e.out.Reset()
+		if err := e.run("--provider", "sarif-fake", "--json"); err != nil {
+			t.Fatalf("review --json: %v\nstderr:\n%s", err, e.errOut.String())
+		}
+		var doc struct {
+			Meta struct {
+				Cached        bool   `json:"cached"`
+				DegradeReason string `json:"degrade_reason"`
+			} `json:"meta"`
+			Findings []map[string]any `json:"findings"`
+		}
+		if err := json.Unmarshal(e.out.Bytes(), &doc); err != nil {
+			t.Fatalf("review --json output is not JSON: %v\n%s", err, e.out.String())
+		}
+		if doc.Meta.Cached != wantCached {
+			t.Fatalf("meta.cached = %v, want %v", doc.Meta.Cached, wantCached)
+		}
+		if doc.Meta.DegradeReason != "prose" {
+			t.Fatalf("meta.degrade_reason = %q, want \"prose\" (cached=%v)", doc.Meta.DegradeReason, wantCached)
+		}
+		if len(doc.Findings) == 0 {
+			t.Fatal("the flaky pre-pass should have left findings next to the empty content")
+		}
+		return e.out.String()
+	}
+	reviewDoc(false)          // live degrade, entry stored
+	replay := reviewDoc(true) // cache hit
+
+	dir := t.TempDir()
+	pol := filepath.Join(dir, "policy.yml")
+	reviewPath := filepath.Join(dir, "review.json")
+	out := filepath.Join(dir, "guard.sarif")
+	if err := os.WriteFile(pol, []byte(guardPolicy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(reviewPath, []byte(replay), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.errOut.Reset()
+	err := e.run("guard", "--policy", pol, "--from-json", reviewPath, "--sarif", "-o", out)
+	if err == nil {
+		t.Fatal("a degraded cache replay fed through --from-json must fail the command")
+	}
+	if !strings.Contains(err.Error(), "could not be parsed") {
+		t.Errorf("want the sarif.degraded error, got: %v", err)
+	}
+	if _, statErr := os.Stat(out); statErr == nil {
+		t.Error("no SARIF file may be written for a degraded cache replay")
+	}
+}
+
+func TestCachedDegradeReason(t *testing.T) {
+	cases := []struct {
+		name string
+		in   cache.Result
+		want string
+	}{
+		{"clean json", cache.Result{Format: cache.FormatJSON, Content: `{"findings":[]}`}, ""},
+		{"legacy empty format, clean", cache.Result{Content: `{"findings":[]}`}, ""},
+		{"plain text is never a degrade", cache.Result{Format: cache.FormatPlainText, Content: "free text"}, ""},
+		{"stored reason wins", cache.Result{Format: cache.FormatMarkdownFallback, Content: "{", DegradeReason: "retry-error"}, "retry-error"},
+		{"legacy fallback entry derives prose", cache.Result{Format: cache.FormatMarkdownFallback, Content: "I could not do it."}, "prose"},
+		{"json entry that no longer parses", cache.Result{Format: cache.FormatJSON, Content: "not json"}, "prose"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := cachedDegradeReason(tc.in); got != tc.want {
+				t.Errorf("cachedDegradeReason = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

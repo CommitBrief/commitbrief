@@ -144,10 +144,10 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 	}
 	result.Sort()
 
-	if global.sarif && result.Truncated {
-		// Same reasoning as the narrowing check above: a commit that fell out
-		// of the --max-commits window would silently close its alert.
-		return errors.New(app.Catalog.T("leaks.sarif_truncated", leaksCommitLimit()))
+	if global.sarif {
+		if err := leaksSarifIncomplete(app, result); err != nil {
+			return err
+		}
 	}
 
 	findings := leakFindings(result, userPatterns)
@@ -169,6 +169,21 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 		return err
 	}
 	return leaksGate(app, findings)
+}
+
+// leaksSarifIncomplete refuses a SARIF log for a history scan that did not
+// reach every commit (same reasoning as the narrowing check: a commit that fell
+// out of the scan would silently close its alert). The two causes need
+// different advice: the --max-commits window can be raised, the commit walk's
+// own ceiling cannot, so --max-commits would be a misleading hint there.
+func leaksSarifIncomplete(app *appContext, res leaks.Result) error {
+	switch {
+	case res.WalkTruncated:
+		return errors.New(app.Catalog.T("leaks.sarif_walk_truncated"))
+	case res.Truncated:
+		return errors.New(app.Catalog.T("leaks.sarif_truncated", leaksCommitLimit()))
+	}
+	return nil
 }
 
 // emitLeaksSarif writes the scan as SARIF under the leaks category (ADR-0036,

@@ -414,6 +414,8 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 				LinesAdded:   parsed.AddedLines(),
 				LinesRemoved: parsed.DeletedLines(),
 				RulesLoaded:  loaded.Source != rules.SourceDefault,
+				// Same stamp as a local review (ADR-0031 §Update 2026-10-20).
+				DegradeReason: cachedDegradeReason(entry.Result),
 			}
 			var findings []render.Finding
 			switch entry.Result.Format {
@@ -529,8 +531,9 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 				Lang:             app.Lang.Code,
 			},
 			Result: cache.Result{
-				Content: content,
-				Format:  format,
+				Content:       content,
+				Format:        format,
+				DegradeReason: degrade,
 				Tokens: cache.Tokens{
 					Input:  usage.InputTokens,
 					Output: usage.OutputTokens,

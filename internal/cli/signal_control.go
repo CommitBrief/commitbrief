@@ -181,11 +181,10 @@ type degradeProbeKey struct{}
 // withDegradeProbe returns a context carrying a degrade probe and the probe
 // itself. Read the probe only after the review has returned.
 //
-// The schema-v1 document cannot answer this on its own: meta.degrade_reason is
-// stamped on a live degrade only, and a cache replay of the same degraded
-// response carries findings from the static flaky pre-pass next to an empty
-// content, which is indistinguishable from a clean review that found only
-// those. The pipeline knows, so it says so.
+// meta.degrade_reason is stamped on a live degrade and, since ADR-0031 §Update
+// 2026-10-20, on the cache replay of the same degraded response. The probe is
+// still what run mode trusts: the pipeline knows first-hand, so it does not
+// depend on the document round-tripping through meta.
 func withDegradeProbe(ctx context.Context) (context.Context, *bool) {
 	if ctx == nil {
 		ctx = context.Background()

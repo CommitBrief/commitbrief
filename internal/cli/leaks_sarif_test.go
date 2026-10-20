@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/leaks"
 )
 
 // leakSarifEnv returns a repo whose HEAD commit carries leakKey in conf.yml.
@@ -250,5 +253,41 @@ func TestLeaksSarifTruncatedHistoryFailsClosed(t *testing.T) {
 	}
 	if _, statErr := os.Stat(out2); statErr != nil {
 		t.Errorf("a complete scan must write SARIF: %v", statErr)
+	}
+}
+
+// The commit walk's own ceiling (git.Selection.WalkTruncated) is a second way
+// to miss history, and --max-commits cannot reach past it. It must refuse the
+// log too, with advice that does not point at --max-commits.
+func TestLeaksSarifIncompleteScanRefusals(t *testing.T) {
+	cat, err := i18n.Load("en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &appContext{Catalog: cat}
+
+	if err := leaksSarifIncomplete(app, leaks.Result{}); err != nil {
+		t.Fatalf("a complete scan must not be refused: %v", err)
+	}
+
+	err = leaksSarifIncomplete(app, leaks.Result{Truncated: true})
+	if err == nil || !strings.Contains(err.Error(), "--max-commits N") {
+		t.Errorf("a window truncation should suggest a larger --max-commits, got: %v", err)
+	}
+
+	for name, res := range map[string]leaks.Result{
+		"walk only":       {WalkTruncated: true},
+		"walk and window": {WalkTruncated: true, Truncated: true},
+	} {
+		err := leaksSarifIncomplete(app, res)
+		if err == nil {
+			t.Fatalf("%s: a walk-truncated scan must be refused", name)
+		}
+		if strings.Contains(err.Error(), "--max-commits N") {
+			t.Errorf("%s: --max-commits cannot lift the walk ceiling, the hint would mislead: %v", name, err)
+		}
+		if !strings.Contains(err.Error(), "No file was written") {
+			t.Errorf("%s: unexpected message: %v", name, err)
+		}
 	}
 }

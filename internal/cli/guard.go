@@ -155,14 +155,13 @@ func writeGuardSarif(cmd *cobra.Command, offending []render.Finding) error {
 // reviewDocDegraded reports whether a schema-v1 review document is a degraded
 // run rather than a clean one. render.JSON puts the raw model response in
 // content only when the findings never parsed, and stamps meta.degrade_reason
-// on a live degrade; ParseFindings ignores both, so a degraded document reads
-// as an empty finding list. A document that carries findings is never degraded
-// (older documents may keep a vestigial content next to them).
-//
-// This is a heuristic over a finished document and cannot see a cached replay
-// of a degraded response that also carries static flaky findings (no
-// degrade_reason, empty content, non-empty findings). Run-mode does not rely
-// on it alone: guardReviewJSON takes the degrade signal from the pipeline.
+// on a degraded review, live or replayed from the cache (ADR-0031 §Update
+// 2026-10-20); ParseFindings ignores both, so a degraded document reads as an
+// empty finding list. meta.degrade_reason is the reliable signal: a degraded
+// response that also carries static flaky findings has empty content and
+// non-empty findings, so the content check alone would miss it. Documents
+// written before the cache replayed the reason lack it; run-mode does not
+// depend on that, guardReviewJSON also takes the signal from the pipeline.
 func reviewDocDegraded(reviewJSON string, findings []render.Finding) bool {
 	var doc struct {
 		Content string `json:"content"`

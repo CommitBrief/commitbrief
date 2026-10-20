@@ -362,6 +362,27 @@ func TestScanHistoryPropagatesTruncation(t *testing.T) {
 	}
 }
 
+func TestScanHistoryPropagatesWalkTruncation(t *testing.T) {
+	r := newRepo(t)
+	r.write(t, "a.go", "package app\n")
+	r.commit(t, "initial", "a.go")
+
+	res, err := ScanHistory(context.Background(), r.dir,
+		git.Selection{WalkTruncated: true}, Options{})
+	if err != nil {
+		t.Fatalf("ScanHistory: %v", err)
+	}
+	if !res.WalkTruncated {
+		t.Error("a walk-truncated selection must stay walk-truncated in the result")
+	}
+	if res.Truncated {
+		t.Error("the walk ceiling must not masquerade as the --max-commits window")
+	}
+	if !(Result{}).Merge(res).WalkTruncated {
+		t.Error("walk truncation must survive a merge")
+	}
+}
+
 // ---------- shared ----------
 
 func TestResultMergeAndSort(t *testing.T) {

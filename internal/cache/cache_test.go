@@ -145,6 +145,29 @@ func TestPutGetRoundTrip(t *testing.T) {
 	}
 }
 
+// The degrade reason rides in the entry's result and is not a key input, so a
+// replay can report it without changing any cache key or the schema version.
+func TestPutGetRoundTripDegradeReason(t *testing.T) {
+	c := newCache(t)
+	key := Compute(ComputeArgs{Diff: "d", Model: "m"})
+	in := sampleEntry()
+	in.Result.Format = FormatMarkdownFallback
+	in.Result.DegradeReason = "prose"
+	if err := c.Put(key, in); err != nil {
+		t.Fatal(err)
+	}
+	out, ok := c.Get(key)
+	if !ok {
+		t.Fatal("Get miss after Put")
+	}
+	if out.Result.DegradeReason != "prose" {
+		t.Errorf("DegradeReason = %q, want prose", out.Result.DegradeReason)
+	}
+	if out.Version != SchemaVersion {
+		t.Errorf("Version = %d, want %d (an additive field must not bump it)", out.Version, SchemaVersion)
+	}
+}
+
 func TestGetMiss(t *testing.T) {
 	c := newCache(t)
 	_, ok := c.Get("nonexistent-key")
