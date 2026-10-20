@@ -21,8 +21,8 @@ func TestLocalizeGitError(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"tr git missing", "tr", git.ErrNoGitCLI, "git bulunamadı"},
-		{"tr git missing wrapped", "tr", fmt.Errorf("diff: %w", git.ErrNoGitCLI), "git bulunamadı"},
+		{"tr git missing", "tr", git.ErrNoGitCLI, "git PATH'te bulunamadı"},
+		{"tr git missing wrapped", "tr", fmt.Errorf("diff: %w", git.ErrNoGitCLI), "git PATH'te bulunamadı"},
 		{"tr not a repo", "tr", git.ErrNotARepo, "git deposunun içinde değilsiniz"},
 		{"en git missing", "en", git.ErrNoGitCLI, "git not found on PATH"},
 		{"en not a repo", "", git.ErrNotARepo, "Not inside a git repository"},

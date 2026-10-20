@@ -183,7 +183,7 @@ func runReview(cmd *cobra.Command, scope reviewScopeFlags, diffArgs []string) er
 	prog.Start(app.Catalog.T("progress.searching"))
 	rawDiff, selection, err := fetchDiff(ctx, app.Repo, scope, diffArgs, commitFilter)
 	if err != nil {
-		prog.Fail(err)
+		prog.Fail(errors.New(localizeGitError(app.Catalog, err)))
 		return err
 	}
 	parsed, err := diff.Parse(rawDiff)

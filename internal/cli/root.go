@@ -295,6 +295,9 @@ func Execute() {
 // localizeGitError maps the two sentinel git errors every command can surface
 // to their translated catalog message. Any other error is returned unchanged,
 // so its original text (and any wrapping context) still reaches the user.
+// A matched sentinel drops its wrapping context on purpose: code that wraps
+// ErrNoGitCLI or ErrNotARepo with extra detail must not expect that detail to
+// reach the user.
 func localizeGitError(cat *i18n.Catalog, err error) string {
 	switch {
 	case errors.Is(err, git.ErrNoGitCLI):

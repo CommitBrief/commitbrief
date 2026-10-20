@@ -107,7 +107,7 @@ rules.using_default: "ℹ Yerleşik review kuralları kullanılıyor. Özelleşt
 rules.output.using_default: "ℹ Yerleşik çıktı formatı kullanılıyor. Özelleştirmek için ~/.commitbrief/OUTPUT.md veya <repo>/.commitbrief/OUTPUT.md oluşturun."
 
 common.error_prefix: "Hata:"
-common.error.git_missing: "git bulunamadı. git'i kurun ve PATH'inizde olduğundan emin olun."
+common.error.git_missing: "git PATH'te bulunamadı. git'i kurun ve PATH'inizde olduğundan emin olun."
 common.error.not_a_repo: "Bir git deposunun içinde değilsiniz."
 # evet/Hayır kelimeleri. Türkçe oturumda kullanıcı "e" veya "evet" yazınca
 # kabul edilir; İngilizce "y"/"yes" formları da her zaman geçerli.

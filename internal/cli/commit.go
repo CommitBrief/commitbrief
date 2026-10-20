@@ -113,7 +113,7 @@ func runCommit(cmd *cobra.Command) error {
 	prog.Start(app.Catalog.T("progress.searching"))
 	raw, _, err := fetchDiff(cmd.Context(), app.Repo, reviewScopeFlags{staged: true}, nil, git.CommitFilter{})
 	if err != nil {
-		prog.Fail(err)
+		prog.Fail(errors.New(localizeGitError(app.Catalog, err)))
 		return err
 	}
 	parsedRaw, err := diff.Parse(raw)
