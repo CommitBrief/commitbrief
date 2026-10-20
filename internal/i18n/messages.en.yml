@@ -353,3 +353,5 @@ timeout.exceeded: "timed out after %s — the run was stopped by --timeout / rev
 sarif.plain_text_provider: "--sarif needs structured findings, which CLI-backed providers (claude-cli, gemini-cli, codex-cli) do not return. Use an API provider (anthropic, openai, gemini, ollama, deepseek, mistral, cohere) with --sarif."
 sarif.output_conflict: "--sarif cannot be combined with --json, --markdown, --suggest-commit, --cli or --show-prompt; each selects a different output format or produces no review at all."
 sarif.degraded: "--sarif refused: the model response could not be parsed into structured findings, and an empty SARIF file would tell Code Scanning that every open alert is fixed. No file was written. Re-run the review."
+
+leaks.sarif_patterns_conflict: "--sarif cannot be combined with --patterns; --patterns lists pattern names and scans nothing, so there are no findings to describe."

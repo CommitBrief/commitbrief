@@ -371,3 +371,58 @@ func TestSARIFPayloadWrapperUsesFindings(t *testing.T) {
 		t.Errorf("SARIF(Payload) did not render payload findings:\n%s", buf.String())
 	}
 }
+
+func TestSARIFWithCategoryDefaultMatchesSARIF(t *testing.T) {
+	var a, b bytes.Buffer
+	if err := writeSARIFCategory(&a, sarifFixture(), "1.19.0", SARIFCategoryReview, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSARIF(&b, sarifFixture(), "1.19.0"); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(a.Bytes(), b.Bytes()) {
+		t.Error("review category with no extra props must equal the plain SARIF output byte for byte")
+	}
+}
+
+func TestSARIFWithCategorySetsAutomationID(t *testing.T) {
+	for _, cat := range []string{SARIFCategoryReview, SARIFCategoryGuard, SARIFCategoryLeaks} {
+		var buf bytes.Buffer
+		if err := SARIFWithCategory(&buf, nil, cat, nil); err != nil {
+			t.Fatal(err)
+		}
+		doc := decodeSARIF(t, buf.Bytes())
+		run := doc["runs"].([]any)[0].(map[string]any)
+		if id := run["automationDetails"].(map[string]any)["id"]; id != cat {
+			t.Errorf("automationDetails.id = %v, want %q", id, cat)
+		}
+	}
+	if SARIFCategoryGuard != "commitbrief/guard/" || SARIFCategoryLeaks != "commitbrief/leaks/" || SARIFCategoryReview != "commitbrief/" {
+		t.Error("category ids are part of the Code Scanning contract")
+	}
+}
+
+func TestSARIFWithCategoryExtraProps(t *testing.T) {
+	fs := sarifFixture()[:2]
+	extra := []map[string]any{
+		{"commitbrief/patterns": []string{"aws-access-key"}, "commitbrief/severity": "hijack"},
+		nil,
+	}
+	var buf bytes.Buffer
+	if err := SARIFWithCategory(&buf, fs, SARIFCategoryLeaks, extra); err != nil {
+		t.Fatal(err)
+	}
+	doc := decodeSARIF(t, buf.Bytes())
+	results := doc["runs"].([]any)[0].(map[string]any)["results"].([]any)
+	p0 := results[0].(map[string]any)["properties"].(map[string]any)
+	if pats, _ := p0["commitbrief/patterns"].([]any); len(pats) != 1 || pats[0] != "aws-access-key" {
+		t.Errorf("extra property missing: %v", p0)
+	}
+	if p0["commitbrief/severity"] != "critical" {
+		t.Errorf("extra properties must not override the renderer's own keys, got %v", p0["commitbrief/severity"])
+	}
+	p1 := results[1].(map[string]any)["properties"].(map[string]any)
+	if _, ok := p1["commitbrief/patterns"]; ok {
+		t.Errorf("a nil extra entry must add nothing: %v", p1)
+	}
+}

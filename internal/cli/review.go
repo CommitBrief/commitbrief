@@ -56,7 +56,13 @@ func bindScopeFlags(cmd *cobra.Command) {
 // than with cobra's MarkFlagsMutuallyExclusive, which would panic on any
 // command that carries --json but not --sarif.
 func bindSarifFlag(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&global.sarif, "sarif", false, "emit SARIF 2.1.0 for GitHub Code Scanning instead of the review (use -o to write a file; API providers only; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)")
+	bindSarifFlagUsage(cmd, "emit SARIF 2.1.0 for GitHub Code Scanning instead of the review (use -o to write a file; API providers only; not with --json/--markdown/--suggest-commit/--cli/--show-prompt)")
+}
+
+// bindSarifFlagUsage is bindSarifFlag with a command-specific help string, for
+// the commands (guard, leaks) that emit SARIF under their own category.
+func bindSarifFlagUsage(cmd *cobra.Command, usage string) {
+	cmd.Flags().BoolVar(&global.sarif, "sarif", false, usage)
 }
 
 // validateSarifFlags rejects --sarif combined with another output mode. It

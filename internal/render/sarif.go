@@ -31,6 +31,18 @@ const (
 	sarifFingerprintKey = "commitbrief/v1"
 )
 
+// Code Scanning categories (runs[0].automationDetails.id) per command. Each
+// command owns its own category so that uploading one never closes the alerts
+// of another: Code Scanning treats a missing result as fixed within a category.
+const (
+	// SARIFCategoryReview is the review and diff category (the default).
+	SARIFCategoryReview = sarifCategory
+	// SARIFCategoryGuard is the `commitbrief guard` category.
+	SARIFCategoryGuard = "commitbrief/guard/"
+	// SARIFCategoryLeaks is the `commitbrief leaks` category.
+	SARIFCategoryLeaks = "commitbrief/leaks/"
+)
+
 type sarifLog struct {
 	Schema  string     `json:"$schema"`
 	Version string     `json:"version"`
@@ -123,8 +135,23 @@ func SARIF(w io.Writer, p Payload) error {
 	return writeSARIF(w, p.Findings, version.Version)
 }
 
+// SARIFWithCategory is SARIF for the commands that own their own Code
+// Scanning category (guard, leaks). extraProps, when non-nil, is parallel to
+// findings: extraProps[i] is merged into findings[i]'s properties bag, so a
+// caller can attach command-specific keys without widening Finding. A key in
+// extraProps never overrides the renderer's own keys.
+func SARIFWithCategory(w io.Writer, findings []Finding, category string, extraProps []map[string]any) error {
+	return writeSARIFCategory(w, findings, version.Version, category, extraProps)
+}
+
 // writeSARIF is SARIF with the tool version injected, so tests can pin it.
 func writeSARIF(w io.Writer, findings []Finding, toolVersion string) error {
+	return writeSARIFCategory(w, findings, toolVersion, sarifCategory, nil)
+}
+
+// writeSARIFCategory is the shared body: tool version, category and optional
+// per-finding extra properties all injected.
+func writeSARIFCategory(w io.Writer, findings []Finding, toolVersion, category string, extraProps []map[string]any) error {
 	taxonomy := rules.Taxonomy()
 	ruleIndex := make(map[string]int, len(taxonomy))
 	descriptors := make([]sarifRule, len(taxonomy))
@@ -134,8 +161,16 @@ func writeSARIF(w io.Writer, findings []Finding, toolVersion string) error {
 	}
 
 	results := make([]sarifResult, 0, len(findings))
-	for _, f := range findings {
-		results = append(results, sarifResultFor(f, ruleIndex))
+	for i, f := range findings {
+		res := sarifResultFor(f, ruleIndex)
+		if i < len(extraProps) {
+			for k, v := range extraProps[i] {
+				if _, taken := res.Properties[k]; !taken {
+					res.Properties[k] = v
+				}
+			}
+		}
+		results = append(results, res)
 	}
 
 	driver := sarifDriver{
@@ -154,7 +189,7 @@ func writeSARIF(w io.Writer, findings []Finding, toolVersion string) error {
 		Version: sarifVersion,
 		Runs: []sarifRun{{
 			Tool:              sarifTool{Driver: driver},
-			AutomationDetails: sarifAutomation{ID: sarifCategory},
+			AutomationDetails: sarifAutomation{ID: category},
 			Results:           results,
 		}},
 	}
