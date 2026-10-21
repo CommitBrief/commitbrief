@@ -10,7 +10,7 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
-## [1.21.0] - 2026-10-20
+## [1.21.0] - 2026-10-21
 
 ### Added
 - **`commitbrief guard --sarif`** writes the policy's offending findings as a SARIF 2.1.0
