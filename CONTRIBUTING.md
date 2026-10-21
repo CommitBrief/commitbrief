@@ -9,7 +9,7 @@ here too.
 
 ## Prerequisites
 
-- **Go 1.25+** — lower versions will not compile.
+- **Go 1.26+** — lower versions will not compile.
 - `golangci-lint` v2 for `make lint` (`.golangci.yml` uses the v2 schema).
 - `goimports` for `make fmt` (`go install golang.org/x/tools/cmd/goimports@latest`).
 - `bash` for the helper scripts. On Windows use Git Bash or WSL.

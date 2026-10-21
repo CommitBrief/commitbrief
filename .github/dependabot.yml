@@ -21,10 +21,3 @@ updates:
     groups:
       dependencies-minor-patch:
         update-types: ["minor", "patch"]
-    # These releases raise the go directive to 1.26; the module targets
-    # Go 1.25. Drop these entries when the toolchain moves to 1.26.
-    ignore:
-      - dependency-name: "github.com/go-git/go-git/v5"
-        versions: [">= 5.19.3"]
-      - dependency-name: "golang.org/x/crypto"
-        versions: [">= 0.56.0"]
