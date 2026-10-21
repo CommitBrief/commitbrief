@@ -3,7 +3,7 @@ module github.com/CommitBrief/commitbrief
 go 1.26.0
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.80.0
+	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
@@ -14,7 +14,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
-	google.golang.org/genai v1.74.0
+	google.golang.org/genai v1.75.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -49,6 +49,8 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.2 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
@@ -84,6 +86,10 @@ require (
 	github.com/yuin/goldmark v1.7.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
 	go.opencensus.io v0.24.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/otel v1.33.0 // indirect
+	go.opentelemetry.io/otel/metric v1.33.0 // indirect
+	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/crypto v0.56.0 // indirect
