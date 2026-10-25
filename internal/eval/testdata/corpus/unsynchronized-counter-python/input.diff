@@ -1,0 +1,22 @@
+diff --git a/app/metrics.py b/app/metrics.py
+new file mode 100644
+index 0000000..f7cf1f9
+--- /dev/null
++++ b/app/metrics.py
+@@ -0,0 +1,16 @@
++import threading
++from concurrent.futures import ThreadPoolExecutor
++
++processed = 0
++
++
++def handle(job):
++    global processed
++    job.run()
++    processed += 1
++
++
++def run_all(jobs):
++    with ThreadPoolExecutor(max_workers=8) as pool:
++        list(pool.map(handle, jobs))
++    return processed

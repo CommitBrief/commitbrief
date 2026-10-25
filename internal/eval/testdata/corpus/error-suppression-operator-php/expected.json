@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "error-suppression-operator",
+      "file": "src/Export/FileStore.php",
+      "line": 12,
+      "line_tol": 3,
+      "category": "error-handling",
+      "min_severity": "low",
+      "summary": "The @ operator hides the warning and the false return of file_put_contents() is no longer checked (the previous RuntimeException was removed), so save() reports success even when nothing was written; remove the @ and throw on failure."
+    }
+  ],
+  "must_stay_silent_on": []
+}

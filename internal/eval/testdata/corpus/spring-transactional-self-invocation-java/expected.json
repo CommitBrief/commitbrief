@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "transactional-self-invocation",
+      "file": "src/main/java/com/acme/billing/InvoiceService.java",
+      "line": 23,
+      "line_tol": 4,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "recordAudit is annotated REQUIRES_NEW but is invoked through this from finalizeInvoice; Spring's proxy is bypassed, so the annotation is ignored and the audit row commits or rolls back together with the invoice instead of independently. Move it to a separate bean or use TransactionTemplate."
+    }
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,16 @@
+diff --git a/src/main/java/com/acme/util/Strings.java b/src/main/java/com/acme/util/Strings.java
+index 0fb6e29..0189fa9 100644
+--- a/src/main/java/com/acme/util/Strings.java
++++ b/src/main/java/com/acme/util/Strings.java
+@@ -5,5 +5,11 @@
+ public final class Strings {
+ 
++    /**
++     * Returns {@code true} when the value is {@code null} or contains only whitespace.
++     *
++     * @param value the string to test, may be {@code null}
++     * @return whether the value is blank
++     */
+     public static boolean isBlank(String value) {
+         return value == null || value.trim().isEmpty();
+     }

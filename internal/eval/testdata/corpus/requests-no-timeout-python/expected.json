@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "requests-no-timeout",
+      "file": "app/webhooks.py",
+      "line": 5,
+      "line_tol": 3,
+      "category": "error-handling",
+      "min_severity": "low",
+      "summary": "requests.post is called without a timeout (the previous timeout=5 was dropped), so a hung endpoint blocks the worker forever; pass an explicit timeout."
+    }
+  ],
+  "must_stay_silent_on": []
+}

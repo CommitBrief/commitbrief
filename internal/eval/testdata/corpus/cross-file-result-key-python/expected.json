@@ -1,0 +1,21 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "result-key-renamed",
+      "file": "billing/receipts.py",
+      "line": 9,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "high",
+      "summary": "gateway.charge() no longer returns an 'id' key (renamed to 'charge_id' in this diff), but send_receipt still reads result['id'], raising KeyError after the customer has already been charged; update it to charge_id."
+    }
+  ],
+  "must_stay_silent_on": [
+    {
+      "file": "billing/checkout.py",
+      "line": 14,
+      "reason": "Caller already updated to the renamed charge_id key; correct."
+    }
+  ]
+}

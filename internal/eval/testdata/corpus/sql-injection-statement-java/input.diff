@@ -1,0 +1,19 @@
+diff --git a/src/main/java/com/acme/user/UserDao.java b/src/main/java/com/acme/user/UserDao.java
+index 257b773..afe687f 100644
+--- a/src/main/java/com/acme/user/UserDao.java
++++ b/src/main/java/com/acme/user/UserDao.java
+@@ -24,9 +24,7 @@
+     public User findByEmail(String email) throws SQLException {
+-        String sql = "SELECT id, email, name FROM users WHERE email = ?";
+-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+-            ps.setString(1, email);
+-            try (ResultSet rs = ps.executeQuery()) {
+-                return rs.next() ? map(rs) : null;
+-            }
+-        }
++        String sql = "SELECT id, email, name FROM users WHERE email = '" + email + "'";
++        try (Statement st = connection.createStatement();
++             ResultSet rs = st.executeQuery(sql)) {
++            return rs.next() ? map(rs) : null;
++        }
+     }

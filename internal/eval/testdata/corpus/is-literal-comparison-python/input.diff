@@ -1,0 +1,8 @@
+diff --git a/app/jobs.py b/app/jobs.py
+index 50a4f7f..ff2942a 100644
+--- a/app/jobs.py
++++ b/app/jobs.py
+@@ -30,2 +30,2 @@
+ def should_retry(job):
+-    return job.status == "failed" and job.attempts < MAX_ATTEMPTS
++    return job.status is "failed" and job.attempts < MAX_ATTEMPTS

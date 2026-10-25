@@ -1,0 +1,15 @@
+diff --git a/src/main/java/com/acme/payments/SettlementService.java b/src/main/java/com/acme/payments/SettlementService.java
+index 28b8076..7e49b1e 100644
+--- a/src/main/java/com/acme/payments/SettlementService.java
++++ b/src/main/java/com/acme/payments/SettlementService.java
+@@ -30,7 +30,8 @@
+     public Settlement settle(String orderId) {
+         try {
+             return gateway.settle(orderId);
+-        } catch (GatewayException e) {
+-            throw new SettlementFailedException(orderId, e);
++        } catch (Exception e) {
++            e.printStackTrace();
++            return null;
+         }
+     }

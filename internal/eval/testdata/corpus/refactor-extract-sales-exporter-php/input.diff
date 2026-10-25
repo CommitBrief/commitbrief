@@ -1,0 +1,193 @@
+diff --git a/src/Reports/ReportService.php b/src/Reports/ReportService.php
+index f4b6c2a..d6a793a 100644
+--- a/src/Reports/ReportService.php
++++ b/src/Reports/ReportService.php
+@@ -1,84 +1,23 @@
+ <?php
+ 
+ declare(strict_types=1);
+ 
+ namespace App\Reports;
+ 
+ final class ReportService
+ {
+-    public function __construct(
+-        private array $filters = [],
+-        private string $sortKey = 'id',
+-        private bool $sortDescending = false,
+-    ) {
+-    }
++    public function __construct(private SalesExporter $exporter)
++    {
++    }
+ 
++    public function salesCsv(array $rows, int $page, int $perPage): string
++    {
++        return $this->exporter->exportSales($rows, $page, $perPage);
++    }
++
++    public function salesTotals(array $rows): array
++    {
++        return $this->exporter->totals($rows);
++    }
++
+-    public function exportSales(array $rows, int $page, int $perPage): string
+-    {
+-        $rows = $this->applyFilters($rows);
+-        $rows = $this->sortRows($rows);
+-        $offset = ($page - 1) * $perPage;
+-        $slice = array_slice($rows, $offset, $perPage);
+-
+-        $out = fopen('php://temp', 'r+');
+-        fputcsv($out, ['id', 'customer', 'region', 'units', 'revenue']);
+-        foreach ($slice as $row) {
+-            fputcsv($out, [
+-                $row['id'],
+-                $row['customer'],
+-                $row['region'],
+-                $row['units'],
+-                number_format($row['revenue_cents'] / 100, 2, '.', ''),
+-            ]);
+-        }
+-        rewind($out);
+-        $csv = stream_get_contents($out);
+-        fclose($out);
+-
+-        return $csv;
+-    }
+-
+-    private function applyFilters(array $rows): array
+-    {
+-        $filters = $this->filters;
+-        return array_values(array_filter($rows, function (array $row) use ($filters): bool {
+-            if (isset($filters['region']) && $row['region'] !== $filters['region']) {
+-                return false;
+-            }
+-            if (isset($filters['min_units']) && $row['units'] < $filters['min_units']) {
+-                return false;
+-            }
+-            if (isset($filters['customer']) && stripos($row['customer'], $filters['customer']) === false) {
+-                return false;
+-            }
+-            return true;
+-        }));
+-    }
+-
+-    private function sortRows(array $rows): array
+-    {
+-        $key = $this->sortKey;
+-        $direction = $this->sortDescending ? -1 : 1;
+-        usort($rows, function (array $a, array $b) use ($key, $direction): int {
+-            if ($a[$key] === $b[$key]) {
+-                return $a['id'] <=> $b['id'];
+-            }
+-            return $direction * ($a[$key] <=> $b[$key]);
+-        });
+-        return $rows;
+-    }
+-
+-    public function totals(array $rows): array
+-    {
+-        $units = 0;
+-        $revenue = 0;
+-        $byRegion = [];
+-        foreach ($this->applyFilters($rows) as $row) {
+-            $units += $row['units'];
+-            $revenue += $row['revenue_cents'];
+-            $byRegion[$row['region']] = ($byRegion[$row['region']] ?? 0) + $row['revenue_cents'];
+-        }
+-        ksort($byRegion);
+-        return ['units' => $units, 'revenue_cents' => $revenue, 'by_region' => $byRegion];
+-    }
+ }
+diff --git a/src/Reports/SalesExporter.php b/src/Reports/SalesExporter.php
+new file mode 100644
+index 0000000..84c8475
+--- /dev/null
++++ b/src/Reports/SalesExporter.php
+@@ -0,0 +1,85 @@
++<?php
++
++declare(strict_types=1);
++
++namespace App\Reports;
++
++/** Sales export logic, split out of ReportService. */
++final class SalesExporter
++{
++    public function __construct(
++        private array $filters = [],
++        private string $sortKey = 'id',
++        private bool $sortDescending = false,
++    ) {
++    }
++
++    public function exportSales(array $rows, int $page, int $perPage): string
++    {
++        $rows = $this->applyFilters($rows);
++        $rows = $this->sortRows($rows);
++        $offset = $page * $perPage;
++        $slice = array_slice($rows, $offset, $perPage);
++
++        $out = fopen('php://temp', 'r+');
++        fputcsv($out, ['id', 'customer', 'region', 'units', 'revenue']);
++        foreach ($slice as $row) {
++            fputcsv($out, [
++                $row['id'],
++                $row['customer'],
++                $row['region'],
++                $row['units'],
++                number_format($row['revenue_cents'] / 100, 2, '.', ''),
++            ]);
++        }
++        rewind($out);
++        $csv = stream_get_contents($out);
++        fclose($out);
++
++        return $csv;
++    }
++
++    private function applyFilters(array $rows): array
++    {
++        $filters = $this->filters;
++        return array_values(array_filter($rows, function (array $row) use ($filters): bool {
++            if (isset($filters['region']) && $row['region'] !== $filters['region']) {
++                return false;
++            }
++            if (isset($filters['min_units']) && $row['units'] < $filters['min_units']) {
++                return false;
++            }
++            if (isset($filters['customer']) && stripos($row['customer'], $filters['customer']) === false) {
++                return false;
++            }
++            return true;
++        }));
++    }
++
++    private function sortRows(array $rows): array
++    {
++        $key = $this->sortKey;
++        $direction = $this->sortDescending ? -1 : 1;
++        usort($rows, function (array $a, array $b) use ($key, $direction): int {
++            if ($a[$key] === $b[$key]) {
++                return $a['id'] <=> $b['id'];
++            }
++            return $direction * ($a[$key] <=> $b[$key]);
++        });
++        return $rows;
++    }
++
++    public function totals(array $rows): array
++    {
++        $units = 0;
++        $revenue = 0;
++        $byRegion = [];
++        foreach ($this->applyFilters($rows) as $row) {
++            $units += $row['units'];
++            $revenue += $row['revenue_cents'];
++            $byRegion[$row['region']] = ($byRegion[$row['region']] ?? 0) + $row['revenue_cents'];
++        }
++        ksort($byRegion);
++        return ['units' => $units, 'revenue_cents' => $revenue, 'by_region' => $byRegion];
++    }
++}

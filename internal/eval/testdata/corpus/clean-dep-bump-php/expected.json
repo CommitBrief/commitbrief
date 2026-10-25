@@ -1,0 +1,11 @@
+{
+  "language": "php",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "composer.json",
+      "line": 8,
+      "reason": "Minor dependency bump; no behavior change."
+    }
+  ]
+}

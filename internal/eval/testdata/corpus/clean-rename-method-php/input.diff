@@ -1,0 +1,17 @@
+diff --git a/src/Order/OrderPresenter.php b/src/Order/OrderPresenter.php
+index 220a590..c947559 100644
+--- a/src/Order/OrderPresenter.php
++++ b/src/Order/OrderPresenter.php
+@@ -13,10 +13,10 @@
+ 
+-    private function fmt(int $cents): string
++    private function formatAmount(int $cents): string
+     {
+         return number_format($cents / 100, 2, '.', ',');
+     }
+ 
+     public function present(Order $order): array
+     {
+-        return ['id' => $order->id, 'total' => $this->fmt($order->totalCents)];
++        return ['id' => $order->id, 'total' => $this->formatAmount($order->totalCents)];
+     }

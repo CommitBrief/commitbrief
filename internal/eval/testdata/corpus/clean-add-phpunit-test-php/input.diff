@@ -1,0 +1,27 @@
+diff --git a/tests/Unit/StrTest.php b/tests/Unit/StrTest.php
+new file mode 100644
+index 0000000..c183c98
+--- /dev/null
++++ b/tests/Unit/StrTest.php
+@@ -0,0 +1,21 @@
++<?php
++
++declare(strict_types=1);
++
++namespace Tests\Unit;
++
++use App\Util\Str;
++use PHPUnit\Framework\TestCase;
++
++final class StrTest extends TestCase
++{
++    public function testLimitKeepsShortStrings(): void
++    {
++        $this->assertSame('hello', Str::limit('hello', 10));
++    }
++
++    public function testLimitTruncatesWithEllipsis(): void
++    {
++        $this->assertSame('hel…', Str::limit('hello world', 4));
++    }
++}

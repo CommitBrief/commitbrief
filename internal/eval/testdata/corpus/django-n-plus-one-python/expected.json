@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "django-n-plus-one",
+      "file": "shop/views.py",
+      "line": 15,
+      "line_tol": 3,
+      "category": "performance",
+      "min_severity": "medium",
+      "summary": "The loop reads o.customer.name on a queryset built without select_related('customer'), issuing one extra query per order (up to 51 queries); add select_related('customer') to the queryset."
+    }
+  ],
+  "must_stay_silent_on": []
+}

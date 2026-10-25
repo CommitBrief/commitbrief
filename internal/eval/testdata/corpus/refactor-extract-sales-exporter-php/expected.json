@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "pagination-offset-off-by-one",
+      "file": "src/Reports/SalesExporter.php",
+      "line": 21,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "The moved exportSales() computes the offset as $page * $perPage instead of ($page - 1) * $perPage, so with 1-based pages the first page of rows is skipped and the last page is empty; restore the original formula."
+    }
+  ],
+  "must_stay_silent_on": []
+}

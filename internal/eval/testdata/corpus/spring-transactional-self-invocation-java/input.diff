@@ -1,0 +1,35 @@
+diff --git a/src/main/java/com/acme/billing/InvoiceService.java b/src/main/java/com/acme/billing/InvoiceService.java
+index 18e75e1..e68fc37 100644
+--- a/src/main/java/com/acme/billing/InvoiceService.java
++++ b/src/main/java/com/acme/billing/InvoiceService.java
+@@ -1,25 +1,30 @@
+ package com.acme.billing;
+ 
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Propagation;
+ import org.springframework.transaction.annotation.Transactional;
+ 
+ @Service
+ public class InvoiceService {
+ 
+     private final InvoiceRepository invoices;
+     private final AuditRepository audits;
+ 
+     public InvoiceService(InvoiceRepository invoices, AuditRepository audits) {
+         this.invoices = invoices;
+         this.audits = audits;
+     }
+ 
+     @Transactional
+     public void finalizeInvoice(long id) {
+         Invoice invoice = invoices.findById(id).orElseThrow();
+         invoice.finalizeNow();
+         invoices.save(invoice);
++        recordAudit(id, "FINALIZED");
+     }
+ 
++    @Transactional(propagation = Propagation.REQUIRES_NEW)
++    public void recordAudit(long invoiceId, String action) {
++        audits.save(new AuditEntry(invoiceId, action));
++    }
+ }

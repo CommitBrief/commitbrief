@@ -1,0 +1,16 @@
+diff --git a/src/Util/Str.php b/src/Util/Str.php
+index 8883700..ccb24d2 100644
+--- a/src/Util/Str.php
++++ b/src/Util/Str.php
+@@ -6,5 +6,11 @@
+ final class Str
+ {
++    /**
++     * Truncates a string to the given length, appending an ellipsis when cut.
++     *
++     * @param string $value  the text to truncate
++     * @param int    $length maximum length including the ellipsis
++     */
+     public static function limit(string $value, int $length): string
+     {
+         if (mb_strlen($value) <= $length) {

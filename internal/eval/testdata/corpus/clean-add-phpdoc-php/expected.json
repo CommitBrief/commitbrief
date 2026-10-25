@@ -1,0 +1,11 @@
+{
+  "language": "php",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "src/Util/Str.php",
+      "line": 15,
+      "reason": "PHPDoc-only change; method body untouched and correct."
+    }
+  ]
+}

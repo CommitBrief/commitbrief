@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "in-array-loose",
+      "file": "src/Access/ProjectAccess.php",
+      "line": 17,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "in_array() without the strict flag uses ==, so a user-chosen vanity id such as '1e1' matches the editor id '10' and the authorization check passes for the wrong user; pass true as the third argument."
+    }
+  ],
+  "must_stay_silent_on": []
+}

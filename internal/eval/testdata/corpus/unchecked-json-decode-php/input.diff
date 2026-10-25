@@ -1,0 +1,15 @@
+diff --git a/src/Config/Loader.php b/src/Config/Loader.php
+index 46f6486..972e0ba 100644
+--- a/src/Config/Loader.php
++++ b/src/Config/Loader.php
+@@ -9,8 +9,6 @@
+     public function load(string $path): array
+     {
+         $raw = file_get_contents($path);
+-        if ($raw === false) {
+-            throw new ConfigException("Cannot read $path");
+-        }
+-        return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
++        $config = json_decode($raw, true);
++        return $config['app'];
+     }

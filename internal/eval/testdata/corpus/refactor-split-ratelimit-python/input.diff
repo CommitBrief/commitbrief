@@ -1,0 +1,193 @@
+diff --git a/app/util.py b/app/util.py
+index 3aa4f4c..4cc2c4b 100644
+--- a/app/util.py
++++ b/app/util.py
+@@ -1,90 +1,12 @@
+ import threading
+ import time
+ 
+ 
+ def clamp(value, low, high):
+     return max(low, min(high, value))
+ 
+ 
+-class SlidingWindowLimiter:
+-    """Allow at most `limit` events per `window` seconds per key."""
+-
+-    def __init__(self, limit, window, clock=time.monotonic):
+-        if limit <= 0:
+-            raise ValueError("limit must be positive")
+-        if window <= 0:
+-            raise ValueError("window must be positive")
+-        self.limit = limit
+-        self.window = window
+-        self._clock = clock
+-        self._hits = {}
+-        self._lock = threading.Lock()
+-
+-    def _prune(self, key, now):
+-        cutoff = now - self.window
+-        hits = self._hits.get(key)
+-        if not hits:
+-            return []
+-        while hits and hits[0] <= cutoff:
+-            hits.pop(0)
+-        if not hits:
+-            del self._hits[key]
+-            return []
+-        return hits
+-
+-    def allow(self, key):
+-        now = self._clock()
+-        with self._lock:
+-            hits = self._prune(key, now)
+-            if len(hits) >= self.limit:
+-                return False
+-            self._hits.setdefault(key, []).append(now)
+-            return True
+-
+-    def remaining(self, key):
+-        now = self._clock()
+-        with self._lock:
+-            hits = self._prune(key, now)
+-            return max(0, self.limit - len(hits))
+-
+-    def retry_after(self, key):
+-        now = self._clock()
+-        with self._lock:
+-            hits = self._prune(key, now)
+-            if len(hits) < self.limit:
+-                return 0.0
+-            return max(0.0, hits[0] + self.window - now)
+-
+-    def reset(self, key=None):
+-        with self._lock:
+-            if key is None:
+-                self._hits.clear()
+-            else:
+-                self._hits.pop(key, None)
+-
+-
+-class TokenBucket:
+-    """Refill `rate` tokens per second up to `capacity`."""
+-
+-    def __init__(self, rate, capacity, clock=time.monotonic):
+-        self.rate = rate
+-        self.capacity = capacity
+-        self._clock = clock
+-        self._tokens = float(capacity)
+-        self._updated = clock()
+-        self._lock = threading.Lock()
+-
+-    def take(self, n=1):
+-        with self._lock:
+-            now = self._clock()
+-            elapsed = now - self._updated
+-            self._tokens = min(self.capacity, self._tokens + elapsed * self.rate)
+-            self._updated = now
+-            if self._tokens < n:
+-                return False
+-            self._tokens -= n
+-            return True
+ 
+ 
+ def slugify(text):
+     return "-".join(text.lower().split())
+diff --git a/app/ratelimit.py b/app/ratelimit.py
+new file mode 100644
+index 0000000..7792c40
+--- /dev/null
++++ b/app/ratelimit.py
+@@ -0,0 +1,83 @@
++"""Rate limiting primitives, split out of app/util.py."""
++import threading
++import time
++
++
++class SlidingWindowLimiter:
++    """Allow at most `limit` events per `window` seconds per key."""
++
++    def __init__(self, limit, window, clock=time.monotonic):
++        if limit <= 0:
++            raise ValueError("limit must be positive")
++        if window <= 0:
++            raise ValueError("window must be positive")
++        self.limit = limit
++        self.window = window
++        self._clock = clock
++        self._hits = {}
++        self._lock = threading.Lock()
++
++    def _prune(self, key, now):
++        cutoff = now - self.window
++        hits = self._hits.get(key)
++        if not hits:
++            return []
++        while hits and hits[0] <= cutoff:
++            hits.pop(0)
++        if not hits:
++            del self._hits[key]
++            return []
++        return hits
++
++    def allow(self, key):
++        now = self._clock()
++        with self._lock:
++            hits = self._prune(key, now)
++            if len(hits) > self.limit:
++                return False
++            self._hits.setdefault(key, []).append(now)
++            return True
++
++    def remaining(self, key):
++        now = self._clock()
++        with self._lock:
++            hits = self._prune(key, now)
++            return max(0, self.limit - len(hits))
++
++    def retry_after(self, key):
++        now = self._clock()
++        with self._lock:
++            hits = self._prune(key, now)
++            if len(hits) < self.limit:
++                return 0.0
++            return max(0.0, hits[0] + self.window - now)
++
++    def reset(self, key=None):
++        with self._lock:
++            if key is None:
++                self._hits.clear()
++            else:
++                self._hits.pop(key, None)
++
++
++class TokenBucket:
++    """Refill `rate` tokens per second up to `capacity`."""
++
++    def __init__(self, rate, capacity, clock=time.monotonic):
++        self.rate = rate
++        self.capacity = capacity
++        self._clock = clock
++        self._tokens = float(capacity)
++        self._updated = clock()
++        self._lock = threading.Lock()
++
++    def take(self, n=1):
++        with self._lock:
++            now = self._clock()
++            elapsed = now - self._updated
++            self._tokens = min(self.capacity, self._tokens + elapsed * self.rate)
++            self._updated = now
++            if self._tokens < n:
++                return False
++            self._tokens -= n
++            return True
+diff --git a/app/api.py b/app/api.py
+index b2289a9..b334243 100644
+--- a/app/api.py
++++ b/app/api.py
+@@ -1,3 +1,3 @@
+-from app.util import SlidingWindowLimiter
++from app.ratelimit import SlidingWindowLimiter
+ 
+ limiter = SlidingWindowLimiter(limit=100, window=60)

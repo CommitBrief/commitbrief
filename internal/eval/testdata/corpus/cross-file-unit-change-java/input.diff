@@ -1,0 +1,38 @@
+diff --git a/src/main/java/com/acme/pricing/PriceCalculator.java b/src/main/java/com/acme/pricing/PriceCalculator.java
+index c97cf04..b6d925f 100644
+--- a/src/main/java/com/acme/pricing/PriceCalculator.java
++++ b/src/main/java/com/acme/pricing/PriceCalculator.java
+@@ -13,8 +13,8 @@
+ 
+-    public double total(Order order) {
+-        double sum = 0;
++    public long total(Order order) {
++        long sum = 0;
+         for (OrderLine line : order.getLines()) {
+-            sum += line.getUnitPrice() * line.getQuantity();
++            sum += line.getUnitPriceCents() * line.getQuantity();
+         }
+         return sum;
+     }
+diff --git a/src/main/java/com/acme/order/OrderService.java b/src/main/java/com/acme/order/OrderService.java
+index 1c77fe2..9f7cd29 100644
+--- a/src/main/java/com/acme/order/OrderService.java
++++ b/src/main/java/com/acme/order/OrderService.java
+@@ -33,4 +33,4 @@
+     public void place(Order order) {
+-        double total = calculator.total(order);
+-        payments.charge(order.getCustomerId(), total);
++        long totalCents = calculator.total(order);
++        payments.chargeCents(order.getCustomerId(), totalCents);
+     }
+diff --git a/src/main/java/com/acme/billing/InvoiceService.java b/src/main/java/com/acme/billing/InvoiceService.java
+index ee76ec2..162d412 100644
+--- a/src/main/java/com/acme/billing/InvoiceService.java
++++ b/src/main/java/com/acme/billing/InvoiceService.java
+@@ -20,5 +20,5 @@
+     public String render(Order order) {
+         double total = calculator.total(order);
+         double tax = total * 0.2;
+-        return String.format("Total: %.2f Tax: %.2f", total, tax);
++        return String.format(Locale.US, "Total: %.2f Tax: %.2f", total, tax);
+     }

@@ -1,0 +1,11 @@
+diff --git a/src/main/java/com/acme/catalog/ProductController.java b/src/main/java/com/acme/catalog/ProductController.java
+index 81c04dd..9c761f3 100644
+--- a/src/main/java/com/acme/catalog/ProductController.java
++++ b/src/main/java/com/acme/catalog/ProductController.java
+@@ -20,4 +20,5 @@
+     @GetMapping("/products/{id}")
+     public ProductDto getProduct(@PathVariable long id) {
+-        return ProductDto.from(repository.findById(id).orElseThrow(ProductNotFoundException::new));
++        Product product = repository.findById(id).get();
++        return ProductDto.from(product);
+     }

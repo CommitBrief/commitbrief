@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "laravel-n-plus-one",
+      "file": "app/Http/Controllers/PostController.php",
+      "line": 14,
+      "line_tol": 3,
+      "category": "performance",
+      "min_severity": "medium",
+      "summary": "The eager load was dropped (with('author') removed) while the map callback reads $post->author->name, causing one extra query per post (51 total); add with('author') back."
+    }
+  ],
+  "must_stay_silent_on": []
+}

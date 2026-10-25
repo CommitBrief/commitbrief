@@ -1,0 +1,31 @@
+diff --git a/billing/gateway.py b/billing/gateway.py
+index 2f020e9..5cf6ae8 100644
+--- a/billing/gateway.py
++++ b/billing/gateway.py
+@@ -20,5 +20,5 @@
+ def charge(customer_id, amount_cents):
+     resp = _client.post("/v1/charges", json={"customer": customer_id, "amount": amount_cents})
+     resp.raise_for_status()
+     body = resp.json()
+-    return {"id": body["id"], "status": body["status"]}
++    return {"charge_id": body["id"], "status": body["status"]}
+diff --git a/billing/checkout.py b/billing/checkout.py
+index eb9b696..7c944a4 100644
+--- a/billing/checkout.py
++++ b/billing/checkout.py
+@@ -12,4 +12,4 @@
+ def complete_checkout(cart, customer):
+     result = gateway.charge(customer.id, cart.total_cents)
+-    cart.mark_paid(result["id"])
++    cart.mark_paid(result["charge_id"])
+     return result
+diff --git a/billing/receipts.py b/billing/receipts.py
+index 9536491..02b935f 100644
+--- a/billing/receipts.py
++++ b/billing/receipts.py
+@@ -7,4 +7,4 @@
+ def send_receipt(result, email):
+-    logger.info("sending receipt")
++    logger.info("sending receipt to %s", email)
+     body = render_receipt(result["id"], result["status"])
+     mailer.send(email, "Your receipt", body)

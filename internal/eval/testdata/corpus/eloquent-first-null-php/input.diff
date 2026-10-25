@@ -1,0 +1,14 @@
+diff --git a/app/Http/Controllers/ProfileController.php b/app/Http/Controllers/ProfileController.php
+index b8fea97..90c56b1 100644
+--- a/app/Http/Controllers/ProfileController.php
++++ b/app/Http/Controllers/ProfileController.php
+@@ -20,8 +20,8 @@
+     public function byEmail(Request $request)
+     {
+         $email = $request->query('email');
+-        $user = User::where('email', $email)->firstOrFail();
++        $user = User::where('email', $email)->first();
+         return response()->json([
+             'name' => $user->name,
+         ]);
+     }

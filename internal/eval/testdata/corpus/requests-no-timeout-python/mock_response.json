@@ -1,0 +1,1 @@
+{"findings": [{"severity": "low", "file": "app/webhooks.py", "line": 5, "title": "HTTP call without timeout", "description": "requests.post is called without a timeout (the previous timeout=5 was dropped), so a hung endpoint blocks the worker forever; pass an explicit timeout.", "suggestion": "Restore timeout=5 (or a (connect, read) tuple)."}]}

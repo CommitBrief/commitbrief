@@ -1,0 +1,13 @@
+diff --git a/src/Repository/OrderRepository.php b/src/Repository/OrderRepository.php
+index 39b1554..a3a15b8 100644
+--- a/src/Repository/OrderRepository.php
++++ b/src/Repository/OrderRepository.php
+@@ -18,6 +18,5 @@
+     public function findByCustomer(string $customerId): array
+     {
+-        $stmt = $this->pdo->prepare('SELECT * FROM orders WHERE customer_id = :id');
+-        $stmt->execute(['id' => $customerId]);
+-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
++        $sql = "SELECT * FROM orders WHERE customer_id = '$customerId'";
++        return $this->pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+     }

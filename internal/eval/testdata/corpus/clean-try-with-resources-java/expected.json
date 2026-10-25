@@ -1,0 +1,11 @@
+{
+  "language": "java",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "src/main/java/com/acme/io/Checksums.java",
+      "line": 14,
+      "reason": "Correct try-with-resources refactor; closes the stream on every path."
+    }
+  ]
+}

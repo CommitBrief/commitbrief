@@ -1,0 +1,15 @@
+diff --git a/src/main/java/com/acme/order/OrderMapper.java b/src/main/java/com/acme/order/OrderMapper.java
+index bfa6e52..3b7d312 100644
+--- a/src/main/java/com/acme/order/OrderMapper.java
++++ b/src/main/java/com/acme/order/OrderMapper.java
+@@ -14,8 +14,8 @@
+ 
+-    private String fmt(Money amount) {
++    private String formatAmount(Money amount) {
+         return amount.currency().getSymbol() + amount.toPlainString();
+     }
+ 
+     public OrderDto toDto(Order order) {
+-        return new OrderDto(order.getId(), fmt(order.getTotal()));
++        return new OrderDto(order.getId(), formatAmount(order.getTotal()));
+     }

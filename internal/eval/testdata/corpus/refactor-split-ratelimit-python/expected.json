@@ -1,0 +1,21 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "limiter-off-by-one",
+      "file": "app/ratelimit.py",
+      "line": 36,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "In the moved SlidingWindowLimiter.allow(), the guard changed from len(hits) >= self.limit to len(hits) > self.limit, so the limiter admits limit + 1 events per window (remaining()/retry_after() still use the old boundary and disagree); restore >=."
+    }
+  ],
+  "must_stay_silent_on": [
+    {
+      "file": "app/ratelimit.py",
+      "line": 51,
+      "reason": "retry_after() keeps the original boundary; the moved code here is verbatim and correct."
+    }
+  ]
+}

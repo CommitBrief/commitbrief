@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "django-get-does-not-exist",
+      "file": "accounts/views.py",
+      "line": 9,
+      "line_tol": 3,
+      "category": "error-handling",
+      "min_severity": "medium",
+      "summary": "Profile.objects.get(pk=profile_id) raises Profile.DoesNotExist for an unknown id, which Django turns into a 500; use get_object_or_404 or catch DoesNotExist and return a 404."
+    }
+  ],
+  "must_stay_silent_on": []
+}

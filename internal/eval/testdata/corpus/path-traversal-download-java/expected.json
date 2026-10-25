@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "path-traversal-download",
+      "file": "src/main/java/com/acme/files/DownloadController.java",
+      "line": 20,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "The name path variable is resolved against storageDir with no normalize()/startsWith() containment check (removed in this diff), so encoded '..' segments read arbitrary files; restore the check."
+    }
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,16 @@
+{
+  "language": "php",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "src/Order/OrderPresenter.php",
+      "line": 15,
+      "reason": "Private method rename for readability; no behavior change."
+    },
+    {
+      "file": "src/Order/OrderPresenter.php",
+      "line": 21,
+      "reason": "Call site mirrors the rename; not a finding."
+    }
+  ]
+}

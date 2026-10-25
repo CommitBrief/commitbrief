@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "swallowed-exception",
+      "file": "src/main/java/com/acme/payments/SettlementService.java",
+      "line": 33,
+      "line_tol": 3,
+      "category": "error-handling",
+      "min_severity": "medium",
+      "summary": "catch (Exception) prints the stack trace and returns null, hiding gateway failures and turning them into NullPointerExceptions in callers; rethrow SettlementFailedException (and log properly)."
+    }
+  ],
+  "must_stay_silent_on": []
+}

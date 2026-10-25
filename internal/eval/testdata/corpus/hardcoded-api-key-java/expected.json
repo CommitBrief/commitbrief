@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "hardcoded-api-key",
+      "file": "src/main/java/com/acme/payments/StripeConfig.java",
+      "line": 5,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "A live payment API key (sk_live_...) is hardcoded in source and will live in version control; load it from the environment or a secret store and rotate the exposed key."
+    }
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,19 @@
+diff --git a/src/Auth/PasswordHasher.php b/src/Auth/PasswordHasher.php
+index cd909fd..5f8412e 100644
+--- a/src/Auth/PasswordHasher.php
++++ b/src/Auth/PasswordHasher.php
+@@ -6,12 +6,12 @@
+ final class PasswordHasher
+ {
+     public function hash(string $password): string
+     {
+-        return password_hash($password, PASSWORD_BCRYPT);
++        return md5($password);
+     }
+ 
+     public function verify(string $password, string $hash): bool
+     {
+-        return password_verify($password, $hash);
++        return md5($password) === $hash;
+     }
+ }

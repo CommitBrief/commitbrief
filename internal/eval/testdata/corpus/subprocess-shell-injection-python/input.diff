@@ -1,0 +1,11 @@
+diff --git a/app/media.py b/app/media.py
+index 20c508f..32ee377 100644
+--- a/app/media.py
++++ b/app/media.py
+@@ -1,5 +1,5 @@
+ import subprocess
+ 
+ 
+ def make_thumbnail(src: str, dst: str) -> None:
+-    subprocess.run(["convert", src, "-resize", "128x128", dst], check=True)
++    subprocess.run(f"convert {src} -resize 128x128 {dst}", shell=True, check=True)

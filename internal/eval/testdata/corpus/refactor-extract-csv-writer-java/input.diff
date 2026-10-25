@@ -1,0 +1,208 @@
+diff --git a/src/main/java/com/acme/reports/ReportService.java b/src/main/java/com/acme/reports/ReportService.java
+index 0d23333..895598d 100644
+--- a/src/main/java/com/acme/reports/ReportService.java
++++ b/src/main/java/com/acme/reports/ReportService.java
+@@ -1,103 +1,25 @@
+ package com.acme.reports;
+ 
+ import java.io.IOException;
+ import java.io.StringWriter;
+ import java.io.Writer;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.TreeMap;
+ 
+ public class ReportService {
+ 
+-    private static final int PAGE_SIZE = 50;
++    private final CsvReportWriter csv = new CsvReportWriter();
+     private final RowRepository rows;
+ 
+     public ReportService(RowRepository rows) {
+         this.rows = rows;
+     }
+ 
+     public String monthlyCsv(String month) throws IOException {
+         StringWriter out = new StringWriter();
+-        writeReport(rows.findByMonth(month), out);
++        csv.writeReport(rows.findByMonth(month), out);
+         return out.toString();
+     }
+ 
+-    public void writeReport(List<Row> rows, Writer out) throws IOException {
+-        writeHeader(out);
+-        int pageCount = 0;
+-        for (int i = 0; i < rows.size(); i++) {
+-            Row row = rows.get(i);
+-            StringBuilder line = new StringBuilder();
+-            line.append(escape(row.getId())).append(',');
+-            line.append(escape(row.getName())).append(',');
+-            line.append(escape(row.getRegion())).append(',');
+-            line.append(row.getUnits()).append(',');
+-            line.append(formatMoney(row.getRevenueCents()));
+-            out.write(line.toString());
+-            out.write("\n");
+-            if ((i + 1) % PAGE_SIZE == 0) {
+-                pageCount++;
+-                out.write("# page " + pageCount + "\n");
+-            }
+-        }
+-        writeRegionSummary(out, rows);
+-        writeFooter(out, rows);
+-    }
+-
+-    private void writeHeader(Writer out) throws IOException {
+-        out.write("id,name,region,units,revenue\n");
+-    }
+-
+-    private void writeFooter(Writer out, List<Row> rows) throws IOException {
+-        long units = 0;
+-        long revenue = 0;
+-        for (Row row : rows) {
+-            units += row.getUnits();
+-            revenue += row.getRevenueCents();
+-        }
+-        out.write("total,," + rows.size() + "," + units + "," + formatMoney(revenue) + "\n");
+-        out.write("average,,," + averageUnits(rows) + ",\n");
+-    }
+-
+-    private double averageUnits(List<Row> rows) {
+-        if (rows.isEmpty()) {
+-            return 0.0;
+-        }
+-        long units = 0;
+-        for (Row row : rows) {
+-            units += row.getUnits();
+-        }
+-        return (double) units / rows.size();
+-    }
+-
+-    private Map<String, Long> revenueByRegion(List<Row> rows) {
+-        Map<String, Long> totals = new TreeMap<>();
+-        for (Row row : rows) {
+-            String region = row.getRegion() == null ? "unknown" : row.getRegion();
+-            totals.merge(region, row.getRevenueCents(), Long::sum);
+-        }
+-        return totals;
+-    }
+-
+-    private void writeRegionSummary(Writer out, List<Row> rows) throws IOException {
+-        for (Map.Entry<String, Long> entry : revenueByRegion(rows).entrySet()) {
+-            out.write("region," + escape(entry.getKey()) + ",,," + formatMoney(entry.getValue()) + "\n");
+-        }
+-    }
+-
+-    private String formatMoney(long cents) {
+-        long abs = Math.abs(cents);
+-        String sign = cents < 0 ? "-" : "";
+-        return sign + (abs / 100) + "." + String.format("%02d", abs % 100);
+-    }
+-
+-    private String escape(String value) {
+-        if (value == null) {
+-            return "";
+-        }
+-        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+-            return "\"" + value.replace("\"", "\"\"") + "\"";
+-        }
+-        return value;
+-    }
+ }
+diff --git a/src/main/java/com/acme/reports/CsvReportWriter.java b/src/main/java/com/acme/reports/CsvReportWriter.java
+new file mode 100644
+index 0000000..8ed5d4c
+--- /dev/null
++++ b/src/main/java/com/acme/reports/CsvReportWriter.java
+@@ -0,0 +1,92 @@
++package com.acme.reports;
++
++import java.io.IOException;
++import java.io.Writer;
++import java.util.List;
++import java.util.Map;
++import java.util.TreeMap;
++
++/** CSV rendering split out of ReportService. */
++public class CsvReportWriter {
++
++    private static final int PAGE_SIZE = 50;
++
++    public void writeReport(List<Row> rows, Writer out) throws IOException {
++        writeHeader(out);
++        int pageCount = 0;
++        for (int i = 0; i < rows.size(); i++) {
++            Row row = rows.get(i);
++            StringBuilder line = new StringBuilder();
++            line.append(escape(row.getId())).append(',');
++            line.append(escape(row.getName())).append(',');
++            line.append(escape(row.getRegion())).append(',');
++            line.append(row.getUnits()).append(',');
++            line.append(formatMoney(row.getRevenueCents()));
++            out.write(line.toString());
++            out.write("\n");
++            if ((i + 1) % PAGE_SIZE == 0) {
++                pageCount++;
++                out.write("# page " + pageCount + "\n");
++            }
++        }
++        writeRegionSummary(out, rows);
++        writeFooter(out, rows);
++    }
++
++    private void writeHeader(Writer out) throws IOException {
++        out.write("id,name,region,units,revenue\n");
++    }
++
++    private void writeFooter(Writer out, List<Row> rows) throws IOException {
++        long units = 0;
++        long revenue = 0;
++        for (Row row : rows) {
++            units += row.getUnits();
++            revenue += row.getRevenueCents();
++        }
++        out.write("total,," + rows.size() + "," + units + "," + formatMoney(revenue) + "\n");
++        out.write("average,,," + averageUnits(rows) + ",\n");
++    }
++
++    private double averageUnits(List<Row> rows) {
++        if (rows.isEmpty()) {
++            return 0.0;
++        }
++        long units = 0;
++        for (Row row : rows) {
++            units += row.getUnits();
++        }
++        return units / rows.size();
++    }
++
++    private Map<String, Long> revenueByRegion(List<Row> rows) {
++        Map<String, Long> totals = new TreeMap<>();
++        for (Row row : rows) {
++            String region = row.getRegion() == null ? "unknown" : row.getRegion();
++            totals.merge(region, row.getRevenueCents(), Long::sum);
++        }
++        return totals;
++    }
++
++    private void writeRegionSummary(Writer out, List<Row> rows) throws IOException {
++        for (Map.Entry<String, Long> entry : revenueByRegion(rows).entrySet()) {
++            out.write("region," + escape(entry.getKey()) + ",,," + formatMoney(entry.getValue()) + "\n");
++        }
++    }
++
++    private String formatMoney(long cents) {
++        long abs = Math.abs(cents);
++        String sign = cents < 0 ? "-" : "";
++        return sign + (abs / 100) + "." + String.format("%02d", abs % 100);
++    }
++
++    private String escape(String value) {
++        if (value == null) {
++            return "";
++        }
++        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
++            return "\"" + value.replace("\"", "\"\"") + "\"";
++        }
++        return value;
++    }
++}

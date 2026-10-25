@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "sql-injection-statement",
+      "file": "src/main/java/com/acme/user/UserDao.java",
+      "line": 25,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "critical",
+      "summary": "email is concatenated into the SQL text and executed via Statement, allowing SQL injection (e.g. email = \"x' OR '1'='1\"); keep the PreparedStatement with a bound parameter."
+    }
+  ],
+  "must_stay_silent_on": []
+}

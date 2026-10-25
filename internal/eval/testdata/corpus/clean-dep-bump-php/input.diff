@@ -1,0 +1,11 @@
+diff --git a/composer.json b/composer.json
+index 8a9ca84..7365c67 100644
+--- a/composer.json
++++ b/composer.json
+@@ -6,5 +6,5 @@
+     "require": {
+         "php": "^8.2",
+-        "monolog/monolog": "^3.6.0",
++        "monolog/monolog": "^3.7.0",
+         "symfony/http-foundation": "^7.1"
+     },

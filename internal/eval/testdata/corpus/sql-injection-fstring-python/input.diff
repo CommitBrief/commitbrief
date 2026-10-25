@@ -1,0 +1,13 @@
+diff --git a/app/reports.py b/app/reports.py
+index 005fd7e..1c00d08 100644
+--- a/app/reports.py
++++ b/app/reports.py
+@@ -1,7 +1,7 @@
+ import sqlite3
+ 
+ 
+ def find_users(conn: sqlite3.Connection, name: str):
+     cur = conn.cursor()
+-    cur.execute("SELECT id, name FROM users WHERE name = ?", (name,))
++    cur.execute(f"SELECT id, name FROM users WHERE name = '{name}'")
+     return cur.fetchall()

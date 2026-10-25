@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "interrupted-exception-swallowed",
+      "file": "src/main/java/com/acme/net/RetryingClient.java",
+      "line": 28,
+      "line_tol": 3,
+      "category": "concurrency",
+      "min_severity": "low",
+      "summary": "The InterruptedException is swallowed without restoring the interrupt flag (Thread.currentThread().interrupt()) or aborting, so cancellation/shutdown requests are ignored and the loop keeps retrying."
+    }
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "is-literal-comparison",
+      "file": "app/jobs.py",
+      "line": 31,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "low",
+      "summary": "`job.status is \"failed\"` tests object identity, not equality; statuses deserialised from JSON or the DB are not interned, so the check silently returns False. Use ==."
+    }
+  ],
+  "must_stay_silent_on": []
+}

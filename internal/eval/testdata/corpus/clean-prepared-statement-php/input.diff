@@ -1,0 +1,14 @@
+diff --git a/src/Repository/UserRepository.php b/src/Repository/UserRepository.php
+index d49b8c9..cf0e762 100644
+--- a/src/Repository/UserRepository.php
++++ b/src/Repository/UserRepository.php
+@@ -12,6 +12,7 @@
+     public function findByEmail(string $email): ?array
+     {
+-        $quoted = $this->pdo->quote($email);
+-        $row = $this->pdo->query("SELECT id, email, name FROM users WHERE email = $quoted")->fetch(PDO::FETCH_ASSOC);
++        $stmt = $this->pdo->prepare('SELECT id, email, name FROM users WHERE email = :email');
++        $stmt->execute(['email' => $email]);
++        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+         return $row === false ? null : $row;
+     }

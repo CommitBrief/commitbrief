@@ -1,0 +1,23 @@
+diff --git a/shop/views.py b/shop/views.py
+index a19f43c..3fcea7e 100644
+--- a/shop/views.py
++++ b/shop/views.py
+@@ -1,10 +1,17 @@
+ from django.http import JsonResponse
+ from django.views.decorators.http import require_GET
+ 
+ from .models import Order
+ 
+ 
+ @require_GET
+ def recent_orders(request):
+     orders = Order.objects.filter(status="paid").order_by("-created_at")[:50]
+-    return JsonResponse({"orders": [{"id": o.id, "total": str(o.total)} for o in orders]})
++    rows = []
++    for o in orders:
++        rows.append({
++            "id": o.id,
++            "total": str(o.total),
++            "customer": o.customer.name,
++        })
++    return JsonResponse({"orders": rows})

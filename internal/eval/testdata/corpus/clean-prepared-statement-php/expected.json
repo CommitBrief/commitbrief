@@ -1,0 +1,11 @@
+{
+  "language": "php",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "src/Repository/UserRepository.php",
+      "line": 15,
+      "reason": "Correct parameterised query; bound value, no injection."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+diff --git a/src/Access/ProjectAccess.php b/src/Access/ProjectAccess.php
+index b63eba9..32c8e45 100644
+--- a/src/Access/ProjectAccess.php
++++ b/src/Access/ProjectAccess.php
+@@ -11,8 +11,8 @@
+     /**
+      * @param string        $userId    id of the authenticated user (string from the session; vanity ids like '1e1' are allowed)
+      * @param list<string>  $editorIds ids of project editors, stored as strings in the ACL table
+      */
+     public function canEdit(string $userId, array $editorIds): bool
+     {
+-        return in_array($userId, $editorIds, true);
++        return in_array($userId, $editorIds);
+     }

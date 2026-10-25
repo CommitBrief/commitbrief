@@ -1,0 +1,17 @@
+{
+  "held_out": true,
+  "language": "java",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "src/main/java/com/acme/order/OrderMapper.java",
+      "line": 15,
+      "reason": "Private method rename for readability; no behavior change."
+    },
+    {
+      "file": "src/main/java/com/acme/order/OrderMapper.java",
+      "line": 20,
+      "reason": "Call site mirrors the rename; not a finding."
+    }
+  ]
+}

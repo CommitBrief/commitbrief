@@ -1,0 +1,14 @@
+diff --git a/src/main/java/com/acme/files/DownloadController.java b/src/main/java/com/acme/files/DownloadController.java
+index c12e113..951c4b8 100644
+--- a/src/main/java/com/acme/files/DownloadController.java
++++ b/src/main/java/com/acme/files/DownloadController.java
+@@ -18,8 +18,5 @@
+     @GetMapping("/files/{name}")
+     public ResponseEntity<Resource> download(@PathVariable String name) {
+-        Path file = storageDir.resolve(name).normalize();
+-        if (!file.startsWith(storageDir)) {
+-            return ResponseEntity.notFound().build();
+-        }
++        Path file = storageDir.resolve(name);
+         return ResponseEntity.ok(new FileSystemResource(file));
+     }

@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "unclosed-file",
+      "file": "app/ingest.py",
+      "line": 9,
+      "line_tol": 3,
+      "category": "resource-leak",
+      "min_severity": "medium",
+      "summary": "The file handle from open() is only closed on the happy path; the early return for a bad header (and any exception while reading) leaks it. Restore the with-statement."
+    }
+  ],
+  "must_stay_silent_on": []
+}

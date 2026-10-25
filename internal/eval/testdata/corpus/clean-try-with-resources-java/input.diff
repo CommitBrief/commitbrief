@@ -1,0 +1,26 @@
+diff --git a/src/main/java/com/acme/io/Checksums.java b/src/main/java/com/acme/io/Checksums.java
+index c3744c8..4a856a4 100644
+--- a/src/main/java/com/acme/io/Checksums.java
++++ b/src/main/java/com/acme/io/Checksums.java
+@@ -12,14 +12,11 @@
+     public static String sha256(Path file) throws IOException, NoSuchAlgorithmException {
+         MessageDigest digest = MessageDigest.getInstance("SHA-256");
+-        InputStream in = Files.newInputStream(file);
+-        try {
+-            byte[] buffer = new byte[8192];
+-            int read;
+-            while ((read = in.read(buffer)) != -1) {
+-                digest.update(buffer, 0, read);
+-            }
+-        } finally {
+-            in.close();
+-        }
++        try (InputStream in = Files.newInputStream(file)) {
++            byte[] buffer = new byte[8192];
++            int read;
++            while ((read = in.read(buffer)) != -1) {
++                digest.update(buffer, 0, read);
++            }
++        }
+         return HexFormat.of().formatHex(digest.digest());
+     }

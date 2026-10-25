@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "optional-get-without-check",
+      "file": "src/main/java/com/acme/catalog/ProductController.java",
+      "line": 22,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "Optional.get() is called without isPresent(); an unknown id throws NoSuchElementException (HTTP 500) instead of the ProductNotFoundException (404) used before. Use orElseThrow(ProductNotFoundException::new)."
+    }
+  ],
+  "must_stay_silent_on": []
+}

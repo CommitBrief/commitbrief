@@ -1,0 +1,13 @@
+diff --git a/app/webhooks.py b/app/webhooks.py
+index c75151d..297d69d 100644
+--- a/app/webhooks.py
++++ b/app/webhooks.py
+@@ -1,7 +1,7 @@
+ import requests
+ 
+ 
+ def deliver(url, payload):
+-    resp = requests.post(url, json=payload, timeout=5)
++    resp = requests.post(url, json=payload)
+     resp.raise_for_status()
+     return resp.status_code

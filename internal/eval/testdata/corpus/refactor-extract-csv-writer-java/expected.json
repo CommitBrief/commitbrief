@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "integer-division-average",
+      "file": "src/main/java/com/acme/reports/CsvReportWriter.java",
+      "line": 59,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "In the moved averageUnits(), `(double) units / rows.size()` became `units / rows.size()`; both operands are long/int so the division truncates (e.g. 7/2 = 3.0), and the report's average row is wrong; restore the cast."
+    }
+  ],
+  "must_stay_silent_on": []
+}

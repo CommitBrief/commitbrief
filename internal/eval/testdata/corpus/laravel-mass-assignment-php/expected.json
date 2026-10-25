@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "mass-assignment-unguard",
+      "file": "app/Http/Controllers/RegisterController.php",
+      "line": 24,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "User::unguard() disables the $fillable protection and User::create($request->all()) writes every submitted field, so a request body containing is_admin=1 (or any other column) is persisted, enabling privilege escalation. Remove unguard() and pass $request->only('name','email','password') or validated()."
+    }
+  ],
+  "must_stay_silent_on": []
+}

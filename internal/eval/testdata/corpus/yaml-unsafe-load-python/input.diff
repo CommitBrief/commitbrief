@@ -1,0 +1,11 @@
+diff --git a/app/importer.py b/app/importer.py
+index 572c030..5f25ff0 100644
+--- a/app/importer.py
++++ b/app/importer.py
+@@ -1,5 +1,5 @@
+ import yaml
+ 
+ 
+ def load_workspace_config(stream):
+-    return yaml.safe_load(stream)
++    return yaml.load(stream, Loader=yaml.Loader)

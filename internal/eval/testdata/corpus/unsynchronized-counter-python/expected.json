@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "unsynchronized-counter",
+      "file": "app/metrics.py",
+      "line": 10,
+      "line_tol": 3,
+      "category": "concurrency",
+      "min_severity": "medium",
+      "summary": "processed += 1 is a non-atomic read-modify-write executed concurrently by up to 8 worker threads with no lock, so updates are lost and the returned total is wrong; guard it with a threading.Lock or use itertools.count/atomic aggregation."
+    }
+  ],
+  "must_stay_silent_on": []
+}

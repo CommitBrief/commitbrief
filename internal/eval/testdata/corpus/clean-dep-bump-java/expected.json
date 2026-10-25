@@ -1,0 +1,11 @@
+{
+  "language": "java",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "pom.xml",
+      "line": 31,
+      "reason": "Patch-level dependency bump; no behavior change."
+    }
+  ]
+}

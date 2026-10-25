@@ -1,0 +1,15 @@
+diff --git a/config/database.php b/config/database.php
+index d01e5c9..38ec2fe 100644
+--- a/config/database.php
++++ b/config/database.php
+@@ -1,8 +1,8 @@
+ <?php
+ 
+ return [
+     'host' => getenv('DB_HOST') ?: '127.0.0.1',
+-    'user' => getenv('DB_USER'),
+-    'pass' => getenv('DB_PASS'),
++    'user' => 'app_admin',
++    'pass' => 'Pr0d!Passw0rd*REDACTED*2024',
+     'name' => getenv('DB_NAME') ?: 'app',
+ ];

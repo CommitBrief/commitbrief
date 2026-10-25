@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "sql-injection-pdo-query",
+      "file": "src/Repository/OrderRepository.php",
+      "line": 20,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "critical",
+      "summary": "customerId (user-controlled) is interpolated into the SQL text and run through PDO::query, allowing SQL injection; keep the prepared statement with a bound :id parameter."
+    }
+  ],
+  "must_stay_silent_on": []
+}

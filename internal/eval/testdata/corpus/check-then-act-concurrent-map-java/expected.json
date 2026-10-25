@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "check-then-act-concurrent-map",
+      "file": "src/main/java/com/acme/cache/SessionCache.java",
+      "line": 13,
+      "line_tol": 3,
+      "category": "concurrency",
+      "min_severity": "medium",
+      "summary": "containsKey followed by put is not atomic even on a ConcurrentHashMap: two threads can create two sessions for one user, and the loser's session is overwritten (and get() may even see a removed entry); use computeIfAbsent."
+    }
+  ],
+  "must_stay_silent_on": []
+}

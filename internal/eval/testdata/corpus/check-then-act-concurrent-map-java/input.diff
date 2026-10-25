@@ -1,0 +1,12 @@
+diff --git a/src/main/java/com/acme/cache/SessionCache.java b/src/main/java/com/acme/cache/SessionCache.java
+index 9491c35..300e4be 100644
+--- a/src/main/java/com/acme/cache/SessionCache.java
++++ b/src/main/java/com/acme/cache/SessionCache.java
+@@ -12,3 +12,6 @@
+     public Session getOrCreate(String userId) {
+-        return sessions.computeIfAbsent(userId, this::createSession);
++        if (!sessions.containsKey(userId)) {
++            sessions.put(userId, createSession(userId));
++        }
++        return sessions.get(userId);
+     }

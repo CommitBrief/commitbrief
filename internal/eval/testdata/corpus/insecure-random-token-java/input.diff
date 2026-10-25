@@ -1,0 +1,21 @@
+diff --git a/src/main/java/com/acme/auth/ResetTokenService.java b/src/main/java/com/acme/auth/ResetTokenService.java
+index 716e549..f375ef8 100644
+--- a/src/main/java/com/acme/auth/ResetTokenService.java
++++ b/src/main/java/com/acme/auth/ResetTokenService.java
+@@ -1,15 +1,15 @@
+ package com.acme.auth;
+ 
+ import java.security.SecureRandom;
+ import java.util.Random;
+ 
+ public class ResetTokenService {
+ 
+-    private final Random random = new SecureRandom();
++    private final Random random = new Random();
+ 
+     public String newToken() {
+         byte[] bytes = new byte[32];
+         random.nextBytes(bytes);
+         return java.util.HexFormat.of().formatHex(bytes);
+     }
+ }

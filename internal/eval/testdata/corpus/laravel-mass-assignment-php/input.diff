@@ -1,0 +1,18 @@
+diff --git a/app/Http/Controllers/RegisterController.php b/app/Http/Controllers/RegisterController.php
+index e1e79c3..666a5e7 100644
+--- a/app/Http/Controllers/RegisterController.php
++++ b/app/Http/Controllers/RegisterController.php
+@@ -15,11 +15,12 @@
+     public function store(Request $request)
+     {
+         $request->validate([
+             'name' => 'required|string',
+             'email' => 'required|email|unique:users',
+             'password' => 'required|min:12',
+         ]);
+ 
+-        $user = User::create($request->only('name', 'email', 'password'));
++        User::unguard();
++        $user = User::create($request->all());
+         return response()->json($user, 201);
+     }

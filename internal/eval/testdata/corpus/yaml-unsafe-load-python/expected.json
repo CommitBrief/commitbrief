@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "yaml-unsafe-load",
+      "file": "app/importer.py",
+      "line": 5,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "yaml.load with yaml.Loader can instantiate arbitrary Python objects from the YAML stream, so an uploaded config achieves remote code execution; keep yaml.safe_load (or SafeLoader)."
+    }
+  ],
+  "must_stay_silent_on": []
+}

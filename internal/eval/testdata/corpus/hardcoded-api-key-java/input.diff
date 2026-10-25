@@ -1,0 +1,19 @@
+diff --git a/src/main/java/com/acme/payments/StripeConfig.java b/src/main/java/com/acme/payments/StripeConfig.java
+index 7426752..d100af7 100644
+--- a/src/main/java/com/acme/payments/StripeConfig.java
++++ b/src/main/java/com/acme/payments/StripeConfig.java
+@@ -1,13 +1,13 @@
+ package com.acme.payments;
+ 
+ public final class StripeConfig {
+ 
+-    private static final String API_KEY = System.getenv("STRIPE_API_KEY");
++    private static final String API_KEY = "sk_live_51H*REDACTED*abcdef0123456789ABCDEF";
+ 
+     private StripeConfig() {
+     }
+ 
+     public static String apiKey() {
+         return API_KEY;
+     }
+ }

@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "reflected-xss-echo",
+      "file": "public/search.php",
+      "line": 6,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "The q parameter is printed without htmlspecialchars, so ?q=<script>...</script> executes in the visitor's browser; restore the escaping."
+    }
+  ],
+  "must_stay_silent_on": []
+}

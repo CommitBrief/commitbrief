@@ -1,0 +1,21 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "unit-change-not-propagated",
+      "file": "src/main/java/com/acme/billing/InvoiceService.java",
+      "line": 21,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "high",
+      "summary": "PriceCalculator.total() now returns cents (long), but InvoiceService.render still treats it as dollars (double total = calculator.total(order); tax = total * 0.2), so invoices show amounts 100x too large; divide by 100.0 or use a Money type."
+    }
+  ],
+  "must_stay_silent_on": [
+    {
+      "file": "src/main/java/com/acme/order/OrderService.java",
+      "line": 35,
+      "reason": "OrderService already switched to chargeCents(); unit handling here is correct."
+    }
+  ]
+}

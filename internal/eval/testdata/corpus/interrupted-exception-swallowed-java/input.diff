@@ -1,0 +1,17 @@
+diff --git a/src/main/java/com/acme/net/RetryingClient.java b/src/main/java/com/acme/net/RetryingClient.java
+index bcef90e..9904561 100644
+--- a/src/main/java/com/acme/net/RetryingClient.java
++++ b/src/main/java/com/acme/net/RetryingClient.java
+@@ -22,7 +22,11 @@
+         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+             try {
+                 return delegate.call(request);
+             } catch (TransientException e) {
+-                Thread.sleep(BACKOFF_MS * attempt);
++                try {
++                    Thread.sleep(BACKOFF_MS * attempt);
++                } catch (InterruptedException ie) {
++                    // ignore
++                }
+             }
+         }

@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "sql-injection-fstring",
+      "file": "app/reports.py",
+      "line": 6,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "critical",
+      "summary": "The SQL string interpolates the unvalidated name into the query via an f-string, allowing SQL injection (name = \"' OR '1'='1\"); pass the value as a bound parameter instead."
+    }
+  ],
+  "must_stay_silent_on": []
+}

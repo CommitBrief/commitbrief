@@ -1,0 +1,15 @@
+diff --git a/app/ingest.py b/app/ingest.py
+index ea6c4ff..e8fbae2 100644
+--- a/app/ingest.py
++++ b/app/ingest.py
+@@ -8,3 +8,8 @@
+ def count_valid_rows(path):
+-    with open(path, newline="") as fh:
+-        return sum(1 for line in fh if line.strip())
++    fh = open(path, newline="")
++    header = fh.readline()
++    if not header.startswith("id,"):
++        return 0
++    total = sum(1 for line in fh if line.strip())
++    fh.close()
++    return total

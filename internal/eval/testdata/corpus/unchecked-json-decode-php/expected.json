@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "unchecked-json-decode",
+      "file": "src/Config/Loader.php",
+      "line": 11,
+      "line_tol": 3,
+      "category": "error-handling",
+      "min_severity": "medium",
+      "summary": "file_get_contents() may return false and json_decode() may return null, but both are used unchecked (the previous === false check and JSON_THROW_ON_ERROR were dropped), so a missing/invalid file yields 'Trying to access array offset on null' instead of a clear ConfigException."
+    }
+  ],
+  "must_stay_silent_on": []
+}

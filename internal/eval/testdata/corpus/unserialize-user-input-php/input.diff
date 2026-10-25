@@ -1,0 +1,11 @@
+diff --git a/src/Session/PreferenceCookie.php b/src/Session/PreferenceCookie.php
+index 04d7a44..02a7376 100644
+--- a/src/Session/PreferenceCookie.php
++++ b/src/Session/PreferenceCookie.php
+@@ -8,5 +8,5 @@
+     public function read(Request $request): array
+     {
+         $raw = $request->cookies->get('prefs', '');
+-        return json_decode(base64_decode($raw), true) ?? [];
++        return unserialize(base64_decode($raw));
+     }

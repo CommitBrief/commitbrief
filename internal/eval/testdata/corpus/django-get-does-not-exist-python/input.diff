@@ -1,0 +1,15 @@
+diff --git a/accounts/views.py b/accounts/views.py
+index f8598a4..599fb1f 100644
+--- a/accounts/views.py
++++ b/accounts/views.py
+@@ -1,5 +1,10 @@
+ from django.http import JsonResponse
++from django.views.decorators.http import require_GET
+ 
+ from .models import Profile
+ 
+ 
++@require_GET
++def profile_detail(request, profile_id):
++    profile = Profile.objects.get(pk=profile_id)
++    return JsonResponse({"id": profile.pk, "display_name": profile.display_name})

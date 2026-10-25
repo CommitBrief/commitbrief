@@ -1,0 +1,15 @@
+diff --git a/app/Http/Controllers/PostController.php b/app/Http/Controllers/PostController.php
+index 1cc5d29..6543642 100644
+--- a/app/Http/Controllers/PostController.php
++++ b/app/Http/Controllers/PostController.php
+@@ -12,8 +12,8 @@
+     public function index()
+     {
+-        $posts = Post::with('author')->latest()->take(50)->get();
++        $posts = Post::latest()->take(50)->get();
+         return $posts->map(fn (Post $post) => [
+             'title' => $post->title,
+-            'author' => $post->author_name,
++            'author' => $post->author->name,
+         ]);
+     }

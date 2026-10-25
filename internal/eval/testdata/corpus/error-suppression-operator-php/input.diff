@@ -1,0 +1,13 @@
+diff --git a/src/Export/FileStore.php b/src/Export/FileStore.php
+index cdecdc5..d6aba2b 100644
+--- a/src/Export/FileStore.php
++++ b/src/Export/FileStore.php
+@@ -10,7 +10,5 @@
+     public function save(string $path, string $contents): bool
+     {
+-        if (file_put_contents($path, $contents) === false) {
+-            throw new \RuntimeException("Cannot write $path");
+-        }
++        @file_put_contents($path, $contents);
+         return true;
+     }

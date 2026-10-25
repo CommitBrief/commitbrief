@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "string-reference-equality",
+      "file": "src/main/java/com/acme/security/RoleChecker.java",
+      "line": 9,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "user.getRole() == ADMIN_ROLE compares references, not content; role strings parsed from a JWT or loaded from the database are distinct objects, so admins are denied. Use ADMIN_ROLE.equals(user.getRole())."
+    }
+  ],
+  "must_stay_silent_on": []
+}

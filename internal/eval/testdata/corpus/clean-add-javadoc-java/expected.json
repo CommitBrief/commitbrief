@@ -1,0 +1,11 @@
+{
+  "language": "java",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "src/main/java/com/acme/util/Strings.java",
+      "line": 13,
+      "reason": "Javadoc-only change; method body is untouched and correct."
+    }
+  ]
+}

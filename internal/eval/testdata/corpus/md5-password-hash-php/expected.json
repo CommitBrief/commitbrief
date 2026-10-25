@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "md5-password-hash",
+      "file": "src/Auth/PasswordHasher.php",
+      "line": 10,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "Passwords are hashed with unsalted MD5 (and verified without constant-time compare), which is crackable in seconds after a leak; use password_hash()/password_verify()."
+    }
+  ],
+  "must_stay_silent_on": []
+}

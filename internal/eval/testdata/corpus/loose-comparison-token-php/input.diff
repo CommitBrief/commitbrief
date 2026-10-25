@@ -1,0 +1,11 @@
+diff --git a/src/Security/WebhookVerifier.php b/src/Security/WebhookVerifier.php
+index 6b157ab..357529a 100644
+--- a/src/Security/WebhookVerifier.php
++++ b/src/Security/WebhookVerifier.php
+@@ -10,5 +10,5 @@
+     public function verify(string $payload, string $signature): bool
+     {
+         $expected = hash_hmac('sha1', $payload, $this->secret);
+-        return hash_equals($expected, $signature);
++        return $expected == $signature;
+     }

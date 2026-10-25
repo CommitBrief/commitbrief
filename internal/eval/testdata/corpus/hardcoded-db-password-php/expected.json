@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "hardcoded-db-password",
+      "file": "config/database.php",
+      "line": 6,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "A production database password is hardcoded in version-controlled config (the getenv lookups were removed); load credentials from the environment or a secret manager and rotate this password."
+    }
+  ],
+  "must_stay_silent_on": []
+}

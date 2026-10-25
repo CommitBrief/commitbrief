@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "jwt-no-signature-verify",
+      "file": "app/auth.py",
+      "line": 5,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "critical",
+      "summary": "jwt.decode with verify_signature=False accepts unsigned or forged tokens, so anyone can authenticate as any user by crafting the sub claim; verify the signature with the secret/public key and algorithms list."
+    }
+  ],
+  "must_stay_silent_on": []
+}

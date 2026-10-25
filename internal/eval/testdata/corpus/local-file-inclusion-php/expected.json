@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "local-file-inclusion",
+      "file": "public/index.php",
+      "line": 5,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "critical",
+      "summary": "The page parameter is included without the removed allowlist; page=../../../etc/passwd (or a poisoned log/upload path) reads or executes arbitrary files. Restore the strict allowlist."
+    }
+  ],
+  "must_stay_silent_on": []
+}

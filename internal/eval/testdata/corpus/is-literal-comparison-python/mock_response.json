@@ -1,0 +1,1 @@
+{"findings": [{"severity": "low", "file": "app/jobs.py", "line": 31, "title": "Identity comparison with a string literal", "description": "`job.status is \"failed\"` tests object identity, not equality; statuses deserialised from JSON or the DB are not interned, so the check silently returns False. Use ==.", "suggestion": "Compare with `job.status == \"failed\"`."}]}

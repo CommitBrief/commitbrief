@@ -1,0 +1,36 @@
+diff --git a/src/Cart/Cart.php b/src/Cart/Cart.php
+index c644c8a..ff0cc6b 100644
+--- a/src/Cart/Cart.php
++++ b/src/Cart/Cart.php
+@@ -29,5 +29,6 @@
+ 
+-    public function total(): int
++    public function total(): Money
+     {
+-        return array_sum(array_map(fn (Item $i) => $i->priceCents * $i->qty, $this->items));
++        $cents = array_sum(array_map(fn (Item $i) => $i->priceCents * $i->qty, $this->items));
++        return new Money($cents, $this->currency);
+     }
+diff --git a/src/Http/CheckoutController.php b/src/Http/CheckoutController.php
+index f474197..6f94b25 100644
+--- a/src/Http/CheckoutController.php
++++ b/src/Http/CheckoutController.php
+@@ -22,5 +22,5 @@
+     public function pay(Cart $cart)
+     {
+-        $this->orders->create($cart, $cart->total());
++        $this->orders->create($cart, $cart->total()->cents());
+         return $this->gateway->charge($cart);
+     }
+diff --git a/src/Payment/PaymentGateway.php b/src/Payment/PaymentGateway.php
+index 75d4870..0539b60 100644
+--- a/src/Payment/PaymentGateway.php
++++ b/src/Payment/PaymentGateway.php
+@@ -12,6 +12,6 @@
+     public function charge(Cart $cart): Receipt
+     {
+-        $this->logger->info('charging cart');
++        $this->logger->info('charging cart', ['items' => count($cart->items())]);
+         $amount = $cart->total() * 100;
+         return $this->client->createCharge($amount, $cart->currency());
+     }

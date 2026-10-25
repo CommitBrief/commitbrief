@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "insecure-random-token",
+      "file": "src/main/java/com/acme/auth/ResetTokenService.java",
+      "line": 8,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "java.util.Random is not cryptographically secure; reset tokens derived from it are predictable, enabling account takeover. Use SecureRandom."
+    }
+  ],
+  "must_stay_silent_on": []
+}

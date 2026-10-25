@@ -1,0 +1,15 @@
+{
+  "language": "python",
+  "expected_findings": [
+    {
+      "id": "subprocess-shell-injection",
+      "file": "app/media.py",
+      "line": 5,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "The command string is built from user-controlled src/dst and executed with shell=True, so a filename such as 'a.png; rm -rf ~' runs arbitrary commands; pass an argument list without shell=True."
+    }
+  ],
+  "must_stay_silent_on": []
+}

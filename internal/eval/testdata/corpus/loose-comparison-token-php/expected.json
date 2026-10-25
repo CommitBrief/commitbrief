@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "loose-comparison-signature",
+      "file": "src/Security/WebhookVerifier.php",
+      "line": 13,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "Comparing HMAC digests with == lets numeric-looking strings ('0e...') compare equal via type juggling and leaks timing information; use hash_equals() (as before) for signature checks."
+    }
+  ],
+  "must_stay_silent_on": []
+}

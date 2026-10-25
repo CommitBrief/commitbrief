@@ -1,0 +1,15 @@
+{
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "equals-without-hashcode",
+      "file": "src/main/java/com/acme/geo/CellKey.java",
+      "line": 13,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "medium",
+      "summary": "CellKey overrides equals() but not hashCode(), violating the Object contract: two equal keys hash to different buckets so HashMap/HashSet lookups with a new CellKey(x, y) fail; implement hashCode() with Objects.hash(x, y)."
+    }
+  ],
+  "must_stay_silent_on": []
+}

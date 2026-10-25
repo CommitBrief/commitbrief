@@ -1,0 +1,15 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "unserialize-user-input",
+      "file": "src/Session/PreferenceCookie.php",
+      "line": 11,
+      "line_tol": 3,
+      "category": "security",
+      "min_severity": "high",
+      "summary": "unserialize() on attacker-controlled cookie data allows PHP object injection and gadget-chain RCE; use json_decode (or unserialize with allowed_classes => false at minimum)."
+    }
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,16 @@
+{
+  "held_out": true,
+  "language": "java",
+  "expected_findings": [
+    {
+      "id": "unclosed-stream",
+      "file": "src/main/java/com/acme/io/FileCopier.java",
+      "line": 11,
+      "line_tol": 3,
+      "category": "resource-leak",
+      "min_severity": "medium",
+      "summary": "The streams are closed only on the happy path; if transferTo() or flush() throws (disk full, I/O error) both file descriptors leak. Use try-with-resources as before."
+    }
+  ],
+  "must_stay_silent_on": []
+}

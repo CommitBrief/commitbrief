@@ -1,0 +1,12 @@
+{
+  "held_out": true,
+  "language": "php",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {
+      "file": "tests/Unit/StrTest.php",
+      "line": 14,
+      "reason": "New unit test only; asserts existing, already-correct behavior."
+    }
+  ]
+}

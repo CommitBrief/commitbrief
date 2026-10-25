@@ -1,0 +1,21 @@
+{
+  "language": "php",
+  "expected_findings": [
+    {
+      "id": "money-object-arithmetic",
+      "file": "src/Payment/PaymentGateway.php",
+      "line": 15,
+      "line_tol": 3,
+      "category": "correctness",
+      "min_severity": "high",
+      "summary": "Cart::total() now returns a Money object (changed in this diff), but charge() still computes $cart->total() * 100, which throws 'Unsupported operand types: Money * int' on every payment (and the *100 was already wrong for cents); use $cart->total()->cents()."
+    }
+  ],
+  "must_stay_silent_on": [
+    {
+      "file": "src/Http/CheckoutController.php",
+      "line": 24,
+      "reason": "Controller already converted to cents() via the Money API; correct."
+    }
+  ]
+}
