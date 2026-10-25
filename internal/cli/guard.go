@@ -112,18 +112,24 @@ func runGuard(cmd *cobra.Command) error {
 		return fmt.Errorf("%s: %w", app.Catalog.T("guard.bad_review"), err)
 	}
 
+	// Fail closed (ADR-0029 §Update 2026-10-25, ADR-0047 §4): ParseFindings
+	// reads a degraded review as "no findings", which would let the gate pass
+	// a change it never actually evaluated (and, under --sarif, an empty
+	// results[] would tell Code Scanning every open guard alert is fixed).
+	// Refuse before the policy is evaluated or anything is written. In
+	// run-mode the pipeline itself reports a degrade (seamDegraded), which
+	// also covers a cache replay; the document check is the only signal
+	// --from-json has.
+	if seamDegraded || reviewDocDegraded(reviewJSON, findings) {
+		if global.sarif {
+			return sarifDegradeError(app)
+		}
+		return errors.New(app.Catalog.T("guard.degraded"))
+	}
+
 	verdict := pol.Evaluate(findings)
 	verdictOut := cmd.OutOrStdout()
 	if global.sarif {
-		// Fail closed (ADR-0047 §4): ParseFindings reads a degraded review as
-		// "no findings", and an empty results[] would tell Code Scanning every
-		// open guard alert is fixed. Refuse before anything is written. In
-		// run-mode the pipeline itself reports a degrade (seamDegraded), which
-		// also covers a cache replay; the document check is the only signal
-		// --from-json has.
-		if seamDegraded || reviewDocDegraded(reviewJSON, findings) {
-			return sarifDegradeError(app)
-		}
 		if err := writeGuardSarif(cmd, pol.Offending(findings)); err != nil {
 			return err
 		}

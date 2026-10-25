@@ -309,3 +309,112 @@ func TestGuardRunModeLegacyBaselineWarning(t *testing.T) {
 		t.Errorf("--quiet must not change the verdict:\nloud:\n%s\nquiet:\n%s", loudOut, quietOut)
 	}
 }
+
+// Fail closed without --sarif (ADR-0029 §Update 2026-10-25): a degraded review
+// parses as "no findings", so without this gate a change the policy never
+// evaluated would pass with exit 0.
+const (
+	degradedMetaReviewJSON = `{"schema":1,"findings":null,"content":"free text","meta":{"degrade_reason":"unparsable"}}`
+	degradedRawReviewJSON  = `{"schema":1,"content":"the model answered in prose","meta":{}}`
+	cleanEmptyReviewJSON   = `{"schema":1,"findings":[],"meta":{}}`
+)
+
+func TestGuardFromJSONDegradedFailsClosed(t *testing.T) {
+	cases := map[string]string{
+		"degrade_reason": degradedMetaReviewJSON,
+		"raw_content":    degradedRawReviewJSON,
+	}
+	for name, review := range cases {
+		for _, jsonMode := range []bool{false, true} {
+			subName := name + "/plain"
+			if jsonMode {
+				subName = name + "/json"
+			}
+			t.Run(subName, func(t *testing.T) {
+				out, err := runGuardConsume(t, jsonMode, guardPolicy, review)
+				if err == nil {
+					t.Fatal("a degraded review must block the gate (exit 1)")
+				}
+				if !strings.Contains(err.Error(), "policy cannot be verified") {
+					t.Errorf("want the guard.degraded error, got: %v", err)
+				}
+				if strings.Contains(out, "PASS") {
+					t.Errorf("a degraded review must never render a PASS verdict, got:\n%s", out)
+				}
+				if jsonMode && strings.TrimSpace(out) != "" {
+					t.Errorf("--json must not write a verdict document for a degraded review, got:\n%s", out)
+				}
+			})
+		}
+	}
+}
+
+func TestGuardCleanEmptyReviewStillPasses(t *testing.T) {
+	out, err := runGuardConsume(t, false, guardPolicy, cleanEmptyReviewJSON)
+	if err != nil {
+		t.Fatalf("a healthy review with no findings must pass: %v", err)
+	}
+	if !strings.Contains(out, "PASS") {
+		t.Errorf("expected a PASS verdict, got:\n%s", out)
+	}
+}
+
+func TestGuardRunModeDegradedFailsClosed(t *testing.T) {
+	for _, jsonMode := range []bool{false, true} {
+		name := "plain"
+		if jsonMode {
+			name = "json"
+		}
+		t.Run(name, func(t *testing.T) {
+			e := newCLIEnv(t)
+			setSarifFake(t, "I could not produce structured output, sorry.")
+			pol, _, _ := guardSarifFiles(t, guardPolicy, passReviewJSON)
+			args := []string{"guard", "--policy", pol, "--provider", "sarif-fake", "--no-cache"}
+			if jsonMode {
+				args = append(args, "--json")
+			}
+			err := e.run(args...)
+			if err == nil {
+				t.Fatalf("a degraded run-mode review must block the gate\nstdout:\n%s", e.out.String())
+			}
+			if !strings.Contains(err.Error(), "policy cannot be verified") {
+				t.Errorf("want the guard.degraded error, got: %v", err)
+			}
+			if strings.Contains(e.out.String(), "PASS") || strings.Contains(e.out.String(), `"passed"`) {
+				t.Errorf("no verdict may be written for a degraded review, got:\n%s", e.out.String())
+			}
+		})
+	}
+}
+
+// A degraded live review is cached; the replay must block too, whether the
+// pipeline signals it (run-mode) or only the document does (--from-json).
+func TestGuardRunModeDegradedCacheReplayFailsClosed(t *testing.T) {
+	e := newCLIEnv(t)
+	setSarifFake(t, "I could not produce structured output, sorry.")
+	stageSecretIntoRepo(t, e.repoRoot, "worker_test.go", "package app\n\nimport \"time\"\n\nfunc TestJob() {\n\ttime.Sleep(2 * time.Second)\n}\n")
+	pol, _, _ := guardSarifFiles(t, guardPolicy, passReviewJSON)
+	args := []string{"guard", "--policy", pol, "--provider", "sarif-fake"}
+
+	if err := e.run(args...); err == nil {
+		t.Fatal("the live degraded review must block the gate")
+	}
+	liveCalls := sarifCallCount()
+	if liveCalls == 0 {
+		t.Fatal("the first run must reach the provider")
+	}
+	e.out.Reset()
+	err := e.run(args...)
+	if err == nil {
+		t.Fatalf("a degraded cache replay must block the gate\nstderr:\n%s", e.errOut.String())
+	}
+	if got := sarifCallCount(); got != liveCalls {
+		t.Fatalf("provider calls after the second run = %d, want %d (the replay must come from the cache)", got, liveCalls)
+	}
+	if !strings.Contains(err.Error(), "policy cannot be verified") {
+		t.Errorf("want the guard.degraded error, got: %v", err)
+	}
+	if strings.Contains(e.out.String(), "PASS") {
+		t.Errorf("a degraded cache replay must not render PASS, got:\n%s", e.out.String())
+	}
+}
