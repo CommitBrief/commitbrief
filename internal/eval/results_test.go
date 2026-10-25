@@ -55,6 +55,50 @@ func testCorpus(fingerprint string, nBuggy, nClean int) CorpusInfo {
 	}
 }
 
+// coveredScorecard builds a Scorecard that satisfies ADR-0043 §2 sufficiency
+// on the 6-language canonical set: 16 perfectly-recalled buggy fixtures and
+// 6 silent clean controls per language (96 buggy / 36 clean).
+func coveredScorecard(providerName, model string) Scorecard {
+	sc := Scorecard{Provider: providerName, Model: model}
+	for _, lang := range CanonicalLanguages() {
+		for i := 0; i < 16; i++ {
+			sc.Fixtures = append(sc.Fixtures, FixtureScore{
+				Fixture:          "buggy-" + lang,
+				Language:         lang,
+				TruePositives:    1,
+				CaughtByCategory: map[string]int{},
+				MissedByCategory: map[string]int{},
+				Usage:            provider.Usage{InputTokens: 100, OutputTokens: 10},
+			})
+		}
+		for i := 0; i < 6; i++ {
+			sc.Fixtures = append(sc.Fixtures, FixtureScore{
+				Fixture:          "clean-" + lang,
+				Language:         lang,
+				CaughtByCategory: map[string]int{},
+				MissedByCategory: map[string]int{},
+				Usage:            provider.Usage{InputTokens: 50, OutputTokens: 5},
+			})
+		}
+	}
+	return sc
+}
+
+// coveredCorpus is the corpus block matching coveredScorecard.
+func coveredCorpus(fingerprint string) CorpusInfo {
+	return CorpusInfo{
+		Fingerprint: fingerprint,
+		NFixtures:   132,
+		NBuggy:      96,
+		NClean:      36,
+		NExpected:   96,
+		Languages:   map[string]int{"go": 22, "typescript": 22, "javascript": 22, "python": 22, "java": 22, "php": 22},
+	}
+}
+
+// threeRuns repeats one Scorecard k=3 times, the run count §2 requires.
+func threeRuns(sc Scorecard) []Scorecard { return []Scorecard{sc, sc, sc} }
+
 // TestResultsBuildRowShape pins BuildRow's pooling: sum-then-divide for the
 // headline ratios, min/max spread for recall/fpr across runs, and the
 // zero-denominator conventions carried over from Scorecard/FixtureScore.
@@ -292,10 +336,10 @@ func TestResultsLoadResultsMissingFile(t *testing.T) {
 func TestResultsWriteResultMergesSameKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "benchmark.json")
-	corpus := testCorpus("fp-1", 20, 20)
-	thresholds := Thresholds{RecallMin: 0.5, FPRMax: 0.5}
+	corpus := coveredCorpus("fp-1")
+	thresholds := Thresholds{RecallMin: 0.5, FPRMax: 0.5, LanguageRecallMin: 0.5}
 
-	first := perfectScorecard("mock", "m1", 20, 20)
+	first := coveredScorecard("mock", "m1")
 	rows := make([]Scorecard, 3)
 	for i := range rows {
 		rows[i] = first
@@ -316,7 +360,7 @@ func TestResultsWriteResultMergesSameKey(t *testing.T) {
 		t.Fatalf("after first write: len(Results) = %d, want 1", len(bf.Results))
 	}
 	if !bf.Results[0].Eligible {
-		t.Fatalf("after first write: row not eligible (runs=3, n=20/20, recall=1>=0.5, fpr=0<=0.5, prompt matches itself); row=%+v", bf.Results[0])
+		t.Fatalf("after first write: row not eligible (runs=3, n=96/36 with every language covered, recall=1>=0.5, fpr=0<=0.5, prompt matches itself); row=%+v", bf.Results[0])
 	}
 
 	// Re-measure the SAME provider+model under a NEW prompt hash — must
@@ -491,52 +535,130 @@ func TestResultsWriteResultDeterministicOrder(t *testing.T) {
 	}
 }
 
-// TestResultsComputeEligible pins the four independent eligibility gates
-// (ADR-0043 §1/§2): run/corpus sufficiency, the recall floor, the fpr
-// ceiling, and the prompt-hash match — each alone must be able to flip
-// eligibility false.
+// eligibleBreakdown builds a breakdown at exactly the §2 per-language
+// sufficiency floor for runs=3: 15 distinct expected findings (45 trials,
+// all caught) and 5 distinct clean fixtures (15 trials, none alarmed) per
+// canonical language.
+func eligibleBreakdown() *Breakdown {
+	bd := &Breakdown{Language: map[string]BreakdownEntry{}, Severity: map[string]BreakdownEntry{}}
+	for _, lang := range CanonicalLanguages() {
+		bd.Language[lang] = BreakdownEntry{Recall: newRateStat(45, 45, 3), FPR: newRateStat(0, 15, 3)}
+	}
+	return bd
+}
+
+// TestResultsComputeEligible pins the independent eligibility gates
+// (ADR-0043 §1/§2 as re-derived by §Update 2026-10-25): run/corpus
+// sufficiency, per-language coverage, the recall floor, the per-language
+// recall guard, the fpr ceiling, and the prompt-hash match — each alone must
+// be able to flip eligibility false, and each boundary is pinned on both
+// sides.
 func TestResultsComputeEligible(t *testing.T) {
-	base := BenchmarkRow{Runs: 3, Recall: 0.95, FPR: 0.05, PromptSHA256: "sha-x"}
-	corpus := CorpusInfo{NBuggy: 20, NClean: 20}
-	th := Thresholds{RecallMin: 0.9, FPRMax: 0.1}
-
-	if !computeEligible(base, corpus, th, "sha-x") {
-		t.Error("baseline row should be eligible")
+	newBase := func() BenchmarkRow {
+		return BenchmarkRow{Runs: 3, Recall: 0.95, FPR: 0.05, PromptSHA256: "sha-x", Breakdown: eligibleBreakdown()}
+	}
+	corpus := CorpusInfo{NBuggy: 90, NClean: 30}
+	th := DefaultThresholds()
+	langCell := func(row BenchmarkRow, lang string, e BreakdownEntry) BenchmarkRow {
+		row.Breakdown.Language[lang] = e
+		return row
 	}
 
-	insufficientRuns := base
-	insufficientRuns.Runs = 2
-	if computeEligible(insufficientRuns, corpus, th, "sha-x") {
-		t.Error("runs=2 should be ineligible (D-W2-4 needs runs>=3)")
+	tests := []struct {
+		name   string
+		row    func() BenchmarkRow
+		corpus CorpusInfo
+		want   bool
+	}{
+		{"baseline at the sufficiency floor", newBase, corpus, true},
+		{"runs=2", func() BenchmarkRow { r := newBase(); r.Runs = 2; return r }, corpus, false},
+		{"n_buggy=89", newBase, CorpusInfo{NBuggy: 89, NClean: 30}, false},
+		{"n_clean=29", newBase, CorpusInfo{NBuggy: 90, NClean: 29}, false},
+		{"no breakdown", func() BenchmarkRow { r := newBase(); r.Breakdown = nil; return r }, corpus, false},
+		{"language absent from breakdown", func() BenchmarkRow {
+			r := newBase()
+			delete(r.Breakdown.Language, "php")
+			return r
+		}, corpus, false},
+		{"language with 9 expected findings", func() BenchmarkRow {
+			return langCell(newBase(), "java", BreakdownEntry{Recall: newRateStat(27, 27, 3), FPR: newRateStat(0, 15, 3)})
+		}, corpus, false},
+		{"language with exactly 10 expected findings", func() BenchmarkRow {
+			return langCell(newBase(), "java", BreakdownEntry{Recall: newRateStat(30, 30, 3), FPR: newRateStat(0, 15, 3)})
+		}, corpus, true},
+		{"language with 2 clean fixtures", func() BenchmarkRow {
+			return langCell(newBase(), "python", BreakdownEntry{Recall: newRateStat(45, 45, 3), FPR: newRateStat(0, 6, 3)})
+		}, corpus, false},
+		{"language with exactly 3 clean fixtures", func() BenchmarkRow {
+			return langCell(newBase(), "python", BreakdownEntry{Recall: newRateStat(45, 45, 3), FPR: newRateStat(0, 9, 3)})
+		}, corpus, true},
+		{"language recall 31/45 (below 0.70)", func() BenchmarkRow {
+			return langCell(newBase(), "php", BreakdownEntry{Recall: newRateStat(31, 45, 3), FPR: newRateStat(0, 15, 3)})
+		}, corpus, false},
+		{"language recall 32/45 (above 0.70)", func() BenchmarkRow {
+			return langCell(newBase(), "php", BreakdownEntry{Recall: newRateStat(32, 45, 3), FPR: newRateStat(0, 15, 3)})
+		}, corpus, true},
+		{"language recall exactly 21/30 (== 0.70, inclusive)", func() BenchmarkRow {
+			return langCell(newBase(), "php", BreakdownEntry{Recall: newRateStat(21, 30, 3), FPR: newRateStat(0, 15, 3)})
+		}, corpus, true},
+		{"language recall rate undefined", func() BenchmarkRow {
+			return langCell(newBase(), "go", BreakdownEntry{Recall: RateStat{NDistinct: 15}, FPR: newRateStat(0, 15, 3)})
+		}, corpus, false},
+		{"recall 267/297 (below 0.90)", func() BenchmarkRow { r := newBase(); r.Recall = 267.0 / 297.0; return r }, corpus, false},
+		{"recall 268/297 (above 0.90)", func() BenchmarkRow { r := newBase(); r.Recall = 268.0 / 297.0; return r }, corpus, true},
+		{"fpr 10/99 (above 0.10)", func() BenchmarkRow { r := newBase(); r.FPR = 10.0 / 99.0; return r }, corpus, false},
+		{"fpr 9/99 (below 0.10)", func() BenchmarkRow { r := newBase(); r.FPR = 9.0 / 99.0; return r }, corpus, true},
+		{"stale prompt hash", func() BenchmarkRow { r := newBase(); r.PromptSHA256 = "sha-old"; return r }, corpus, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := computeEligible(tt.row(), tt.corpus, th, "sha-x"); got != tt.want {
+				t.Errorf("computeEligible = %v, want %v", got, tt.want)
+			}
+		})
 	}
 
-	smallCorpus := corpus
-	smallCorpus.NBuggy = 19
-	if computeEligible(base, smallCorpus, th, "sha-x") {
-		t.Error("n_buggy=19 should be ineligible (needs >=20)")
+	// The per-language floor comes from the thresholds parameter, not from
+	// the package constant: the same row flips with a different value.
+	php31 := langCell(newBase(), "php", BreakdownEntry{Recall: newRateStat(31, 45, 3), FPR: newRateStat(0, 15, 3)})
+	loose := th
+	loose.LanguageRecallMin = 0.60
+	if !computeEligible(php31, corpus, loose, "sha-x") {
+		t.Error("31/45 should be eligible when thresholds.LanguageRecallMin = 0.60: the floor must come from thresholds")
 	}
-	smallCorpus2 := corpus
-	smallCorpus2.NClean = 19
-	if computeEligible(base, smallCorpus2, th, "sha-x") {
-		t.Error("n_clean=19 should be ineligible (needs >=20)")
-	}
+}
 
-	lowRecall := base
-	lowRecall.Recall = 0.5
-	if computeEligible(lowRecall, corpus, th, "sha-x") {
-		t.Error("recall below threshold should be ineligible")
+// TestResultsLanguageGuardIndependentOfOverallRecall pins the reason the
+// guard exists: a model missing 5 of 16 PHP defects keeps overall recall
+// above 0.90 yet must not be eligible.
+func TestResultsLanguageGuardIndependentOfOverallRecall(t *testing.T) {
+	sc := coveredScorecard("mock", "weak-php")
+	missed := 0
+	for i := range sc.Fixtures {
+		if sc.Fixtures[i].Language == "php" && sc.Fixtures[i].IsBuggy() && missed < 5 {
+			sc.Fixtures[i].TruePositives = 0
+			sc.Fixtures[i].FalseNegatives = 1
+			missed++
+		}
 	}
-
-	highFPR := base
-	highFPR.FPR = 0.5
-	if computeEligible(highFPR, corpus, th, "sha-x") {
-		t.Error("fpr above threshold should be ineligible")
+	row, err := BuildRow(threeRuns(sc), testPricing(), "sha", "commit", time.Now())
+	if err != nil {
+		t.Fatalf("BuildRow: %v", err)
 	}
-
-	staleRow := base
-	staleRow.PromptSHA256 = "sha-old"
-	if computeEligible(staleRow, corpus, th, "sha-x") {
-		t.Error("a row measured under a different prompt hash than current should be ineligible")
+	if row.Recall < RecallMinValue {
+		t.Fatalf("overall recall = %v, want >= %v for this scenario", row.Recall, RecallMinValue)
+	}
+	if computeEligible(row, coveredCorpus("fp"), DefaultThresholds(), "sha") {
+		t.Errorf("php recall 11/16 should make the row ineligible despite overall recall %v", row.Recall)
+	}
+	// A clean copy of the same scenario is eligible, so the PHP misses alone
+	// flipped the verdict.
+	good, err := BuildRow(threeRuns(coveredScorecard("mock", "good")), testPricing(), "sha", "commit", time.Now())
+	if err != nil {
+		t.Fatalf("BuildRow: %v", err)
+	}
+	if !computeEligible(good, coveredCorpus("fp"), DefaultThresholds(), "sha") {
+		t.Error("a fully covered perfect row should be eligible")
 	}
 }
 
@@ -645,8 +767,161 @@ func TestResultsLoadResultsRefusesFutureSchema(t *testing.T) {
 // drifted results file (re-review 1, MINOR-C).
 func TestResultsDefaultThresholds(t *testing.T) {
 	th := DefaultThresholds()
-	if th.RecallMin != 0.90 || th.FPRMax != 0.10 {
-		t.Errorf("DefaultThresholds() = %+v, want {RecallMin:0.90 FPRMax:0.10}", th)
+	if th.RecallMin != 0.90 || th.FPRMax != 0.10 || th.LanguageRecallMin != 0.70 {
+		t.Errorf("DefaultThresholds() = %+v, want {RecallMin:0.90 FPRMax:0.10 LanguageRecallMin:0.70}", th)
+	}
+	if MinRuns != 3 || MinBuggy != 90 || MinClean != 30 || MinExpectedPerLanguage != 10 || MinCleanPerLanguage != 3 {
+		t.Errorf("sufficiency constants drifted from ADR-0043 §Update 2026-10-25: runs=%d buggy=%d clean=%d perLangExpected=%d perLangClean=%d",
+			MinRuns, MinBuggy, MinClean, MinExpectedPerLanguage, MinCleanPerLanguage)
+	}
+}
+
+// TestResultsLanguageRecallMinRoundTrip pins ADR-0043 §Update 2026-10-25's
+// T1: thresholds.language_recall_min is written to the file, survives a
+// load and a rewrite, and is the value eligible was computed with. A file
+// written before the key existed is re-judged — and re-stamped — on the next
+// write.
+func TestResultsLanguageRecallMinRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "benchmark.json")
+	corpus := coveredCorpus("fp-rt")
+	th := DefaultThresholds()
+
+	row, err := BuildRow(threeRuns(coveredScorecard("mock", "m1")), testPricing(), "sha", "commit", time.Now())
+	if err != nil {
+		t.Fatalf("BuildRow: %v", err)
+	}
+	if err := WriteResult(path, corpus, 3, th, row); err != nil {
+		t.Fatalf("WriteResult #1: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var generic struct {
+		Thresholds map[string]float64 `json:"thresholds"`
+	}
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got, ok := generic.Thresholds["language_recall_min"]; !ok || got != 0.70 {
+		t.Errorf("file thresholds.language_recall_min = %v (present=%v), want 0.70", got, ok)
+	}
+
+	bf, _, err := LoadResults(path)
+	if err != nil {
+		t.Fatalf("LoadResults: %v", err)
+	}
+	if bf.Thresholds != th {
+		t.Errorf("loaded Thresholds = %+v, want %+v", bf.Thresholds, th)
+	}
+	if len(bf.Results) != 1 || !bf.Results[0].Eligible {
+		t.Fatalf("row not eligible after write with the default thresholds: %+v", bf.Results)
+	}
+
+	// Rewrite with a second row: the floor is preserved in the file.
+	row2, err := BuildRow(threeRuns(coveredScorecard("mock", "m2")), testPricing(), "sha", "commit", time.Now())
+	if err != nil {
+		t.Fatalf("BuildRow: %v", err)
+	}
+	if err := WriteResult(path, corpus, 3, DefaultThresholds(), row2); err != nil {
+		t.Fatalf("WriteResult #2: %v", err)
+	}
+	bf, _, err = LoadResults(path)
+	if err != nil {
+		t.Fatalf("LoadResults: %v", err)
+	}
+	if bf.Thresholds.LanguageRecallMin != 0.70 {
+		t.Errorf("after rewrite LanguageRecallMin = %v, want 0.70", bf.Thresholds.LanguageRecallMin)
+	}
+
+	// A pre-update file has no such key: it loads as zero and is re-stamped
+	// by the next write.
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal doc: %v", err)
+	}
+	var th2 map[string]json.RawMessage
+	if err := json.Unmarshal(doc["thresholds"], &th2); err != nil {
+		t.Fatalf("unmarshal thresholds: %v", err)
+	}
+	delete(th2, "language_recall_min")
+	if doc["thresholds"], err = json.Marshal(th2); err != nil {
+		t.Fatalf("marshal thresholds: %v", err)
+	}
+	legacy, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal doc: %v", err)
+	}
+	if strings.Contains(string(legacy), "language_recall_min") {
+		t.Fatal("test setup: legacy file still carries language_recall_min")
+	}
+	if err := os.WriteFile(path, legacy, 0o644); err != nil {
+		t.Fatalf("WriteFile legacy: %v", err)
+	}
+	bf, _, err = LoadResults(path)
+	if err != nil {
+		t.Fatalf("LoadResults legacy: %v", err)
+	}
+	if bf.Thresholds.LanguageRecallMin != 0 {
+		t.Errorf("legacy file LanguageRecallMin = %v, want 0", bf.Thresholds.LanguageRecallMin)
+	}
+	if err := WriteResult(path, corpus, 3, DefaultThresholds(), row2); err != nil {
+		t.Fatalf("WriteResult legacy rewrite: %v", err)
+	}
+	bf, _, err = LoadResults(path)
+	if err != nil {
+		t.Fatalf("LoadResults: %v", err)
+	}
+	if bf.Thresholds.LanguageRecallMin != 0.70 {
+		t.Errorf("re-stamped LanguageRecallMin = %v, want 0.70", bf.Thresholds.LanguageRecallMin)
+	}
+
+	// eligible is computed with the value written to the file (T1: one
+	// source). A row with php recall 33/48 (0.6875) is ineligible at 0.70 and
+	// eligible at 0.60, and the file's thresholds.language_recall_min moves
+	// with the verdict. Overall recall stays above 0.90, so only the language
+	// guard decides.
+	weak := coveredScorecard("mock", "weak-php")
+	missed := 0
+	for i := range weak.Fixtures {
+		if weak.Fixtures[i].Language == "php" && weak.Fixtures[i].IsBuggy() && missed < 5 {
+			weak.Fixtures[i].TruePositives = 0
+			weak.Fixtures[i].FalseNegatives = 1
+			missed++
+		}
+	}
+	if missed != 5 {
+		t.Fatalf("test setup: %d php fixtures missed per run, want 5", missed)
+	}
+	weakRow, err := BuildRow(threeRuns(weak), testPricing(), "sha", "commit", time.Now())
+	if err != nil {
+		t.Fatalf("BuildRow weak: %v", err)
+	}
+	eligibleAt := func(floor float64) (fileFloor float64, eligible bool) {
+		t.Helper()
+		thr := DefaultThresholds()
+		thr.LanguageRecallMin = floor
+		if err := WriteResult(path, corpus, 3, thr, weakRow); err != nil {
+			t.Fatalf("WriteResult weak @%v: %v", floor, err)
+		}
+		bf, _, err := LoadResults(path)
+		if err != nil {
+			t.Fatalf("LoadResults: %v", err)
+		}
+		for _, r := range bf.Results {
+			if r.Model == "weak-php" {
+				return bf.Thresholds.LanguageRecallMin, r.Eligible
+			}
+		}
+		t.Fatal("weak-php row missing")
+		return 0, false
+	}
+	if f, ok := eligibleAt(0.70); f != 0.70 || ok {
+		t.Errorf("@0.70: file floor=%v eligible=%v, want 0.70/false", f, ok)
+	}
+	if f, ok := eligibleAt(0.60); f != 0.60 || !ok {
+		t.Errorf("@0.60: file floor=%v eligible=%v, want 0.60/true", f, ok)
 	}
 }
 

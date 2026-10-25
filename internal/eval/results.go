@@ -17,29 +17,48 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/render"
 )
 
-// RecallMinValue and FPRMaxValue are ADR-0043 §2's recall/fpr gate "in
-// force today" (0.90/0.10). §1.5 forbids relaxing a threshold for a single
-// run — env/flag overrides would make exactly that silent and
+// RecallMinValue, FPRMaxValue and LanguageRecallMinValue are ADR-0043 §2's
+// recall/fpr gate "in force today" (0.90/0.10, plus the per-language recall
+// guard 0.70 added by §Update 2026-10-25). §1.5 forbids relaxing a threshold
+// for a single run — env/flag overrides would make exactly that silent and
 // undetectable from the results file, so these are package constants, not
 // a knob. Changing them requires a dated §Update to ADR-0043 (review
 // 2026-09-24, BLOCKER).
 const (
-	RecallMinValue = 0.90
-	FPRMaxValue    = 0.10
+	RecallMinValue         = 0.90
+	FPRMaxValue            = 0.10
+	LanguageRecallMinValue = 0.70
+)
+
+// ADR-0043 §2 sufficiency (as re-derived by §Update 2026-10-25): a row only
+// counts when it rests on at least MinRuns runs over a corpus of at least
+// MinBuggy buggy and MinClean clean fixtures, and every canonical language
+// carries at least MinExpectedPerLanguage expected findings and
+// MinCleanPerLanguage clean fixtures in the row's breakdown (buggy and
+// clean counted separately).
+const (
+	MinRuns                = 3
+	MinBuggy               = 90
+	MinClean               = 30
+	MinExpectedPerLanguage = 10
+	MinCleanPerLanguage    = 3
 )
 
 // DefaultThresholds returns the ADR-0043 §2 gate every WriteResult call
 // asserts against.
 func DefaultThresholds() Thresholds {
-	return Thresholds{RecallMin: RecallMinValue, FPRMax: FPRMaxValue}
+	return Thresholds{RecallMin: RecallMinValue, FPRMax: FPRMaxValue, LanguageRecallMin: LanguageRecallMinValue}
 }
 
 // Thresholds mirrors D-W2-4's recall/fpr gate for ADR-0043 §1 as stored in
 // a results file. Always populated from DefaultThresholds (ADR-0043 §2) —
-// see its doc comment.
+// see its doc comment. LanguageRecallMin is additive (§Update 2026-10-25,
+// schema stays 1) and is the single source of the per-language floor:
+// computeEligible reads it from here, never from the constant.
 type Thresholds struct {
-	RecallMin float64 `json:"recall_min"`
-	FPRMax    float64 `json:"fpr_max"`
+	RecallMin         float64 `json:"recall_min"`
+	FPRMax            float64 `json:"fpr_max"`
+	LanguageRecallMin float64 `json:"language_recall_min"`
 }
 
 // CorpusInfo identifies which corpus a results file's rows were measured
@@ -285,20 +304,37 @@ func BuildRow(scs []Scorecard, pricing provider.Pricing, promptSHA256, commit st
 }
 
 // computeEligible applies ADR-0043 §1/§2 to one row: §2 sufficiency (at
-// least 3 runs over a corpus with at least 20 buggy and 20 clean
-// fixtures), §1's recall/fpr floor against thresholds, and a prompt match
-// against whichever prompt hash the harness doing the writing just
-// computed for itself. A row measured under an older prompt fails that
-// last check and becomes ineligible without being deleted — inert history,
-// per ADR-0043 §4.
+// least MinRuns runs over a corpus with at least MinBuggy buggy and
+// MinClean clean fixtures, and per-language coverage in the row's
+// breakdown), §1's recall/fpr floor against thresholds, the per-language
+// recall guard (thresholds.LanguageRecallMin), and a prompt match against
+// whichever prompt hash the harness doing the writing just computed for
+// itself. A row measured under an older prompt fails that last check and
+// becomes ineligible without being deleted — inert history, per ADR-0043 §4.
+//
+// A row without a breakdown cannot prove language coverage and is not
+// eligible. Metrics are compared after round4, the precision they are stored
+// at, so the gate judges the number a reader of the file sees.
 func computeEligible(row BenchmarkRow, corpus CorpusInfo, thresholds Thresholds, currentPromptSHA256 string) bool {
-	if row.Runs < 3 || corpus.NBuggy < 20 || corpus.NClean < 20 {
+	if row.Runs < MinRuns || corpus.NBuggy < MinBuggy || corpus.NClean < MinClean {
 		return false
 	}
-	if row.Recall < thresholds.RecallMin {
+	if row.Breakdown == nil {
 		return false
 	}
-	if row.FPR > thresholds.FPRMax {
+	for _, lang := range CanonicalLanguages() {
+		cell, ok := row.Breakdown.Language[lang]
+		if !ok || cell.Recall.NDistinct < MinExpectedPerLanguage || cell.FPR.NDistinct < MinCleanPerLanguage {
+			return false
+		}
+		if cell.Recall.Rate == nil || round4(*cell.Recall.Rate) < thresholds.LanguageRecallMin {
+			return false
+		}
+	}
+	if round4(row.Recall) < thresholds.RecallMin {
+		return false
+	}
+	if round4(row.FPR) > thresholds.FPRMax {
 		return false
 	}
 	if row.PromptSHA256 != currentPromptSHA256 {
