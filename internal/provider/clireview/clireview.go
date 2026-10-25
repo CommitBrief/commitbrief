@@ -27,10 +27,14 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/CommitBrief/commitbrief/internal/i18n"
+	"github.com/CommitBrief/commitbrief/internal/lang"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/tokens"
 )
@@ -88,6 +92,15 @@ type Spec struct {
 	// Adapter authors: only set this true when you've confirmed the
 	// host CLI reliably reads from stdin in one-shot mode.
 	UseStdin bool
+
+	// CheckArgSize opts the provider into the pre-exec command-line size
+	// preflight (see [ArgLimit]). Set it for adapters that embed the whole
+	// prompt in argv and have no stdin transport (gemini-cli): an oversized
+	// prompt is then rejected before the subprocess is started, with an
+	// actionable, localized [ArgTooLongError] instead of the OS's opaque
+	// `argument list too long`. It is ignored when UseStdin is true, since
+	// the prompt is not on the command line then.
+	CheckArgSize bool
 
 	// VersionArgs prints the CLI version and exits. Used by
 	// TestConnection to confirm the binary works and by the cache
@@ -251,6 +264,14 @@ func (b *Backend) Review(ctx context.Context, req provider.Request) (provider.Re
 		args = b.spec.PromptArgs(combined, withContext)
 	}
 	cmd := exec.CommandContext(cctx, b.spec.Binary, args...)
+	// cmd.Err is set when the binary was not found on PATH; skip the preflight
+	// then so the user sees the real problem, not "narrow the diff".
+	if b.spec.CheckArgSize && !b.spec.UseStdin && cmd.Err == nil {
+		// Preflight: refuse before exec when argv (+ env) cannot fit.
+		if size, limit, kind := ArgLimit(runtime.GOOS, cmd.Args, cmd.Environ()); kind != ArgFits {
+			return provider.Response{}, newArgTooLongError(b.spec.Name, req.Lang, size, limit, kind)
+		}
+	}
 	if withContext && repoRoot != "" {
 		// Run the agent in the repository root so its relative file reads
 		// resolve there rather than against commitbrief's inherited cwd.
@@ -267,6 +288,17 @@ func (b *Backend) Review(ctx context.Context, req provider.Request) (provider.Re
 		// exit so the caller can format a useful message. The wrapped
 		// stderr usually carries the host CLI's own error text.
 		msg := strings.TrimSpace(stderr.String())
+		if isArgTooLong(err) {
+			// The preflight is a conservative estimate; the OS has the final
+			// word. Map its E2BIG to the same actionable message.
+			// Our estimate may have said "fits" (kind == ArgFits): then there
+			// is no measured limit to quote, and the message must not claim one.
+			size, limit, kind := ArgLimit(runtime.GOOS, cmd.Args, cmd.Environ())
+			if kind == ArgFits {
+				kind, limit = ArgRejectedByOS, 0
+			}
+			return provider.Response{}, newArgTooLongError(b.spec.Name, req.Lang, size, limit, kind)
+		}
 		if errors.Is(cctx.Err(), context.DeadlineExceeded) {
 			return provider.Response{}, fmt.Errorf("%s: timed out after %s (last stderr: %s)",
 				b.spec.Name, b.spec.Timeout, msg)
@@ -313,4 +345,148 @@ func (b *Backend) versionOrEmpty() string {
 		b.versionMemo = strings.TrimSpace(first)
 	})
 	return b.versionMemo
+}
+
+// Command-line size budgets used by [ArgLimit]. They are deliberately
+// conservative: rejecting a prompt that would have squeaked through is a
+// better failure than an opaque E2BIG, and the message names the real fixes.
+const (
+	// posixMaxArgBytes caps one argv string. Linux enforces MAX_ARG_STRLEN =
+	// 131072 bytes per string (NUL included); the whole prompt travels as a
+	// single `-p <prompt>` argument, so this is the limit that binds first.
+	// 120 KiB leaves headroom for the terminator and rounding. macOS has no
+	// per-string cap, but the same value keeps behaviour uniform.
+	posixMaxArgBytes = 120 * 1024
+
+	// posixMaxTotalBytes caps argv + environment together (each string
+	// counted with its NUL and a pointer slot). macOS ARG_MAX is 1 MiB for
+	// both combined; Linux is typically 2 MiB (a quarter of the stack
+	// rlimit). 900 000 stays under the smaller of the two.
+	posixMaxTotalBytes = 900_000
+
+	// windowsMaxCmdLine caps the CreateProcess command line, documented as
+	// 32 767 characters. Go builds that line by quoting and escaping argv,
+	// so the estimate in ArgLimit counts escape overhead worst-case; 32 000
+	// leaves headroom.
+	windowsMaxCmdLine = 32_000
+
+	// ptrBytes is the per-string pointer slot counted against the POSIX total.
+	ptrBytes = 8
+)
+
+// ArgKind says which command-line budget a prompt broke.
+type ArgKind int
+
+const (
+	// ArgFits: within every budget.
+	ArgFits ArgKind = iota
+	// ArgSingleTooLong: one argument (the prompt) is over the per-argument
+	// cap, or on Windows the whole command line is over its cap.
+	ArgSingleTooLong
+	// ArgTotalTooLong: no single argument is over the cap but argv plus the
+	// environment together are over the POSIX total budget — the environment
+	// is part of the problem, so narrowing the diff may not be enough.
+	ArgTotalTooLong
+	// ArgRejectedByOS: exec failed with E2BIG although the estimate said the
+	// command line fits (unusual stack rlimit, large environment). No limit is
+	// known, so none is quoted.
+	ArgRejectedByOS
+)
+
+// ArgLimit estimates the OS command-line footprint of args (argv including
+// argv[0]) plus env and reports which conservative platform budget, if any,
+// it breaks. goos is a parameter (callers pass runtime.GOOS) so every
+// platform's arithmetic is unit-testable on any host. size and limit are in
+// bytes (characters on Windows). For ArgSingleTooLong on POSIX, size is the
+// largest argument against the per-argument cap; for ArgTotalTooLong it is
+// the whole argv + environment footprint against the total budget; for
+// ArgFits they are the total footprint and total budget.
+func ArgLimit(goos string, args, env []string) (size, limit int, kind ArgKind) {
+	if goos == "windows" {
+		// Windows passes one command-line string; the environment block is
+		// separate and does not count. Worst case every `"` and `\` is
+		// escaped with an extra backslash; +3 covers the quotes and space.
+		for _, a := range args {
+			size += len(a) + strings.Count(a, `"`) + strings.Count(a, `\`) + 3
+		}
+		if size > windowsMaxCmdLine {
+			return size, windowsMaxCmdLine, ArgSingleTooLong
+		}
+		return size, windowsMaxCmdLine, ArgFits
+	}
+	largest := 0
+	for _, a := range args {
+		size += len(a) + 1 + ptrBytes
+		if len(a) > largest {
+			largest = len(a)
+		}
+	}
+	for _, e := range env {
+		size += len(e) + 1 + ptrBytes
+	}
+	switch {
+	case largest > posixMaxArgBytes:
+		return largest, posixMaxArgBytes, ArgSingleTooLong
+	case size > posixMaxTotalBytes:
+		return size, posixMaxTotalBytes, ArgTotalTooLong
+	}
+	return size, posixMaxTotalBytes, ArgFits
+}
+
+// ErrArgTooLong is matched (errors.Is) by every [ArgTooLongError].
+var ErrArgTooLong = errors.New("clireview: command line exceeds the platform argument limit")
+
+// ArgTooLongError reports a prompt that cannot be passed on the command line,
+// either caught by the preflight or reported by the OS as E2BIG. Error()
+// already carries the localized, user-facing text.
+type ArgTooLongError struct {
+	Provider string
+	Kind     ArgKind
+	Size     int // bytes (characters on Windows) measured
+	Limit    int // the budget that was exceeded; 0 when the OS rejected it unpredicted
+	msg      string
+}
+
+func (e *ArgTooLongError) Error() string { return e.msg }
+func (e *ArgTooLongError) Unwrap() error { return ErrArgTooLong }
+
+// newArgTooLongError builds the localized error. The catalog follows the
+// request language (the same code the CLI resolves its interface language
+// from); an unknown language or a load failure falls back to English, and a
+// catalog-less last resort keeps the message non-empty. The i18n key depends
+// on what was exceeded so the text never mislabels the number it quotes.
+func newArgTooLongError(name, reqLang string, size, limit int, kind ArgKind) *ArgTooLongError {
+	kb := func(n int) int { return (n + 1023) / 1024 }
+	e := &ArgTooLongError{Provider: name, Kind: kind, Size: size, Limit: limit}
+	key := "provider.cli.arg_too_long"
+	args := []any{name, kb(size), limit / 1024}
+	switch kind {
+	case ArgTotalTooLong:
+		key = "provider.cli.arg_total_too_long"
+	case ArgRejectedByOS:
+		key = "provider.cli.arg_rejected_by_os"
+		args = []any{name, kb(size)}
+	}
+	cat, err := i18n.Load(lang.UICatalogFor(reqLang))
+	if err != nil {
+		e.msg = fmt.Sprintf("%s: the command line is too long for this platform; narrow the diff with --file/--dir or use claude-cli", name)
+		return e
+	}
+	e.msg = cat.T(key, args...)
+	return e
+}
+
+// isArgTooLong recognizes the OS's "argument list too long" failure from
+// exec: E2BIG on POSIX, and Windows' "filename or extension is too long"
+// (ERROR_FILENAME_EXCED_RANGE) when CreateProcess rejects the command line.
+func isArgTooLong(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.E2BIG) {
+		return true
+	}
+	m := strings.ToLower(err.Error())
+	return strings.Contains(m, "argument list too long") ||
+		strings.Contains(m, "filename or extension is too long")
 }

@@ -41,6 +41,9 @@ func init() {
 			PromptArgs:  promptArgs,
 			VersionArgs: []string{"--version"},
 			Timeout:     5 * time.Minute,
+			// argv is the only transport, so an oversized prompt must be
+			// caught before exec with an actionable message (ARG_MAX).
+			CheckArgSize: true,
 		}), nil
 	})
 }
@@ -49,8 +52,10 @@ func init() {
 //
 // UC-24 note: gemini-cli does not yet expose a documented `-p -` stdin
 // shorthand the way Claude Code does, so we stay on argv until upstream
-// confirms a stable stdin transport. Users hitting ARG_MAX on huge diffs
-// should prefer claude-cli for now.
+// confirms a stable stdin transport. clireview therefore preflights the
+// argv size (Spec.CheckArgSize) and fails with a localized diagnostic before
+// exec when the prompt cannot fit; users hitting that should narrow the
+// diff or prefer claude-cli.
 //
 // --with-context (ADR-0017): context mode needs BOTH `--approval-mode
 // plan` (Gemini's read-only mode) AND `--skip-trust`. Without --skip-trust

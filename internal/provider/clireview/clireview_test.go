@@ -4,11 +4,13 @@ package clireview
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -428,3 +430,229 @@ func TestBackendSetTimeoutIgnoresNonPositive(t *testing.T) {
 
 // Compile-time proof that the CLI layer's type assertion will succeed.
 var _ provider.TimeoutSetter = (*Backend)(nil)
+
+func TestArgLimitPerPlatform(t *testing.T) {
+	big := strings.Repeat("x", 200*1024)
+	small := strings.Repeat("x", 10*1024)
+	env := []string{"PATH=/usr/bin", "HOME=/home/u"}
+	bigEnv := []string{"HUGE=" + strings.Repeat("e", 850_000)}
+
+	tests := []struct {
+		name      string
+		goos      string
+		args      []string
+		env       []string
+		wantKind  ArgKind
+		wantLimit int
+	}{
+		{"linux small", "linux", []string{"gemini", "-p", small}, env, ArgFits, posixMaxTotalBytes},
+		{"linux single arg over cap", "linux", []string{"gemini", "-p", big}, env, ArgSingleTooLong, posixMaxArgBytes},
+		{"darwin single arg over cap", "darwin", []string{"gemini", "-p", big}, env, ArgSingleTooLong, posixMaxArgBytes},
+		{"linux total over budget via many args", "linux", manyArgs(small, 100), env, ArgTotalTooLong, posixMaxTotalBytes},
+		// A modest prompt that only overflows because of a huge environment
+		// must be reported as the total budget, not as a "big prompt".
+		{"linux total over budget via env", "linux", []string{"gemini", "-p", strings.Repeat("x", 100*1024)}, bigEnv, ArgTotalTooLong, posixMaxTotalBytes},
+		{"windows small", "windows", []string{"gemini", "-p", small}, env, ArgFits, windowsMaxCmdLine},
+		{"windows over", "windows", []string{"gemini", "-p", strings.Repeat("x", 33_000)}, env, ArgSingleTooLong, windowsMaxCmdLine},
+		// Escaping worst case: 20k quotes double on the wire and tip a
+		// line that is under the limit in raw characters.
+		{"windows escape overhead", "windows", []string{"gemini", "-p", strings.Repeat(`"`, 20_000)}, env, ArgSingleTooLong, windowsMaxCmdLine},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			size, limit, kind := ArgLimit(tc.goos, tc.args, tc.env)
+			if kind != tc.wantKind || limit != tc.wantLimit {
+				t.Fatalf("ArgLimit = (%d, %d, %v), want kind=%v limit=%d",
+					size, limit, kind, tc.wantKind, tc.wantLimit)
+			}
+			if size <= 0 {
+				t.Errorf("size = %d, want > 0", size)
+			}
+		})
+	}
+}
+
+func manyArgs(chunk string, n int) []string {
+	out := []string{"gemini"}
+	for i := 0; i < n; i++ {
+		out = append(out, chunk)
+	}
+	return out
+}
+
+// TestBackendReviewArgPreflightSkipsExec: with CheckArgSize an oversized
+// prompt is rejected before the subprocess is started. The fake CLI drops a
+// marker file the moment it runs; the marker must not exist afterwards.
+func TestBackendReviewArgPreflightSkipsExec(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	scriptPath(t, "argmax-cli", fmt.Sprintf("touch %q; echo ok", marker))
+
+	b := New(Spec{
+		Name:         "argmax-cli",
+		Binary:       "argmax-cli",
+		PromptArgs:   func(p string, _ bool) []string { return []string{"-p", p} },
+		CheckArgSize: true,
+		Timeout:      5 * time.Second,
+	})
+	_, err := b.Review(context.Background(), provider.Request{
+		UserPrompt: strings.Repeat("d", 256*1024),
+	})
+	if err == nil {
+		t.Fatal("expected an error for an oversized prompt")
+	}
+	if !errors.Is(err, ErrArgTooLong) {
+		t.Errorf("error should match ErrArgTooLong; got %v", err)
+	}
+	var atl *ArgTooLongError
+	if !errors.As(err, &atl) || atl.Size <= atl.Limit {
+		t.Errorf("ArgTooLongError should carry size > limit; got %+v", atl)
+	}
+	for _, want := range []string{"argmax-cli", "KB", "--file", "claude-cli"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("message missing %q: %s", want, err.Error())
+		}
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Error("the CLI was executed despite the preflight rejection")
+	}
+}
+
+// TestBackendReviewArgPreflightSkipsExecInKernelAcceptedRange pins the
+// preflight itself, not the kernel: 124 KiB is over our 120 KiB cap but under
+// Linux's 128 KiB MAX_ARG_STRLEN (and far under macOS's 1 MiB), so exec would
+// have succeeded. Deleting CheckArgSize makes the marker appear on every
+// platform and this test fail.
+func TestBackendReviewArgPreflightSkipsExecInKernelAcceptedRange(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	scriptPath(t, "argmax-range-cli", fmt.Sprintf("touch %q; echo ok", marker))
+	spec := Spec{
+		Name:       "argmax-range-cli",
+		Binary:     "argmax-range-cli",
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
+		Timeout:    5 * time.Second,
+	}
+	req := provider.Request{UserPrompt: strings.Repeat("d", 124*1024)}
+
+	spec.CheckArgSize = true
+	_, err := New(spec).Review(context.Background(), req)
+	if !errors.Is(err, ErrArgTooLong) {
+		t.Fatalf("preflight should reject a 124 KiB prompt; got %v", err)
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("the CLI was executed despite the preflight rejection")
+	}
+
+	// Control: without the preflight the kernel accepts it, so the marker
+	// proves the rejection above came from CheckArgSize alone.
+	spec.CheckArgSize = false
+	if _, err := New(spec).Review(context.Background(), req); err != nil {
+		t.Fatalf("control run should succeed without the preflight: %v", err)
+	}
+	if _, statErr := os.Stat(marker); statErr != nil {
+		t.Error("control run should have executed the CLI")
+	}
+}
+
+// TestArgTooLongMessageNamesTheBudget: the text must describe what was
+// measured — an unpredicted OS rejection quotes no limit, and a total-budget
+// overflow says the environment counts.
+func TestArgTooLongMessageNamesTheBudget(t *testing.T) {
+	osMsg := newArgTooLongError("x-cli", "en", 300*1024, 0, ArgRejectedByOS).Error()
+	if !strings.Contains(osMsg, "operating system rejected") || strings.Contains(osMsg, "over the") {
+		t.Errorf("OS-rejected message should not quote a limit: %s", osMsg)
+	}
+	total := newArgTooLongError("x-cli", "en", 950_000, posixMaxTotalBytes, ArgTotalTooLong).Error()
+	if !strings.Contains(total, "plus environment") {
+		t.Errorf("total-budget message should name the environment: %s", total)
+	}
+	single := newArgTooLongError("x-cli", "en", 200*1024, posixMaxArgBytes, ArgSingleTooLong).Error()
+	if !strings.Contains(single, "the prompt is 200 KB") {
+		t.Errorf("single-arg message should name the prompt: %s", single)
+	}
+	tr := newArgTooLongError("x-cli", "tr", 950_000, posixMaxTotalBytes, ArgTotalTooLong).Error()
+	if !strings.Contains(tr, "ortam") {
+		t.Errorf("Turkish total-budget message should mention the environment: %s", tr)
+	}
+}
+
+// TestBackendReviewArgPreflightLocalized: the message follows the request
+// language.
+func TestBackendReviewArgPreflightLocalized(t *testing.T) {
+	scriptPath(t, "argmax-tr-cli", "echo ok")
+	b := New(Spec{
+		Name:         "argmax-tr-cli",
+		Binary:       "argmax-tr-cli",
+		PromptArgs:   func(p string, _ bool) []string { return []string{"-p", p} },
+		CheckArgSize: true,
+	})
+	_, err := b.Review(context.Background(), provider.Request{
+		UserPrompt: strings.Repeat("d", 256*1024),
+		Lang:       "tr",
+	})
+	if err == nil || !strings.Contains(err.Error(), "sınırını aşıyor") {
+		t.Fatalf("expected the Turkish message; got %v", err)
+	}
+}
+
+// TestBackendReviewArgPreflightPassesSmallPrompt: the check must not reject
+// a prompt that fits, and is not applied when CheckArgSize is off.
+func TestBackendReviewArgPreflightPassesSmallPrompt(t *testing.T) {
+	scriptPath(t, "argmax-ok-cli", "echo fine")
+	b := New(Spec{
+		Name:         "argmax-ok-cli",
+		Binary:       "argmax-ok-cli",
+		PromptArgs:   func(p string, _ bool) []string { return []string{"-p", p} },
+		CheckArgSize: true,
+	})
+	resp, err := b.Review(context.Background(), provider.Request{UserPrompt: "small"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Content != "fine" {
+		t.Errorf("Content = %q, want fine", resp.Content)
+	}
+}
+
+// TestBackendReviewMapsE2BIG: with the preflight off, the kernel's own E2BIG
+// from exec (a real 2 MiB argument — over both Linux's per-string cap and
+// macOS's 1 MiB total) is mapped to the same actionable error.
+func TestBackendReviewMapsE2BIG(t *testing.T) {
+	scriptPath(t, "e2big-cli", "echo unreachable")
+	b := New(Spec{
+		Name:       "e2big-cli",
+		Binary:     "e2big-cli",
+		PromptArgs: func(p string, _ bool) []string { return []string{"-p", p} },
+		Timeout:    10 * time.Second,
+	})
+	_, err := b.Review(context.Background(), provider.Request{
+		UserPrompt: strings.Repeat("d", 2*1024*1024),
+	})
+	if err == nil {
+		t.Fatal("expected exec to fail with E2BIG")
+	}
+	if !errors.Is(err, ErrArgTooLong) {
+		t.Fatalf("E2BIG should map to ErrArgTooLong; got %v", err)
+	}
+	var atl *ArgTooLongError
+	if !errors.As(err, &atl) || atl.Kind == ArgFits {
+		t.Errorf("mapped error must never carry ArgFits; got %+v", atl)
+	}
+	if !strings.Contains(err.Error(), "claude-cli") || strings.Contains(err.Error(), "invocation failed") {
+		t.Errorf("expected the actionable message, got %q", err.Error())
+	}
+}
+
+func TestIsArgTooLong(t *testing.T) {
+	if isArgTooLong(nil) {
+		t.Error("nil is not E2BIG")
+	}
+	if !isArgTooLong(fmt.Errorf("fork/exec /x: %w", syscall.E2BIG)) {
+		t.Error("wrapped syscall.E2BIG must match")
+	}
+	if !isArgTooLong(errors.New("fork/exec /x: Argument list too long")) {
+		t.Error("message form must match")
+	}
+	if isArgTooLong(errors.New("exit status 1")) {
+		t.Error("an ordinary exit error must not match")
+	}
+}
