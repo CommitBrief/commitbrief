@@ -1,0 +1,11 @@
+diff --git a/src/services/pricing.js b/src/services/pricing.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/pricing.js
++++ b/src/services/pricing.js
+@@ -12,2 +12,6 @@
+ function applyFormula(formula, basePrice, qty) {
++  const fn = new Function("basePrice", "qty", `return (${formula});`);
++  const price = fn(basePrice, qty);
++  if (!Number.isFinite(price)) throw new Error("formula did not return a number");
++  return Math.round(price);
+ }

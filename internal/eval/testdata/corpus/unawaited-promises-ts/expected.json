@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "unawaited-promises", "file": "src/services/inventory.ts", "line": 20, "line_tol": 3, "category": "correctness", "min_severity": "high", "summary": "reserveStock(...).then(...) is fire-and-forget inside the loop, so orders.confirm runs before any reservation finishes and the OutOfStockError thrown in the callback becomes an unhandled rejection rather than failing reserveAll — orders are confirmed regardless of stock. Await each reservation (or `await Promise.all(order.items.map(...))`) before confirming."}
+  ],
+  "must_stay_silent_on": []
+}

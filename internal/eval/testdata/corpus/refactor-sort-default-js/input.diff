@@ -1,0 +1,173 @@
+diff --git a/lib/stats.js b/lib/stats.js
+index aaaaaaa..bbbbbbb 100644
+--- a/lib/stats.js
++++ b/lib/stats.js
+@@ -1,76 +1,107 @@
+ "use strict";
+ 
+ /**
+  * Latency summaries for the /admin/metrics page.
+  * Samples look like { route: "/api/orders", ms: 123 }.
+  */
+ 
+-function summarize(samples) {
+-  const byRoute = {};
+-  for (const s of samples) {
+-    if (!byRoute[s.route]) byRoute[s.route] = [];
+-    byRoute[s.route].push(s.ms);
+-  }
+-
+-  const result = {};
+-  for (const route of Object.keys(byRoute)) {
+-    const values = byRoute[route];
+-    const sorted = values.slice().sort((a, b) => a - b);
+-    const count = sorted.length;
+-    let total = 0;
+-    for (const v of sorted) total += v;
+-
+-    const mid = Math.floor(count / 2);
+-    const median = count % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+-    const p95 = sorted[Math.min(count - 1, Math.ceil(count * 0.95) - 1)];
+-    const p99 = sorted[Math.min(count - 1, Math.ceil(count * 0.99) - 1)];
+-
+-    result[route] = {
+-      count,
+-      min: sorted[0],
+-      max: sorted[count - 1],
+-      mean: total / count,
+-      median,
+-      p95,
+-      p99,
+-    };
+-  }
+-  return result;
+-}
+-
+-function renderTable(summary) {
+-  const routes = Object.keys(summary).sort();
+-  let wRoute = 5;
+-  for (const route of routes) {
+-    if (route.length > wRoute) wRoute = route.length;
+-  }
+-  const lines = ["route".padEnd(wRoute) + "  count  mean      median    p95       p99"];
+-  for (const route of routes) {
+-    const s = summary[route];
+-    lines.push(
+-      route.padEnd(wRoute) + "  " +
+-      String(s.count).padEnd(5) + "  " +
+-      s.mean.toFixed(1).padEnd(8) + "  " +
+-      s.median.toFixed(1).padEnd(8) + "  " +
+-      s.p95.toFixed(1).padEnd(8) + "  " +
+-      s.p99.toFixed(1).padEnd(8)
+-    );
+-  }
+-  return lines.join("\n");
+-}
++function summarize(samples) {
++  const byRoute = groupByRoute(samples);
++  const result = {};
++  for (const route of Object.keys(byRoute)) {
++    result[route] = describe(byRoute[route]);
++  }
++  return result;
++}
++
++function groupByRoute(samples) {
++  const byRoute = {};
++  for (const s of samples) {
++    if (!byRoute[s.route]) byRoute[s.route] = [];
++    byRoute[s.route].push(s.ms);
++  }
++  return byRoute;
++}
++
++function mean(values) {
++  let total = 0;
++  for (const v of values) total += v;
++  return total / values.length;
++}
++
++/**
++ * Nearest-rank percentile of an unsorted list; p is in (0, 1].
++ */
++function percentile(values, p) {
++  const sorted = [...values].sort();
++  const rank = Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1);
++  return sorted[rank];
++}
++
++function median(values) {
++  const sorted = values.slice().sort((a, b) => a - b);
++  const mid = Math.floor(sorted.length / 2);
++  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
++}
++
++function describe(values) {
++  const ordered = values.slice().sort((a, b) => a - b);
++  return {
++    count: values.length,
++    min: ordered[0],
++    max: ordered[ordered.length - 1],
++    mean: mean(values),
++    median: median(values),
++    p95: percentile(values, 0.95),
++    p99: percentile(values, 0.99),
++  };
++}
++
++function pad(value, width) {
++  return String(value).padEnd(width, " ");
++}
++
++function formatRow(route, s, widths) {
++  return [
++    pad(route, widths.route),
++    pad(s.count, widths.count),
++    pad(s.mean.toFixed(1), widths.num),
++    pad(s.median.toFixed(1), widths.num),
++    pad(s.p95.toFixed(1), widths.num),
++    pad(s.p99.toFixed(1), widths.num),
++  ].join("  ");
++}
++
++function formatHeader(widths) {
++  return [
++    pad("route", widths.route),
++    pad("count", widths.count),
++    pad("mean", widths.num),
++    pad("median", widths.num),
++    pad("p95", widths.num),
++    pad("p99", widths.num),
++  ].join("  ");
++}
++
++function renderTable(summary) {
++  const routes = Object.keys(summary).sort();
++  const widths = { route: 5, count: 5, num: 8 };
++  for (const route of routes) {
++    widths.route = Math.max(widths.route, route.length);
++  }
++  const header = formatHeader(widths);
++  const lines = routes.map((route) => formatRow(route, summary[route], widths));
++  return [header, ...lines].join("\n");
++}
+ 
+ /**
+  * Returns the routes whose p95 exceeds the budget, slowest first.
+  */
+ function slowRoutes(summary, budgetMs) {
+-  const out = [];
+-  for (const route of Object.keys(summary)) {
+-    if (summary[route].p95 > budgetMs) {
+-      out.push({ route, p95: summary[route].p95 });
+-    }
+-  }
+-  out.sort((a, b) => b.p95 - a.p95);
+-  return out;
++  return Object.entries(summary)
++    .filter(([, s]) => s.p95 > budgetMs)
++    .map(([route, s]) => ({ route, p95: s.p95 }))
++    .sort((a, b) => b.p95 - a.p95);
+ }
+ 
+ module.exports = { summarize, renderTable, slowRoutes };

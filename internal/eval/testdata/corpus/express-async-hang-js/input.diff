@@ -1,0 +1,19 @@
+diff --git a/src/routes/reports.js b/src/routes/reports.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/reports.js
++++ b/src/routes/reports.js
+@@ -10,7 +10,14 @@
+ router.get("/reports/:id", wrap(async (req, res) => {
+   const report = await db.getReport(req.params.id);
+   if (!report) return res.status(404).end();
+   res.json(report);
+ }));
+ 
++router.get("/reports/:id/export", async (req, res) => {
++  const report = await db.getReport(req.params.id);
++  if (!report) return res.status(404).end();
++  const pdf = await renderPdf(report);
++  res.type("application/pdf").send(pdf);
++});
++
+ module.exports = router;

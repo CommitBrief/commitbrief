@@ -1,0 +1,13 @@
+diff --git a/src/routes/stream.js b/src/routes/stream.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/stream.js
++++ b/src/routes/stream.js
+@@ -8,4 +8,8 @@
+ router.get("/stream", requireAuth, (req, res) => {
+   res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+   res.flushHeaders();
++
++  events.on("update", (payload) => {
++    res.write(`data: ${JSON.stringify(payload)}\n\n`);
++  });
+ });

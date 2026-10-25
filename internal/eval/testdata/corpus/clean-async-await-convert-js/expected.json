@@ -1,0 +1,9 @@
+{
+  "held_out": true,
+  "language": "javascript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/services/checkout.js", "line": 11, "reason": "Same early return as before, now from an async function (resolves null)."},
+    {"file": "src/services/checkout.js", "line": 15, "reason": "`return await` inside try/catch is required so the catch wraps create() errors."}
+  ]
+}

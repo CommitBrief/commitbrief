@@ -1,0 +1,29 @@
+diff --git a/lib/config.js b/lib/config.js
+index aaaaaaa..bbbbbbb 100644
+--- a/lib/config.js
++++ b/lib/config.js
+@@ -14,5 +14,5 @@
+ module.exports = {
+-  // Request timeout in seconds.
+-  getTimeout: () => Number(process.env.REQUEST_TIMEOUT || 30),
++  // Request timeout in milliseconds (REQUEST_TIMEOUT is still configured in seconds).
++  getTimeout: () => Number(process.env.REQUEST_TIMEOUT || 30) * 1000,
+   getBaseUrl: () => process.env.API_BASE_URL,
+ };
+diff --git a/lib/client.js b/lib/client.js
+index aaaaaaa..bbbbbbb 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -6,9 +6,12 @@
+ async function request(path, opts = {}) {
+   const controller = new AbortController();
++  const timer = setTimeout(() => controller.abort(), config.getTimeout() * 1000);
+   try {
+     const res = await fetch(config.getBaseUrl() + path, { ...opts, signal: controller.signal });
+     return await res.json();
+   } catch (err) {
+     throw new ApiError(path, err);
++  } finally {
++    clearTimeout(timer);
+   }
+ }

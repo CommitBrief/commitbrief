@@ -1,0 +1,26 @@
+diff --git a/internal/fetch/client.go b/internal/fetch/client.go
+index aaaaaaa..bbbbbbb 100644
+--- a/internal/fetch/client.go
++++ b/internal/fetch/client.go
+@@ -12,4 +12,21 @@
+ type Client struct {
+ 	http *http.Client
+ 	base string
+ }
++
++// Get fetches path from the upstream with a per-call deadline.
++func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
++	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
++	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
++	if err != nil {
++		cancel()
++		return nil, err
++	}
++	resp, err := c.http.Do(req)
++	if err != nil {
++		cancel()
++		return nil, fmt.Errorf("fetch %s: %w", path, err)
++	}
++	defer resp.Body.Close()
++	return io.ReadAll(resp.Body)
++}

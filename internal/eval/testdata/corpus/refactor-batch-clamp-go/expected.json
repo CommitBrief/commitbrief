@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id": "chunk-slice-out-of-range", "file": "internal/importer/orders.go", "line": 86, "line_tol": 3, "category": "correctness", "min_severity": "high", "summary": "The refactor dropped the `if end > len(orders) { end = len(orders) }` clamp from the old loop; chunkOrders slices orders[i:end] with end = i+size unconditionally, so any import whose length is not a multiple of 200 panics with slice bounds out of range on the last batch."}
+  ],
+  "must_stay_silent_on": []
+}

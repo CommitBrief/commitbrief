@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "pagination-offset", "file": "src/services/listing.ts", "line": 57, "line_tol": 3, "category": "correctness", "min_severity": "high", "summary": "Pages are 1-based (page defaults to 1 and is clamped to >= 1), but the extracted paginate computes start = page * pageSize instead of the original (page - 1) * pageSize; page 1 now returns results 20-39 and the first page is unreachable. Restore (page - 1) * pageSize."}
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,10 @@
+diff --git a/src/app.ts b/src/app.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -8,4 +8,4 @@
+ const app = express();
+-app.use(cors({ origin: "https://app.example.com", credentials: true }));
++app.use(cors({ origin: true, credentials: true }));
+ app.use(express.json());
+ app.use(cookieParser());

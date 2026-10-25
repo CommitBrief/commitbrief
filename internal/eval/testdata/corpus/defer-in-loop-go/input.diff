@@ -1,0 +1,30 @@
+diff --git a/internal/ingest/loader.go b/internal/ingest/loader.go
+index aaaaaaa..bbbbbbb 100644
+--- a/internal/ingest/loader.go
++++ b/internal/ingest/loader.go
+@@ -20,6 +20,25 @@
+ // readHeader reads the fixed-size header of an already-open file.
+ func readHeader(f *os.File) (Header, error) {
+ 	var h Header
+ 	err := binary.Read(f, binary.LittleEndian, &h)
+ 	return h, err
+ }
++
++// LoadAll reads the header of every file in paths.
++func LoadAll(paths []string) ([]Header, error) {
++	headers := make([]Header, 0, len(paths))
++	for _, p := range paths {
++		f, err := os.Open(p)
++		if err != nil {
++			return nil, fmt.Errorf("open %s: %w", p, err)
++		}
++		defer f.Close()
++
++		h, err := readHeader(f)
++		if err != nil {
++			return nil, fmt.Errorf("read %s: %w", p, err)
++		}
++		headers = append(headers, h)
++	}
++	return headers, nil
++}

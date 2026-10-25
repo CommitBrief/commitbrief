@@ -1,0 +1,8 @@
+{
+  "held_out": true,
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "nonnull-after-contract-change", "file": "src/handlers/profile.ts", "line": 10, "line_tol": 3, "category": "correctness", "min_severity": "high", "summary": "findById now returns undefined for an unknown id (previously it threw NotFoundError, which the error middleware mapped to 404). The handler silences the type with `!` and dereferences user.email, so an unknown id throws a TypeError and returns 500. Check for undefined and respond 404."}
+  ],
+  "must_stay_silent_on": []
+}

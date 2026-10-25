@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "exec-command-injection", "file": "src/routes/thumbnails.js", "line": 10, "line_tol": 3, "category": "security", "min_severity": "critical", "summary": "req.query.name is interpolated into a string run through child_process.exec (a shell), so shell metacharacters in `name` execute arbitrary commands. Use execFile('convert', [path, '-resize', '200x200', out]) with a validated/basename'd filename."}
+  ],
+  "must_stay_silent_on": []
+}

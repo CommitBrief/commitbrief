@@ -1,0 +1,29 @@
+diff --git a/src/repo/users.ts b/src/repo/users.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/repo/users.ts
++++ b/src/repo/users.ts
+@@ -12,7 +12,6 @@
+ export const users = {
+-  async findById(id: string): Promise<User> {
+-    const row = await db("users").where({ id }).first();
+-    if (!row) throw new NotFoundError(`user ${id}`);
+-    return toUser(row);
++  async findById(id: string): Promise<User | undefined> {
++    const row = await db("users").where({ id }).first();
++    return row ? toUser(row) : undefined;
+   },
+ };
+diff --git a/src/handlers/profile.ts b/src/handlers/profile.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/handlers/profile.ts
++++ b/src/handlers/profile.ts
+@@ -7,6 +7,7 @@
+ export const getProfile = asyncHandler(async (req, res) => {
+   const id = req.params.id;
+-  const user = await users.findById(id);
++  const user = (await users.findById(id))!;
++  const masked = maskEmail(user.email);
+   setCacheHeaders(res);
+-  res.json({ id: user.id, name: user.name, email: user.email });
++  res.json({ id: user.id, name: user.name, email: masked });
+ });

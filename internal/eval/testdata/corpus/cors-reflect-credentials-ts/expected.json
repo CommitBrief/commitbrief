@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "cors-reflect-origin", "file": "src/app.ts", "line": 9, "line_tol": 3, "category": "security", "min_severity": "high", "summary": "`origin: true` echoes the request Origin and `credentials: true` allows cookies, so any third-party site can make authenticated cross-origin reads against this API. Keep an explicit allow-list of origins (add the staging URL to it) instead of reflecting."}
+  ],
+  "must_stay_silent_on": []
+}

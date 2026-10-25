@@ -1,0 +1,160 @@
+diff --git a/src/services/listing.ts b/src/services/listing.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/listing.ts
++++ b/src/services/listing.ts
+@@ -1,69 +1,96 @@
+ import { Facets, Listing, ListingQuery, ListingPage } from "../types";
+ import { listings } from "../repo/listings";
+ 
+ const DEFAULT_PAGE_SIZE = 20;
+ const MAX_PAGE_SIZE = 100;
+ 
+-export async function searchListings(query: ListingQuery): Promise<ListingPage> {
+-  const all = await listings.all();
+-
+-  let filtered = all;
+-  if (query.city) {
+-    filtered = filtered.filter((l) => l.city.toLowerCase() === query.city!.toLowerCase());
+-  }
+-  if (query.minPrice !== undefined) {
+-    filtered = filtered.filter((l) => l.priceCents >= query.minPrice!);
+-  }
+-  if (query.maxPrice !== undefined) {
+-    filtered = filtered.filter((l) => l.priceCents <= query.maxPrice!);
+-  }
+-  if (query.tags && query.tags.length > 0) {
+-    filtered = filtered.filter((l) => query.tags!.every((t) => l.tags.includes(t)));
+-  }
+-
+-  const sortKey = query.sort ?? "newest";
+-  const sorted = [...filtered];
+-  if (sortKey === "price_asc") {
+-    sorted.sort((a, b) => a.priceCents - b.priceCents);
+-  } else if (sortKey === "price_desc") {
+-    sorted.sort((a, b) => b.priceCents - a.priceCents);
+-  } else {
+-    sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+-  }
+-
+-  const pageSize = Math.min(query.pageSize ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+-  const page = Math.max(query.page ?? 1, 1);
+-  const start = (page - 1) * pageSize;
+-  const items = sorted.slice(start, start + pageSize);
+-
+-  return {
+-    items,
+-    page,
+-    pageSize,
+-    total: sorted.length,
+-    hasMore: start + pageSize < sorted.length,
+-  };
+-}
+-
+-export function buildFacets(items: Listing[]): Facets {
+-  const cities: Record<string, number> = {};
+-  const tags: Record<string, number> = {};
+-  const priceBuckets: Record<string, number> = {};
+-  for (const item of items) {
+-    cities[item.city] = (cities[item.city] ?? 0) + 1;
+-    for (const tag of item.tags) {
+-      tags[tag] = (tags[tag] ?? 0) + 1;
+-    }
+-    let bucket: string;
+-    if (item.priceCents < 50_000) bucket = "under-500";
+-    else if (item.priceCents < 100_000) bucket = "500-1000";
+-    else if (item.priceCents < 250_000) bucket = "1000-2500";
+-    else bucket = "2500-plus";
+-    priceBuckets[bucket] = (priceBuckets[bucket] ?? 0) + 1;
+-  }
+-  return { cities, tags, priceBuckets };
+-}
++export async function searchListings(query: ListingQuery): Promise<ListingPage> {
++  const all = await listings.all();
++  const filtered = applyFilters(all, query);
++  const sorted = sortListings(filtered, query.sort ?? "newest");
++  return paginate(sorted, query.page, query.pageSize);
++}
++
++function applyFilters(all: Listing[], query: ListingQuery): Listing[] {
++  let out = all;
++  if (query.city) {
++    const city = query.city.toLowerCase();
++    out = out.filter((l) => l.city.toLowerCase() === city);
++  }
++  if (query.minPrice !== undefined) {
++    const min = query.minPrice;
++    out = out.filter((l) => l.priceCents >= min);
++  }
++  if (query.maxPrice !== undefined) {
++    const max = query.maxPrice;
++    out = out.filter((l) => l.priceCents <= max);
++  }
++  if (query.tags && query.tags.length > 0) {
++    const tags = query.tags;
++    out = out.filter((l) => tags.every((t) => l.tags.includes(t)));
++  }
++  return out;
++}
++
++function sortListings(input: Listing[], key: ListingQuery["sort"]): Listing[] {
++  const sorted = [...input];
++  switch (key) {
++    case "price_asc":
++      sorted.sort((a, b) => a.priceCents - b.priceCents);
++      break;
++    case "price_desc":
++      sorted.sort((a, b) => b.priceCents - a.priceCents);
++      break;
++    default:
++      sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
++  }
++  return sorted;
++}
++
++function paginate(
++  sorted: Listing[],
++  requestedPage: number | undefined,
++  requestedSize: number | undefined,
++): ListingPage {
++  const pageSize = Math.min(requestedSize ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
++  const page = Math.max(requestedPage ?? 1, 1);
++  const start = page * pageSize;
++  const items = sorted.slice(start, start + pageSize);
++
++  return {
++    items,
++    page,
++    pageSize,
++    total: sorted.length,
++    hasMore: start + pageSize < sorted.length,
++  };
++}
++
++export function buildFacets(items: Listing[]): Facets {
++  return {
++    cities: countBy(items, (l) => [l.city]),
++    tags: countBy(items, (l) => l.tags),
++    priceBuckets: countBy(items, (l) => [priceBucket(l.priceCents)]),
++  };
++}
++
++function countBy(items: Listing[], keys: (l: Listing) => string[]): Record<string, number> {
++  const counts = new Map<string, number>();
++  for (const item of items) {
++    for (const key of keys(item)) {
++      counts.set(key, (counts.get(key) ?? 0) + 1);
++    }
++  }
++  return Object.fromEntries(counts);
++}
++
++function priceBucket(cents: number): string {
++  if (cents < 50_000) return "under-500";
++  if (cents < 100_000) return "500-1000";
++  if (cents < 250_000) return "1000-2500";
++  return "2500-plus";
++}
+ 
+ export async function getListing(id: string): Promise<Listing | undefined> {
+   return listings.byId(id);
+ }

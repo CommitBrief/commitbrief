@@ -1,0 +1,20 @@
+diff --git a/src/components/OrderTable.tsx b/src/components/OrderTable.tsx
+index aaaaaaa..bbbbbbb 100644
+--- a/src/components/OrderTable.tsx
++++ b/src/components/OrderTable.tsx
+@@ -9,4 +9,14 @@
+ export function OrderTable({ orders, currency, onSelect }: Props) {
+-  const total = orders.reduce((sum, o) => sum + o.totalCents, 0);
++  const total = useMemo(
++    () => orders.reduce((sum, o) => sum + o.totalCents, 0),
++    [orders],
++  );
++
++  const format = useCallback(
++    (cents: number) => new Intl.NumberFormat("en", { style: "currency", currency }).format(cents / 100),
++    [currency],
++  );
++
++  const handleClick = useCallback((id: string) => onSelect(id), [onSelect]);
+ 
+   return (

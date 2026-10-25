@@ -1,0 +1,12 @@
+diff --git a/src/routes/auth.js b/src/routes/auth.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/auth.js
++++ b/src/routes/auth.js
+@@ -18,6 +18,6 @@
+ router.post("/login", async (req, res) => {
+   const user = await users.verify(req.body.email, req.body.password);
+   if (!user) return res.status(401).render("login", { error: "Invalid credentials" });
+   req.session.userId = user.id;
+-  res.redirect("/dashboard");
++  res.redirect(req.query.next || "/dashboard");
+ });

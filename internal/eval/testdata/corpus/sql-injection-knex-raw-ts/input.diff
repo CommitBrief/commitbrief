@@ -1,0 +1,14 @@
+diff --git a/src/repo/products.ts b/src/repo/products.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/repo/products.ts
++++ b/src/repo/products.ts
+@@ -9,3 +9,8 @@
+ export async function searchProducts(q: string, sort: string, limit: number) {
+-  return db("products").whereILike("name", `%${q}%`).limit(limit);
++  const rows = await db.raw(
++    `SELECT id, name, price_cents FROM products
++     WHERE name ILIKE '%${q}%'
++     ORDER BY ${sort} LIMIT ${limit}`
++  );
++  return rows.rows;
+ }

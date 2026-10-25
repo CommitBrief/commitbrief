@@ -1,0 +1,12 @@
+diff --git a/src/routes/users.ts b/src/routes/users.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/users.ts
++++ b/src/routes/users.ts
+@@ -21,5 +21,7 @@
+ router.patch("/users/:id", requireAuth, asyncHandler(async (req, res) => {
+   if (req.user.id !== req.params.id) {
+     return res.status(403).json({ error: "forbidden" });
+   }
++  const updated = await users.update(req.params.id, req.body);
++  res.json(updated);
+ }));

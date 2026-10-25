@@ -1,0 +1,9 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "audit-promise-dropped", "file": "src/services/accounts.js", "line": 29, "line_tol": 3, "category": "error-handling", "min_severity": "medium", "summary": "audit.record() returns a promise but the braces-bodied arrow does not return it, so the next .then runs without waiting and any rejection is unhandled and uncatchable by the caller. Return the promise (`return audit.record(...)`)."}
+  ],
+  "must_stay_silent_on": [
+    {"file": "src/services/accounts.js", "line": 24, "reason": "Promise is returned from the arrow function, so the chain waits for it."}
+  ]
+}

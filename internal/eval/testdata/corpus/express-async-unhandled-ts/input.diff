@@ -1,0 +1,22 @@
+diff --git a/src/routes/orders.ts b/src/routes/orders.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/orders.ts
++++ b/src/routes/orders.ts
+@@ -14,9 +14,17 @@
+ const router = Router();
+ 
+ router.get("/orders/:id", asyncHandler(async (req, res) => {
+   const order = await orders.findById(req.params.id);
+   if (!order) return res.status(404).json({ error: "not found" });
+   res.json(order);
+ }));
+ 
++router.post("/orders/:id/refund", async (req, res) => {
++  const order = await orders.findById(req.params.id);
++  if (!order) return res.status(404).json({ error: "not found" });
++  const refund = await payments.refund(order.chargeId, order.totalCents);
++  await orders.markRefunded(order.id, refund.id);
++  res.json({ refundId: refund.id });
++});
++
+ export default router;

@@ -1,0 +1,15 @@
+diff --git a/src/routes/thumbnails.js b/src/routes/thumbnails.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/thumbnails.js
++++ b/src/routes/thumbnails.js
+@@ -5,4 +5,10 @@
+ const { exec } = require("child_process");
+ 
+ router.get("/thumb", (req, res) => {
++  const name = req.query.name;
++  const out = `/tmp/thumbs/${Date.now()}.jpg`;
++  exec(`convert uploads/${name} -resize 200x200 ${out}`, (err) => {
++    if (err) return res.status(500).end();
++    res.sendFile(out);
++  });
+ });

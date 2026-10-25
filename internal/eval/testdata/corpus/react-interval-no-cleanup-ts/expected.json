@@ -1,0 +1,9 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "interval-no-cleanup", "file": "src/hooks/useJobStatus.ts", "line": 10, "line_tol": 3, "category": "resource-leak", "min_severity": "medium", "summary": "The effect starts a setInterval poller and returns no cleanup, so the timer keeps running after unmount and a second interval is stacked each time jobId changes, continuing to call setStatus on an unmounted component. Return `() => clearInterval(id)`."}
+  ],
+  "must_stay_silent_on": [
+    {"file": "src/hooks/useJobStatus.ts", "line": 18, "reason": "One-shot timeout is cleared in the effect cleanup; correct."}
+  ]
+}

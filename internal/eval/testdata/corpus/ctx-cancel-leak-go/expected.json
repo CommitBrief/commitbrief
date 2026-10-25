@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id": "ctx-cancel-leak", "file": "internal/fetch/client.go", "line": 19, "line_tol": 3, "category": "resource-leak", "min_severity": "medium", "summary": "cancel from context.WithTimeout is only invoked on the two error returns; the success path returns without calling it, so the timer and parent registration are held until the 5s deadline. Add `defer cancel()` immediately after WithTimeout."}
+  ],
+  "must_stay_silent_on": []
+}

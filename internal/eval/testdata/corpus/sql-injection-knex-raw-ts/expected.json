@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "sqli-raw-template", "file": "src/repo/products.ts", "line": 10, "line_tol": 3, "category": "security", "min_severity": "high", "summary": "q and sort come from the query string and are interpolated into a raw SQL template; a quote in q or an arbitrary expression in sort allows SQL injection. Use bindings (`?`/`??`) for q and an allow-list for sort, or keep the knex query builder the old code used."}
+  ],
+  "must_stay_silent_on": []
+}

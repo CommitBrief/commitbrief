@@ -1,0 +1,19 @@
+diff --git a/src/services/checkout.ts b/src/services/checkout.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/checkout.ts
++++ b/src/services/checkout.ts
+@@ -24,2 +24,14 @@
+ export async function completeOrder(order: Order): Promise<void> {
++  try {
++    await gateway.capture(order.paymentId);
++  } catch (err) {
++    logger.warn("capture failed", { orderId: order.id, err });
++  }
++  await orders.setStatus(order.id, "paid");
++
++  try {
++    await mailer.sendReceipt(order.id);
++  } catch (err) {
++    logger.warn("receipt email failed", { orderId: order.id, err });
++  }
+ }

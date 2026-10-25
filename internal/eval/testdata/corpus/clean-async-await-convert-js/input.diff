@@ -1,0 +1,29 @@
+diff --git a/src/services/checkout.js b/src/services/checkout.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/checkout.js
++++ b/src/services/checkout.js
+@@ -10,9 +10,15 @@
+-function placeOrder(cart, user) {
+-  if (cart.items.length === 0) return Promise.resolve(null);
+-  return inventory.reserve(cart.items)
+-    .then((reservation) => payments.charge(user.id, cart.totalCents).then((charge) => ({ reservation, charge })))
+-    .then(({ reservation, charge }) => orders.create({ userId: user.id, items: cart.items, chargeId: charge.id, reservationId: reservation.id }))
+-    .catch((err) => {
+-      throw new CheckoutError("placeOrder failed", { cause: err });
+-    });
+-}
++async function placeOrder(cart, user) {
++  if (cart.items.length === 0) return null;
++  try {
++    const reservation = await inventory.reserve(cart.items);
++    const charge = await payments.charge(user.id, cart.totalCents);
++    return await orders.create({
++      userId: user.id,
++      items: cart.items,
++      chargeId: charge.id,
++      reservationId: reservation.id,
++    });
++  } catch (err) {
++    throw new CheckoutError("placeOrder failed", { cause: err });
++  }
++}

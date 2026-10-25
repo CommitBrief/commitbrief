@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "jwt-decode-unverified", "file": "src/middleware/auth.ts", "line": 9, "line_tol": 3, "category": "security", "min_severity": "critical", "summary": "jwt.decode returns the payload without validating the signature or expiry, so any client can forge a token with arbitrary sub/roles and be authenticated. Restore jwt.verify(token, config.jwtSecret) inside a try/catch that returns 401."}
+  ],
+  "must_stay_silent_on": []
+}

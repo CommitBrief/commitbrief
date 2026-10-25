@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "open-redirect-next", "file": "src/routes/auth.js", "line": 22, "line_tol": 3, "category": "security", "min_severity": "medium", "summary": "res.redirect(req.query.next) sends the user to any URL supplied by the requester, including external sites, enabling phishing after a legitimate login. Only allow relative paths that start with a single '/' (and not '//'), otherwise fall back to /dashboard."}
+  ],
+  "must_stay_silent_on": []
+}

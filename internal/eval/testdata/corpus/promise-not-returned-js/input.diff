@@ -1,0 +1,16 @@
+diff --git a/src/services/accounts.js b/src/services/accounts.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/accounts.js
++++ b/src/services/accounts.js
+@@ -22,7 +22,11 @@
+ function closeAccount(id, actor) {
+   return accounts.markClosed(id)
+     .then(() => sessions.revokeAll(id))
+     .then(() => cache.invalidate(`account:${id}`))
+     .then(() => webhooks.emit("account.closed", id))
+     .then(() => metrics.increment("accounts.closed"))
++    .then(() => {
++      audit.record({ action: "account.closed", target: id, actor });
++    })
++    .then(() => ({ id, closed: true }));
+ }

@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "unbounded-nan-limit", "file": "src/routes/activity.ts", "line": 12, "line_tol": 3, "category": "correctness", "min_severity": "medium", "summary": "parseInt of an absent or non-numeric `limit` is NaN, which the query builder treats as no limit, and a huge value is accepted as-is, so the endpoint can return or scan the entire table. Validate it is an integer and clamp, e.g. Math.min(Math.max(n, 1), 100) with a default."}
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,13 @@
+diff --git a/src/services/cart.ts b/src/services/cart.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/cart.ts
++++ b/src/services/cart.ts
+@@ -30,2 +30,8 @@
+ export function updateCartLine(cart: Cart, input: LineInput): Cart {
++  const qty = input.qty || 1;
++  if (qty === 0) {
++    return { ...cart, lines: cart.lines.filter((l) => l.sku !== input.sku) };
++  }
++  const lines = cart.lines.map((l) => (l.sku === input.sku ? { ...l, qty } : l));
++  return { ...cart, lines };
+ }

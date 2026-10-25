@@ -1,0 +1,9 @@
+{
+  "held_out": true,
+  "language": "typescript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/components/OrderTable.tsx", "line": 12, "reason": "useMemo reads only `orders` and lists it."},
+    {"file": "src/components/OrderTable.tsx", "line": 17, "reason": "useCallback reads only `currency` and lists it."}
+  ]
+}

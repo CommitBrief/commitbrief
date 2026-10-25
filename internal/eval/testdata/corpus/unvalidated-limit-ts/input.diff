@@ -1,0 +1,13 @@
+diff --git a/src/routes/activity.ts b/src/routes/activity.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/activity.ts
++++ b/src/routes/activity.ts
+@@ -11,2 +11,8 @@
+ router.get("/activity", requireAuth, asyncHandler(async (req, res) => {
++  const limit = parseInt(req.query.limit as string);
++  const rows = await db("activity")
++    .where({ userId: req.user.id })
++    .orderBy("createdAt", "desc")
++    .limit(limit);
++  res.json(rows);
+ }));

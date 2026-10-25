@@ -1,0 +1,8 @@
+{
+  "held_out": true,
+  "language": "go",
+  "expected_findings": [
+    {"id": "goroutine-leak-unbuffered-chan", "file": "internal/watch/watcher.go", "line": 24, "line_tol": 3, "category": "resource-leak", "min_severity": "medium", "summary": "ch is unbuffered and only received from in the select; if ctx is cancelled first, Next returns and the goroutine blocks forever on `ch <- ev` after Poll returns, leaking one goroutine per cancelled call. Make the channel buffered (make(chan Event, 1)) so the send never blocks."}
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,9 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "express-async-no-error-path", "file": "src/routes/reports.js", "line": 16, "line_tol": 3, "category": "error-handling", "min_severity": "high", "summary": "The export handler is async and not wrapped; a rejection from db.getReport or renderPdf is never passed to next(err) in Express 4, so it becomes an unhandled rejection and the request hangs. Wrap it in wrap() like the neighbouring route or try/catch with next(err)."}
+  ],
+  "must_stay_silent_on": [
+    {"file": "src/routes/reports.js", "line": 11, "reason": "Handler is wrapped in wrap(), which forwards rejections to next()."}
+  ]
+}

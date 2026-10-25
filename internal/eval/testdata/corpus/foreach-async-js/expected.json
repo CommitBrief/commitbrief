@@ -1,0 +1,8 @@
+{
+  "held_out": true,
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "foreach-async-not-awaited", "file": "src/routes/notify.js", "line": 15, "line_tol": 3, "category": "correctness", "min_severity": "medium", "summary": "Array.prototype.forEach does not await the async callback, so res.json({ sent }) runs immediately with sent === 0, mail errors become unhandled rejections, and the request completes before delivery. Use `await Promise.all(recipients.map(...))` (or a for...of loop)."}
+  ],
+  "must_stay_silent_on": []
+}

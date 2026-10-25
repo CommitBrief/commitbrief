@@ -1,0 +1,15 @@
+diff --git a/src/middleware/auth.ts b/src/middleware/auth.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/middleware/auth.ts
++++ b/src/middleware/auth.ts
+@@ -5,8 +5,9 @@
+ export function requireAuth(req: Request, res: Response, next: NextFunction) {
+   const header = req.headers.authorization ?? "";
+   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+   if (!token) return res.status(401).json({ error: "missing token" });
+-  const claims = jwt.verify(token, config.jwtSecret) as Claims;
++  const claims = jwt.decode(token) as Claims | null;
++  if (!claims) return res.status(401).json({ error: "invalid token" });
+   req.user = { id: claims.sub, roles: claims.roles };
+   next();
+ }

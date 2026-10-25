@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "percentile-default-sort", "file": "lib/stats.js", "line": 36, "line_tol": 3, "category": "correctness", "min_severity": "high", "summary": "Array.prototype.sort without a comparator orders elements as strings, so [9, 10, 100] sorts as [10, 100, 9]; the extracted percentile helper (old code used `(a, b) => a - b`) returns wrong p95/p99 for any latency data with mixed digit counts. Pass a numeric comparator."}
+  ],
+  "must_stay_silent_on": []
+}

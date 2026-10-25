@@ -1,0 +1,35 @@
+diff --git a/internal/pricing/discount.go b/internal/pricing/discount.go
+index aaaaaaa..bbbbbbb 100644
+--- a/internal/pricing/discount.go
++++ b/internal/pricing/discount.go
+@@ -8,6 +8,6 @@
+ package pricing
+ 
+-// Apply reduces price by pct percent (0-100).
+-func Apply(price int64, pct int64) int64 {
+-	return price - price*pct/100
++// Apply reduces price by bps basis points (1 bps = 0.01%, 10000 = 100%).
++func Apply(price int64, bps int64) int64 {
++	return price - price*bps/10000
+ }
+diff --git a/internal/checkout/cart.go b/internal/checkout/cart.go
+index aaaaaaa..bbbbbbb 100644
+--- a/internal/checkout/cart.go
++++ b/internal/checkout/cart.go
+@@ -14,12 +14,15 @@
+ type Cart struct {
+ 	Items      []Item
+ 	PercentOff int // whole percent, 0-100
+ }
+ 
+ func (c *Cart) Total() int64 {
+ 	var sum int64
+ 	for _, it := range c.Items {
+ 		sum += it.Price * int64(it.Qty)
+ 	}
+-	return sum
++	if c.PercentOff > 0 {
++		sum = pricing.Apply(sum, int64(c.PercentOff))
++	}
++	return sum
+ }

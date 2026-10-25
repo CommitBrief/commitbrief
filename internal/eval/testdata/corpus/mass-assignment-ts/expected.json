@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "mass-assignment", "file": "src/routes/users.ts", "line": 25, "line_tol": 3, "category": "security", "min_severity": "high", "summary": "req.body is forwarded wholesale to users.update, so a caller can set privileged fields such as role or emailVerified on its own account (mass assignment / privilege escalation). Pick the allowed fields explicitly (name, avatarUrl) or validate against a schema."}
+  ],
+  "must_stay_silent_on": []
+}

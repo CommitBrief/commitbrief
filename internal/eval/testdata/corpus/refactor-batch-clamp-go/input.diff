@@ -1,0 +1,163 @@
+diff --git a/internal/importer/orders.go b/internal/importer/orders.go
+index aaaaaaa..bbbbbbb 100644
+--- a/internal/importer/orders.go
++++ b/internal/importer/orders.go
+@@ -1,72 +1,104 @@
+ package importer
+ 
+ import (
+ 	"context"
+ 	"database/sql"
+ 	"fmt"
+ 	"strconv"
+ 	"strings"
+ )
+ 
+ // Order is one validated row of the nightly orders CSV.
+ type Order struct {
+ 	Ref        string
+ 	SKU        string
+ 	Qty        int
+ 	PriceCents int64
+ }
+ 
+-// Import validates raw CSV records and inserts them in batches.
+-func Import(ctx context.Context, db *sql.DB, raw [][]string) (int, error) {
+-	var orders []Order
+-	for i, rec := range raw {
+-		if len(rec) < 4 {
+-			return 0, fmt.Errorf("row %d: want 4 columns, got %d", i+1, len(rec))
+-		}
+-		qty, err := strconv.Atoi(rec[2])
+-		if err != nil {
+-			return 0, fmt.Errorf("row %d: bad quantity %q: %w", i+1, rec[2], err)
+-		}
+-		cents, err := strconv.ParseInt(rec[3], 10, 64)
+-		if err != nil {
+-			return 0, fmt.Errorf("row %d: bad price %q: %w", i+1, rec[3], err)
+-		}
+-		if qty <= 0 || cents < 0 {
+-			return 0, fmt.Errorf("row %d: quantity/price out of range", i+1)
+-		}
+-		orders = append(orders, Order{Ref: rec[0], SKU: rec[1], Qty: qty, PriceCents: cents})
+-	}
+-
+-	tx, err := db.BeginTx(ctx, nil)
+-	if err != nil {
+-		return 0, fmt.Errorf("begin: %w", err)
+-	}
+-	defer tx.Rollback()
+-
+-	const batchSize = 200
+-	inserted := 0
+-	for i := 0; i < len(orders); i += batchSize {
+-		end := i + batchSize
+-		if end > len(orders) {
+-			end = len(orders)
+-		}
+-		batch := orders[i:end]
+-
+-		placeholders := make([]string, 0, len(batch))
+-		args := make([]any, 0, len(batch)*4)
+-		for _, o := range batch {
+-			placeholders = append(placeholders, "(?, ?, ?, ?)")
+-			args = append(args, o.Ref, o.SKU, o.Qty, o.PriceCents)
+-		}
+-		query := "INSERT INTO orders (ref, sku, qty, price_cents) VALUES " + strings.Join(placeholders, ",")
+-		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+-			return inserted, fmt.Errorf("insert batch at %d: %w", i, err)
+-		}
+-		inserted += len(batch)
+-	}
+-
+-	if err := tx.Commit(); err != nil {
+-		return inserted, fmt.Errorf("commit: %w", err)
+-	}
+-	return inserted, nil
+-}
++const batchSize = 200
++
++// Import validates raw CSV records and inserts them in batches.
++func Import(ctx context.Context, db *sql.DB, raw [][]string) (int, error) {
++	orders, err := parseOrders(raw)
++	if err != nil {
++		return 0, err
++	}
++
++	tx, err := db.BeginTx(ctx, nil)
++	if err != nil {
++		return 0, fmt.Errorf("begin: %w", err)
++	}
++	defer tx.Rollback()
++
++	inserted := 0
++	for i, batch := range chunkOrders(orders, batchSize) {
++		n, err := insertBatch(ctx, tx, batch)
++		inserted += n
++		if err != nil {
++			return inserted, fmt.Errorf("insert batch %d: %w", i, err)
++		}
++	}
++
++	if err := tx.Commit(); err != nil {
++		return inserted, fmt.Errorf("commit: %w", err)
++	}
++	return inserted, nil
++}
++
++// parseOrders converts raw CSV records into validated Orders.
++func parseOrders(raw [][]string) ([]Order, error) {
++	orders := make([]Order, 0, len(raw))
++	for i, rec := range raw {
++		o, err := parseOrder(rec)
++		if err != nil {
++			return nil, fmt.Errorf("row %d: %w", i+1, err)
++		}
++		orders = append(orders, o)
++	}
++	return orders, nil
++}
++
++// parseOrder validates a single record.
++func parseOrder(rec []string) (Order, error) {
++	if len(rec) < 4 {
++		return Order{}, fmt.Errorf("want 4 columns, got %d", len(rec))
++	}
++	qty, err := strconv.Atoi(rec[2])
++	if err != nil {
++		return Order{}, fmt.Errorf("bad quantity %q: %w", rec[2], err)
++	}
++	cents, err := strconv.ParseInt(rec[3], 10, 64)
++	if err != nil {
++		return Order{}, fmt.Errorf("bad price %q: %w", rec[3], err)
++	}
++	if qty <= 0 || cents < 0 {
++		return Order{}, fmt.Errorf("quantity/price out of range")
++	}
++	return Order{Ref: rec[0], SKU: rec[1], Qty: qty, PriceCents: cents}, nil
++}
++
++// chunkOrders splits orders into consecutive batches of at most size.
++func chunkOrders(orders []Order, size int) [][]Order {
++	var out [][]Order
++	for i := 0; i < len(orders); i += size {
++		end := i + size
++		out = append(out, orders[i:end])
++	}
++	return out
++}
++
++// insertBatch writes one batch inside the surrounding transaction.
++func insertBatch(ctx context.Context, tx *sql.Tx, batch []Order) (int, error) {
++	placeholders := make([]string, 0, len(batch))
++	args := make([]any, 0, len(batch)*4)
++	for _, o := range batch {
++		placeholders = append(placeholders, "(?, ?, ?, ?)")
++		args = append(args, o.Ref, o.SKU, o.Qty, o.PriceCents)
++	}
++	query := "INSERT INTO orders (ref, sku, qty, price_cents) VALUES " + strings.Join(placeholders, ",")
++	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
++		return 0, err
++	}
++	return len(batch), nil
++}

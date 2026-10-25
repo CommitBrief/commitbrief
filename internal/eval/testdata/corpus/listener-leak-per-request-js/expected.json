@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "sse-listener-never-removed", "file": "src/routes/stream.js", "line": 12, "line_tol": 3, "category": "resource-leak", "min_severity": "medium", "summary": "events.on('update') is called for every SSE connection and never removed on req 'close', so listeners (and their captured res objects) accumulate forever and keep writing to closed sockets. Keep a reference to the handler and call events.off('update', handler) in req.on('close')."}
+  ],
+  "must_stay_silent_on": []
+}

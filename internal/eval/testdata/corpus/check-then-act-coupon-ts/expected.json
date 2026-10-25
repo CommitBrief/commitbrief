@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "coupon-double-redeem", "file": "src/services/coupons.ts", "line": 19, "line_tol": 3, "category": "concurrency", "min_severity": "medium", "summary": "exists() and add() are separate awaits, so two concurrent requests both observe alreadyUsed=false and both credit the wallet. Make the redemption atomic: insert with a unique (userId, code) constraint and treat a conflict as 'already used', inside a transaction with the credit."}
+  ],
+  "must_stay_silent_on": []
+}

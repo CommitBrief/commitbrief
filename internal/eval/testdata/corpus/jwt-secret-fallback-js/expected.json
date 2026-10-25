@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "jwt-default-secret", "file": "src/lib/tokens.js", "line": 5, "line_tol": 3, "category": "security", "min_severity": "high", "summary": "When JWT_SECRET is unset the module silently uses the literal 'dev-secret-change-me', which is public in the repo; a production misconfiguration then accepts forged tokens. Fail fast at startup if JWT_SECRET is missing instead of falling back."}
+  ],
+  "must_stay_silent_on": []
+}

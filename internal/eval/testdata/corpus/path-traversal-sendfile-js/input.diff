@@ -1,0 +1,11 @@
+diff --git a/src/routes/files.js b/src/routes/files.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/files.js
++++ b/src/routes/files.js
+@@ -6,4 +6,6 @@
+ const UPLOAD_DIR = path.resolve(__dirname, "../../uploads");
+ 
+ router.get("/files/:name", requireAuth, (req, res) => {
++  const target = path.join(UPLOAD_DIR, req.params.name);
++  res.sendFile(target);
+ });

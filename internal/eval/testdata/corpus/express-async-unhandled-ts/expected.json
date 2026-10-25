@@ -1,0 +1,9 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "express-async-no-catch", "file": "src/routes/orders.ts", "line": 22, "line_tol": 3, "category": "error-handling", "min_severity": "high", "summary": "The refund handler is async but not wrapped in asyncHandler and has no try/catch; if payments.refund or the DB calls reject, Express 4 never calls next(err), the promise rejection is unhandled and the request hangs (and a partial refund may go unrecorded). Wrap it in asyncHandler or catch and forward with next(err)."}
+  ],
+  "must_stay_silent_on": [
+    {"file": "src/routes/orders.ts", "line": 17, "reason": "Handler is wrapped in asyncHandler, which forwards rejections to next()."}
+  ]
+}

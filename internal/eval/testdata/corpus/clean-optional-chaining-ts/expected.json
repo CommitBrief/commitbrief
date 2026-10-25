@@ -1,0 +1,8 @@
+{
+  "language": "typescript",
+  "expected_findings": [],
+  "must_stay_silent_on": [
+    {"file": "src/format/address.ts", "line": 10, "reason": "Equivalent rewrite: old guard tested city !== undefined, so an empty string was returned before and still is."},
+    {"file": "src/format/address.ts", "line": 14, "reason": "Equivalent rewrite; zip is string | undefined and the old guard compared against undefined."}
+  ]
+}

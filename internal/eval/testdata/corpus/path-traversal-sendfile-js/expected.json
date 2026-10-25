@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "sendfile-path-traversal", "file": "src/routes/files.js", "line": 9, "line_tol": 3, "category": "security", "min_severity": "high", "summary": "req.params.name is joined to UPLOAD_DIR without normalising and checking that the result stays inside it, so '../' sequences (URL-decoded by Express) read arbitrary files readable by the process. Resolve the path and verify it starts with UPLOAD_DIR + path.sep, or use res.sendFile(name, { root: UPLOAD_DIR })."}
+  ],
+  "must_stay_silent_on": []
+}

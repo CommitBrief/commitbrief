@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "page-not-validated", "file": "src/routes/listings.js", "line": 11, "line_tol": 3, "category": "correctness", "min_severity": "low", "summary": "`Number(req.query.page) || 1` only rewrites 0/NaN; negative, fractional and Infinity values reach listings.page, which computes OFFSET = (page - 1) * size, producing a negative OFFSET (database error / 500) for negative values and a wrong page or non-integer OFFSET for fractional ones. Validate with Number.isInteger(page) && page >= 1 (and cap it), otherwise fall back to 1."}
+  ],
+  "must_stay_silent_on": []
+}

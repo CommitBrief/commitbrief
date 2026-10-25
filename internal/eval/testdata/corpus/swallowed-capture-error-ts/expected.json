@@ -1,0 +1,10 @@
+{
+  "held_out": true,
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "capture-error-swallowed", "file": "src/services/checkout.ts", "line": 28, "line_tol": 3, "category": "error-handling", "min_severity": "high", "summary": "The catch block only logs, so when gateway.capture rejects (declined card, timeout) execution continues to setStatus('paid') and the order is fulfilled unpaid. Re-throw (or mark the order payment_failed and return) instead of continuing."}
+  ],
+  "must_stay_silent_on": [
+    {"file": "src/services/checkout.ts", "line": 35, "reason": "Receipt email is best-effort; logging and continuing is intended."}
+  ]
+}

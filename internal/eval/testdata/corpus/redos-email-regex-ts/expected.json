@@ -1,0 +1,9 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "email-redos", "file": "src/validators.ts", "line": 8, "line_tol": 3, "category": "security", "min_severity": "medium", "summary": "`([a-zA-Z0-9]+[._-]?)+` nests a quantifier inside a quantified group; a non-matching input like 40 'a' characters causes catastrophic backtracking and blocks the event loop on user-supplied signup data. Use a linear pattern (`^[A-Za-z0-9._-]+@...`), cap the input length, or use a validator library."}
+  ],
+  "must_stay_silent_on": [
+    {"file": "src/validators.ts", "line": 3, "reason": "Linear, anchored character-class regex; no nested quantifiers."}
+  ]
+}

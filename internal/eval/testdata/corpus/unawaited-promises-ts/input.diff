@@ -1,0 +1,17 @@
+diff --git a/src/services/inventory.ts b/src/services/inventory.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/inventory.ts
++++ b/src/services/inventory.ts
+@@ -18,7 +18,8 @@
+ export async function reserveAll(order: Order): Promise<void> {
+-  for (const item of order.items) {
+-    const res = await reserveStock(item.sku, item.qty);
+-    if (!res.ok) throw new OutOfStockError(item.sku);
+-  }
++  for (const item of order.items) {
++    reserveStock(item.sku, item.qty).then((res) => {
++      if (!res.ok) throw new OutOfStockError(item.sku);
++    });
++  }
+   await orders.confirm(order.id);
+ }

@@ -24,10 +24,10 @@ import (
 // locked here so a fixture added or annotated without updating the numbers
 // fails CI instead of silently drifting the published figures.
 const (
-	wantFixtures       = 40
-	wantPlantedDefects = 23
-	wantCleanControls  = 20
-	wantHeldOut        = 8
+	wantFixtures       = 129
+	wantPlantedDefects = 99
+	wantCleanControls  = 33
+	wantHeldOut        = 26
 )
 
 // TestCorpusComposition pins the counts the docs advertise (drift guard

@@ -1,0 +1,18 @@
+diff --git a/src/components/InviteForm.jsx b/src/components/InviteForm.jsx
+index aaaaaaa..bbbbbbb 100644
+--- a/src/components/InviteForm.jsx
++++ b/src/components/InviteForm.jsx
+@@ -7,4 +7,13 @@
+ export function InviteForm({ workspaceId, onDone }) {
+   const [form, setForm] = useState({ email: "", role: "viewer" });
+ 
++  const handleCancel = useCallback(() => setForm({ email: "", role: "viewer" }), []);
++
++  const canSubmit = form.email.includes("@");
++
++  const handleSubmit = useCallback(async () => {
++    await api.post(`/workspaces/${workspaceId}/invites`, form);
++    onDone();
++  }, [onDone]);
++
+   return (

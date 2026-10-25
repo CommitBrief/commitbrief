@@ -1,0 +1,26 @@
+diff --git a/src/lib/merge.js b/src/lib/merge.js
+new file mode 100644
+index 0000000..bbbbbbb
+--- /dev/null
++++ b/src/lib/merge.js
+@@ -0,0 +1,20 @@
++"use strict";
++
++function isObject(v) {
++  return v !== null && typeof v === "object" && !Array.isArray(v);
++}
++
++/** Recursively merge source into target (mutates target). */
++function deepMerge(target, source) {
++  for (const key of Object.keys(source)) {
++    if (isObject(source[key])) {
++      if (!isObject(target[key])) target[key] = {};
++      deepMerge(target[key], source[key]);
++    } else {
++      target[key] = source[key];
++    }
++  }
++  return target;
++}
++
++module.exports = { deepMerge };

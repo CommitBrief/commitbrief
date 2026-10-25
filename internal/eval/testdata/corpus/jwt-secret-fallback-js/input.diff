@@ -1,0 +1,13 @@
+diff --git a/src/lib/tokens.js b/src/lib/tokens.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/lib/tokens.js
++++ b/src/lib/tokens.js
+@@ -3,7 +3,7 @@
+ const jwt = require("jsonwebtoken");
+ 
+-const SECRET = process.env.JWT_SECRET;
++const SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+ 
+ function sign(payload) {
+   return jwt.sign(payload, SECRET, { expiresIn: "1h" });
+ }

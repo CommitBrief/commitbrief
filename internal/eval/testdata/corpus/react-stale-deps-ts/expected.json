@@ -1,0 +1,9 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "stale-deps", "file": "src/components/UserCard.tsx", "line": 29, "line_tol": 3, "category": "correctness", "min_severity": "medium", "summary": "The effect fetches `userId` and calls `onLoaded` but its dependency array is empty, so it runs once and never refetches when userId changes — the card shows a stale user. Add [userId, onLoaded] (and stabilise onLoaded with useCallback in the parent)."}
+  ],
+  "must_stay_silent_on": [
+    {"file": "src/components/UserCard.tsx", "line": 34, "reason": "Title effect reads only `displayName` and lists it in its dependency array; correct."}
+  ]
+}

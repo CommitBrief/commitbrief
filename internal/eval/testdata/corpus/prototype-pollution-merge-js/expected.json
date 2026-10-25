@@ -1,0 +1,8 @@
+{
+  "held_out": true,
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "prototype-pollution", "file": "src/lib/merge.js", "line": 12, "line_tol": 3, "category": "security", "min_severity": "high", "summary": "deepMerge recurses into every own key of attacker-controlled JSON, including `__proto__` (JSON.parse creates it as an own key) and `constructor`, so target['__proto__'] resolves to Object.prototype and the merge writes properties onto it. Skip the keys `__proto__`, `constructor` and `prototype`, or merge into Object.create(null)."}
+  ],
+  "must_stay_silent_on": []
+}

@@ -1,0 +1,15 @@
+diff --git a/src/validators.ts b/src/validators.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/validators.ts
++++ b/src/validators.ts
+@@ -3,4 +3,10 @@
+ export const PHONE_RE = /^\+?[0-9]{7,15}$/;
+ export const ZIP_RE = /^[0-9]{5}$/;
+ export const SLUG_RE = /^[a-z0-9-]+$/;
+ 
++// Local part: dot/underscore/dash separated alphanumeric groups.
++export const EMAIL_RE = /^([a-zA-Z0-9]+[._-]?)+@[a-z0-9.-]+\.[a-z]{2,}$/;
++
++export function isValidEmail(value: string): boolean {
++  return EMAIL_RE.test(value);
++}

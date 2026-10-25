@@ -10,6 +10,12 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Changed
+- Eval corpus grown from 40 to 129 fixtures (96 buggy carrying 99 planted defects, 33 clean
+  controls, 26 held-out) across Go, TypeScript, JavaScript, Python, Java and PHP, adding
+  cross-file, large-refactor and framework-idiomatic cases; `TestCorpusComposition` pins the
+  new counts.
+
 ## [1.21.1] - 2026-10-25
 
 ### Fixed

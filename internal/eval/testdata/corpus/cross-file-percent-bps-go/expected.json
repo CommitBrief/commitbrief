@@ -1,0 +1,7 @@
+{
+  "language": "go",
+  "expected_findings": [
+    {"id": "percent-passed-as-bps", "file": "internal/checkout/cart.go", "line": 25, "line_tol": 3, "category": "correctness", "min_severity": "high", "summary": "pricing.Apply now takes basis points (divides by 10000) but Cart.Total passes PercentOff, which is a whole percent (0-100); a 10% coupon becomes 0.1%. Convert with `int64(c.PercentOff)*100` or give Apply a percent-based wrapper."}
+  ],
+  "must_stay_silent_on": []
+}

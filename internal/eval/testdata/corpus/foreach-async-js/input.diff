@@ -1,0 +1,14 @@
+diff --git a/src/routes/notify.js b/src/routes/notify.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/routes/notify.js
++++ b/src/routes/notify.js
+@@ -12,3 +12,9 @@
+ router.post("/notify", requireAdmin, wrap(async (req, res) => {
+   const recipients = await users.byIds(req.body.userIds);
++  let sent = 0;
++  recipients.forEach(async (user) => {
++    await mailer.send(user.email, req.body.subject, req.body.body);
++    sent += 1;
++  });
++  res.json({ sent });
+ }));

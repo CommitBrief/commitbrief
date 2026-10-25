@@ -1,0 +1,7 @@
+{
+  "language": "typescript",
+  "expected_findings": [
+    {"id": "falsy-zero-default", "file": "src/services/cart.ts", "line": 31, "line_tol": 3, "category": "correctness", "min_severity": "low", "summary": "`input.qty || 1` treats 0 as missing, so the removal branch (qty === 0) below is unreachable and a client can never remove a line by sending 0. Use `input.qty ?? 1`."}
+  ],
+  "must_stay_silent_on": []
+}

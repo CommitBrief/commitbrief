@@ -1,0 +1,16 @@
+diff --git a/src/services/coupons.ts b/src/services/coupons.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/coupons.ts
++++ b/src/services/coupons.ts
+@@ -15,5 +15,11 @@
+ export async function redeemCoupon(userId: string, code: string): Promise<number> {
+   const coupon = await coupons.byCode(code);
+   if (!coupon || coupon.expiresAt < new Date()) throw new InvalidCouponError(code);
+ 
++  const alreadyUsed = await redemptions.exists(userId, code);
++  if (alreadyUsed) throw new CouponUsedError(code);
++
++  await redemptions.add(userId, code);
++  await wallet.credit(userId, coupon.amountCents);
++  return coupon.amountCents;
+ }

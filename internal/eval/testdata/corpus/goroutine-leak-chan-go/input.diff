@@ -1,0 +1,25 @@
+diff --git a/internal/watch/watcher.go b/internal/watch/watcher.go
+index aaaaaaa..bbbbbbb 100644
+--- a/internal/watch/watcher.go
++++ b/internal/watch/watcher.go
+@@ -14,5 +14,20 @@
+ // Watcher wraps a blocking event source.
+ type Watcher struct {
+ 	source Source
+ }
+ 
++// Next returns the next event or ctx.Err() if ctx ends first.
++func (w *Watcher) Next(ctx context.Context) (Event, error) {
++	ch := make(chan Event)
++	go func() {
++		ev := w.source.Poll() // blocks until an event is available
++		ch <- ev
++	}()
++
++	select {
++	case ev := <-ch:
++		return ev, nil
++	case <-ctx.Done():
++		return Event{}, ctx.Err()
++	}
++}

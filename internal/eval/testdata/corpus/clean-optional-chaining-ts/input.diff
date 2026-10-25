@@ -1,0 +1,19 @@
+diff --git a/src/format/address.ts b/src/format/address.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/format/address.ts
++++ b/src/format/address.ts
+@@ -4,12 +4,12 @@
+ interface Address {
+   city?: string;
+   zip?: string;
+ }
+ 
+ export function cityLabel(user: User): string {
+-  return user && user.address && user.address.city !== undefined ? user.address.city : "Unknown";
++  return user?.address?.city ?? "Unknown";
+ }
+ 
+ export function zipOrEmpty(user: User): string {
+-  return user && user.address && user.address.zip !== undefined ? user.address.zip : "";
++  return user?.address?.zip ?? "";
+ }

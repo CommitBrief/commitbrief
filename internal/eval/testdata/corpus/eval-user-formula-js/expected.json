@@ -1,0 +1,7 @@
+{
+  "language": "javascript",
+  "expected_findings": [
+    {"id": "new-function-user-input", "file": "src/services/pricing.js", "line": 13, "line_tol": 3, "category": "security", "min_severity": "critical", "summary": "The tenant-editable formula string is compiled and run via new Function in the server process, giving any tenant admin arbitrary code execution (process.env, require('child_process'), fs). Parse the formula with a restricted expression evaluator (e.g. a small arithmetic parser or expr-eval) instead of evaluating JavaScript."}
+  ],
+  "must_stay_silent_on": []
+}

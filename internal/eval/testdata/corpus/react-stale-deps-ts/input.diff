@@ -1,0 +1,33 @@
+diff --git a/src/components/UserCard.tsx b/src/components/UserCard.tsx
+index aaaaaaa..bbbbbbb 100644
+--- a/src/components/UserCard.tsx
++++ b/src/components/UserCard.tsx
+@@ -10,5 +10,28 @@
+ export function UserCard({ userId, onLoaded }: Props) {
+   const [user, setUser] = useState<User | null>(null);
+   const [error, setError] = useState<string | null>(null);
+ 
++  useEffect(() => {
++    let cancelled = false;
++    fetchUser(userId)
++      .then((u) => {
++        if (!cancelled) {
++          setUser(u);
++          onLoaded?.(u);
++        }
++      })
++      .catch((e) => {
++        if (!cancelled) setError(String(e));
++      });
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  const displayName = user?.name ?? "Unknown";
++
++  useEffect(() => {
++    document.title = `${displayName} - Directory`;
++  }, [displayName]);
++
+   if (error) return <ErrorBanner message={error} />;
