@@ -30,11 +30,28 @@ func severityRank(s render.Severity) int {
 	return -1
 }
 
+// severityUnspecified keys an expected finding that sets no min_severity in
+// the per-severity recall breakdown.
+const severityUnspecified = "unspecified"
+
+// severityKey returns the breakdown key for an expected finding: its
+// answer-key severity floor, or severityUnspecified when it has none.
+func severityKey(e ExpectedFinding) string {
+	if e.MinSeverity == "" {
+		return severityUnspecified
+	}
+	return string(e.MinSeverity)
+}
+
 // FixtureScore is the per-fixture outcome of scoring produced findings
 // against the answer key.
 type FixtureScore struct {
 	Fixture string
 	HeldOut bool // mirrors Fixture.HeldOut so a Scorecard can be split
+
+	// Language mirrors Fixture.Language (empty → counted as "unknown") so a
+	// Scorecard can be broken down per language (Scorecard.breakdown).
+	Language string
 
 	TruePositives  int // expected findings that were matched
 	FalseNegatives int // expected findings that were missed
@@ -47,6 +64,19 @@ type FixtureScore struct {
 	// its category, giving a per-category recall breakdown (ADR-0018 §2).
 	CaughtByCategory map[string]int
 	MissedByCategory map[string]int
+
+	// CaughtBySeverity / MissedBySeverity attribute each expected finding to
+	// its answer-key severity floor (ExpectedFinding.MinSeverity; an entry
+	// with no floor is keyed severityUnspecified). They feed the per-severity
+	// recall breakdown.
+	CaughtBySeverity map[string]int
+	MissedBySeverity map[string]int
+
+	// MaxProducedSeverity is the highest severity among the findings produced
+	// on a clean-control fixture ("" when none, or on a buggy fixture). It
+	// feeds the per-severity-floor FPR breakdown; CleanAlarm itself is still
+	// the authority for the headline fpr.
+	MaxProducedSeverity render.Severity
 
 	// Usage is the token usage the provider reported for this fixture's
 	// Review call. Zero on the mock tier (the mock provider's usage is a
@@ -175,9 +205,12 @@ func Score(produced []render.Finding, fx Fixture) FixtureScore {
 	score := FixtureScore{
 		Fixture:          fx.Name,
 		HeldOut:          fx.HeldOut,
+		Language:         fx.Language,
 		SilenceAnchors:   len(fx.MustStaySilentOn),
 		CaughtByCategory: map[string]int{},
 		MissedByCategory: map[string]int{},
+		CaughtBySeverity: map[string]int{},
+		MissedBySeverity: map[string]int{},
 	}
 
 	matched := make([]bool, len(produced))
@@ -197,9 +230,11 @@ func Score(produced []render.Finding, fx Fixture) FixtureScore {
 		if caught {
 			score.TruePositives++
 			score.CaughtByCategory[exp.Category]++
+			score.CaughtBySeverity[severityKey(exp)]++
 		} else {
 			score.FalseNegatives++
 			score.MissedByCategory[exp.Category]++
+			score.MissedBySeverity[severityKey(exp)]++
 		}
 	}
 
@@ -222,7 +257,9 @@ func Score(produced []render.Finding, fx Fixture) FixtureScore {
 		for _, f := range produced {
 			if severityRank(f.Severity) >= severityRank(render.SeverityLow) {
 				score.CleanAlarm = true
-				break
+				if severityRank(f.Severity) > severityRank(score.MaxProducedSeverity) {
+					score.MaxProducedSeverity = f.Severity
+				}
 			}
 		}
 	}
@@ -239,14 +276,18 @@ func ErrorScore(fx Fixture) FixtureScore {
 	score := FixtureScore{
 		Fixture:          fx.Name,
 		HeldOut:          fx.HeldOut,
+		Language:         fx.Language,
 		SilenceAnchors:   len(fx.MustStaySilentOn),
 		CaughtByCategory: map[string]int{},
 		MissedByCategory: map[string]int{},
+		CaughtBySeverity: map[string]int{},
+		MissedBySeverity: map[string]int{},
 		Errored:          true,
 	}
 	for _, exp := range fx.Expected {
 		score.FalseNegatives++
 		score.MissedByCategory[exp.Category]++
+		score.MissedBySeverity[severityKey(exp)]++
 	}
 	if len(fx.Expected) == 0 {
 		score.CleanAlarm = true

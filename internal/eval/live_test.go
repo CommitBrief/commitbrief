@@ -92,6 +92,13 @@ func TestEvalLive(t *testing.T) {
 	t.Logf("── POOLED (%d runs) — recall=%.4f (n=%d) precision=%.4f fpr=%.4f (n=%d) silence_violation_rate=%.4f errors=%d usd/review=%.6f ──",
 		row.Runs, row.Recall, row.NBuggy, row.Precision, row.FPR, row.NClean, row.SilenceViolationRate, row.Errors, row.USDPerReview)
 
+	if row.Breakdown != nil {
+		t.Logf("── POOLED BREAKDOWN (%d runs) ──", row.Runs)
+		for _, line := range FormatBreakdown(*row.Breakdown) {
+			t.Log(line)
+		}
+	}
+
 	outPath := os.Getenv("COMMITBRIEF_EVAL_OUT")
 	if outPath == "" {
 		return
@@ -170,6 +177,9 @@ func logScorecard(t *testing.T, label string, sc Scorecard, withCategories bool)
 	if withCategories {
 		for _, cr := range sc.CategoryRecall() {
 			t.Logf("   category %-16s recall=%d/%d", cr.Category, cr.Caught, cr.Total)
+		}
+		for _, line := range FormatBreakdown(sc.Breakdown()) {
+			t.Log(line)
 		}
 	}
 }

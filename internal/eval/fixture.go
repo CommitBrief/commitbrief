@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/CommitBrief/commitbrief/internal/render"
 )
@@ -82,6 +83,72 @@ type Fixture struct {
 	// HeldOut marks the fixture as part of the generalization-only slice;
 	// see answerKey.HeldOut.
 	HeldOut bool
+}
+
+// canonicalLanguages is the one closed set of answer-key `language` values a
+// corpus fixture may carry (Faz 05), in the order breakdown tables list them.
+// Values are the full lowercase names already used in expected.json —
+// "typescript"/"javascript", not "ts"/"js". The short forms exist only as
+// fixture directory-name suffixes (see languageBySuffix).
+var canonicalLanguages = []string{"go", "typescript", "javascript", "python", "java", "php"}
+
+// languageBySuffix maps a fixture directory's final `-<suffix>` segment to
+// its canonical language, so TestCorpusLanguageConsistency can catch a
+// fixture whose directory name and answer key disagree.
+var languageBySuffix = map[string]string{
+	"go":     "go",
+	"ts":     "typescript",
+	"js":     "javascript",
+	"python": "python",
+	"java":   "java",
+	"php":    "php",
+}
+
+// CanonicalLanguages returns a copy of the closed set of fixture languages.
+func CanonicalLanguages() []string {
+	return append([]string(nil), canonicalLanguages...)
+}
+
+// IsCanonicalLanguage reports whether lang is in the closed fixture
+// language set.
+func IsCanonicalLanguage(lang string) bool {
+	for _, l := range canonicalLanguages {
+		if l == lang {
+			return true
+		}
+	}
+	return false
+}
+
+// LanguageFromFixtureName derives the canonical language from a fixture
+// directory name's trailing `-<suffix>` (e.g. "sql-injection-go" → "go",
+// "xss-innerhtml-js" → "javascript"). ok is false when the name has no
+// recognized suffix.
+func LanguageFromFixtureName(name string) (lang string, ok bool) {
+	i := strings.LastIndex(name, "-")
+	if i < 0 || i == len(name)-1 {
+		return "", false
+	}
+	lang, ok = languageBySuffix[name[i+1:]]
+	return lang, ok
+}
+
+// CheckLanguage verifies the fixture's answer-key language is in the
+// canonical set and agrees with its directory-name suffix. It is a corpus
+// consistency check, deliberately not run by LoadFixture: the loader stays
+// permissive so tooling and tests can load ad-hoc fixture directories.
+func (fx Fixture) CheckLanguage() error {
+	if !IsCanonicalLanguage(fx.Language) {
+		return fmt.Errorf("eval: fixture %q: language %q is not one of %v", fx.Name, fx.Language, canonicalLanguages)
+	}
+	want, ok := LanguageFromFixtureName(fx.Name)
+	if !ok {
+		return fmt.Errorf("eval: fixture %q: directory name has no recognized language suffix (-go, -ts, -js, -python, -java, -php)", fx.Name)
+	}
+	if want != fx.Language {
+		return fmt.Errorf("eval: fixture %q: directory suffix says %q but expected.json language is %q", fx.Name, want, fx.Language)
+	}
+	return nil
 }
 
 // Categories returns the distinct categories a fixture exercises: the

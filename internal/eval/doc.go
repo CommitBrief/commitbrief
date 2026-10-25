@@ -21,6 +21,12 @@
 //     and prints the quality scorecard. Non-deterministic and gated; it is
 //     the source of the README quality numbers, never a CI gate.
 //
+// Every reported ratio is also broken down per language and per severity
+// (BuildBreakdown / FormatBreakdown), each cell carrying its k/n, a 95%
+// Wilson interval and a low_n flag when fewer than 20 distinct units back
+// it. Fixture languages come from a closed set (CanonicalLanguages) that
+// must agree with each fixture directory's suffix (Fixture.CheckLanguage).
+//
 // The harness consumes provider output through the locked --json schema v1
 // findings[] (ADR-0014); it introduces no new output contract.
 package eval

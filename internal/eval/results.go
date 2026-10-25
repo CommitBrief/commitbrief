@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/provider"
+	"github.com/CommitBrief/commitbrief/internal/render"
 )
 
 // RecallMinValue and FPRMaxValue are ADR-0043 §2's recall/fpr gate "in
@@ -118,6 +119,11 @@ type BenchmarkRow struct {
 	USDPerReview float64    `json:"usd_per_review"`
 
 	Eligible bool `json:"eligible"`
+
+	// Breakdown is the per-language and per-severity recall/fpr with n and
+	// Wilson 95% intervals (ADR-0043 §4 §Update 2026-10-25). Additive: rows
+	// written before it existed omit it and schema stays 1.
+	Breakdown *Breakdown `json:"breakdown,omitempty"`
 }
 
 // BenchmarkFile is the whole ADR-0043 §4 results document — one corpus's
@@ -248,6 +254,8 @@ func BuildRow(scs []Scorecard, pricing provider.Pricing, promptSHA256, commit st
 		usd = uncachedInputOutputCost(pricing, usage) / float64(totalReviews)
 	}
 
+	breakdown := BuildBreakdown(scs)
+
 	return BenchmarkRow{
 		Provider:             scs[0].Provider,
 		Model:                scs[0].Model,
@@ -272,6 +280,7 @@ func BuildRow(scs []Scorecard, pricing provider.Pricing, promptSHA256, commit st
 		CachedInputTokens:    round4(meanCached),
 		Pricing:              RowPricing{InputPer1M: pricing.InputPer1M, OutputPer1M: pricing.OutputPer1M},
 		USDPerReview:         round6(usd),
+		Breakdown:            &breakdown,
 	}, nil
 }
 
@@ -354,6 +363,11 @@ func nonFiniteField(row BenchmarkRow) string {
 	for _, f := range fields {
 		if math.IsNaN(f.v) || math.IsInf(f.v, 0) {
 			return f.name
+		}
+	}
+	if row.Breakdown != nil {
+		if name := row.Breakdown.nonFiniteField(); name != "" {
+			return "breakdown." + name
 		}
 	}
 	return ""
@@ -475,4 +489,265 @@ func WriteResult(path string, corpus CorpusInfo, runs int, thresholds Thresholds
 		return fmt.Errorf("eval: rename temp file into results %q: %w", path, err)
 	}
 	return nil
+}
+
+// wilsonZ is the two-sided 95% normal quantile used for every interval in
+// the breakdown.
+const wilsonZ = 1.96
+
+// lowNThreshold is the sample size below which a breakdown cell is flagged
+// `low_n`: no headline ratio may rest on fewer than this many distinct
+// units (defects for recall, clean fixtures for fpr).
+const lowNThreshold = 20
+
+// wilsonBounds is the Wilson score interval for a proportion p observed over
+// an effective sample size n (n > 0), clamped to [0, 1]. n is a float so a
+// pooled multi-run cell can be evaluated at its distinct-unit size (see
+// newRateStat).
+func wilsonBounds(p, n float64) (lo, hi float64) {
+	z2 := wilsonZ * wilsonZ
+	denom := 1 + z2/n
+	centre := (p + z2/(2*n)) / denom
+	half := wilsonZ * math.Sqrt(p*(1-p)/n+z2/(4*n*n)) / denom
+	return math.Max(0, centre-half), math.Min(1, centre+half)
+}
+
+// WilsonInterval returns the 95% Wilson score interval for successes out of
+// n trials. ok is false when the interval is undefined (n <= 0, or
+// successes outside [0, n]); callers must then report no interval rather
+// than a NaN.
+func WilsonInterval(successes, n int) (lo, hi float64, ok bool) {
+	if n <= 0 || successes < 0 || successes > n {
+		return 0, 0, false
+	}
+	lo, hi = wilsonBounds(float64(successes)/float64(n), float64(n))
+	return lo, hi, true
+}
+
+// RateStat is one reported ratio together with the evidence behind it. K
+// and N are pooled over every run (so Rate = K/N, the same sum-then-divide
+// pooling BuildRow uses); NDistinct is N per run — the number of distinct
+// defects or clean fixtures the ratio rests on. Repeating a run does not
+// add independent evidence, so the Wilson interval and LowN are computed at
+// NDistinct, not N. When N == 0 the ratio is undefined: Rate and the
+// interval are null (never NaN) and LowN is true.
+type RateStat struct {
+	Rate       *float64 `json:"rate"`
+	K          int      `json:"k"`
+	N          int      `json:"n"`
+	NDistinct  int      `json:"n_distinct"`
+	WilsonLow  *float64 `json:"wilson_low"`
+	WilsonHigh *float64 `json:"wilson_high"`
+	LowN       bool     `json:"low_n"`
+}
+
+func newRateStat(k, n, runs int) RateStat {
+	if runs < 1 {
+		runs = 1
+	}
+	// NDistinct is the one definition of "distinct n": LowN and the Wilson
+	// interval both use it.
+	rs := RateStat{K: k, N: n, NDistinct: n / runs}
+	rs.LowN = rs.NDistinct < lowNThreshold
+	if n <= 0 || k < 0 || k > n || rs.NDistinct <= 0 {
+		return rs
+	}
+	p := float64(k) / float64(n)
+	lo, hi := wilsonBounds(p, float64(rs.NDistinct))
+	r, l, h := round4(p), round4(lo), round4(hi)
+	rs.Rate, rs.WilsonLow, rs.WilsonHigh = &r, &l, &h
+	return rs
+}
+
+func (rs RateStat) nonFiniteField() string {
+	for _, f := range []struct {
+		name string
+		v    *float64
+	}{{"rate", rs.Rate}, {"wilson_low", rs.WilsonLow}, {"wilson_high", rs.WilsonHigh}} {
+		if f.v != nil && (math.IsNaN(*f.v) || math.IsInf(*f.v, 0)) {
+			return f.name
+		}
+	}
+	return ""
+}
+
+// BreakdownEntry is one language's or one severity's recall and fpr.
+//
+// Per language: Recall counts caught ÷ expected defects in that language's
+// buggy fixtures; FPR counts clean fixtures of that language that drew a
+// low-or-higher finding ÷ clean fixtures of that language.
+//
+// Per severity: Recall is keyed by the answer-key severity floor
+// (min_severity) of the expected defect, "unspecified" if it sets none. FPR
+// is keyed by an alarm floor: the clean fixtures that drew a finding of at
+// least that severity ÷ all clean fixtures (so "low" equals the headline
+// fpr). "info" is never an fpr floor (ADR-0043 §3 excludes it), and
+// "unspecified" has no fpr, so those cells carry n = 0.
+type BreakdownEntry struct {
+	Recall RateStat `json:"recall"`
+	FPR    RateStat `json:"fpr"`
+}
+
+// Breakdown is the ADR-0043 §4 additive `breakdown` object on a results row.
+// Language always lists every canonical language (n = 0 where the corpus has
+// none yet, e.g. java/php), plus "unknown" if a fixture carries none.
+type Breakdown struct {
+	Language map[string]BreakdownEntry `json:"language"`
+	Severity map[string]BreakdownEntry `json:"severity"`
+}
+
+func (b Breakdown) nonFiniteField() string {
+	for _, group := range []struct {
+		name string
+		m    map[string]BreakdownEntry
+	}{{"language", b.Language}, {"severity", b.Severity}} {
+		for key, e := range group.m {
+			if f := e.Recall.nonFiniteField(); f != "" {
+				return group.name + "." + key + ".recall." + f
+			}
+			if f := e.FPR.nonFiniteField(); f != "" {
+				return group.name + "." + key + ".fpr." + f
+			}
+		}
+	}
+	return ""
+}
+
+// severityFloors are the alarm floors the per-severity fpr is reported at,
+// ascending. The first (low) is the headline fpr's own floor.
+var severityFloors = []render.Severity{render.SeverityLow, render.SeverityMedium, render.SeverityHigh, render.SeverityCritical}
+
+// severityOrder lists the severity breakdown keys most-severe first.
+var severityOrder = []string{
+	string(render.SeverityCritical), string(render.SeverityHigh), string(render.SeverityMedium),
+	string(render.SeverityLow), string(render.SeverityInfo),
+}
+
+// BuildBreakdown pools k Scorecards of the same corpus into the per-language
+// and per-severity breakdown, summing raw counts across runs exactly as
+// BuildRow does for the headline ratios.
+func BuildBreakdown(scs []Scorecard) Breakdown {
+	type counts struct{ k, n int }
+	langRecall := map[string]*counts{}
+	langFPR := map[string]*counts{}
+	sevRecall := map[string]*counts{}
+	sevFPR := map[string]*counts{}
+	cell := func(m map[string]*counts, key string) *counts {
+		c := m[key]
+		if c == nil {
+			c = &counts{}
+			m[key] = c
+		}
+		return c
+	}
+
+	for _, sc := range scs {
+		for _, s := range sc.Fixtures {
+			lang := s.Language
+			if lang == "" {
+				lang = "unknown"
+			}
+			rc := cell(langRecall, lang)
+			rc.k += s.TruePositives
+			rc.n += s.TruePositives + s.FalseNegatives
+			for sev, n := range s.CaughtBySeverity {
+				c := cell(sevRecall, sev)
+				c.k += n
+				c.n += n
+			}
+			for sev, n := range s.MissedBySeverity {
+				cell(sevRecall, sev).n += n
+			}
+			if s.IsBuggy() {
+				continue
+			}
+			fc := cell(langFPR, lang)
+			fc.n++
+			if s.CleanAlarm {
+				fc.k++
+			}
+			for _, floor := range severityFloors {
+				c := cell(sevFPR, string(floor))
+				c.n++
+				// The low floor is CleanAlarm itself; higher floors need the
+				// recorded max severity. An errored clean run is an alarm at
+				// every floor: its severity is unknowable and ADR-0043 §3
+				// counts it against the model.
+				if s.CleanAlarm && (s.Errored || floor == render.SeverityLow ||
+					severityRank(s.MaxProducedSeverity) >= severityRank(floor)) {
+					c.k++
+				}
+			}
+		}
+	}
+
+	runs := len(scs)
+	stat := func(m map[string]*counts, key string) RateStat {
+		if c := m[key]; c != nil {
+			return newRateStat(c.k, c.n, runs)
+		}
+		return newRateStat(0, 0, runs)
+	}
+
+	bd := Breakdown{Language: map[string]BreakdownEntry{}, Severity: map[string]BreakdownEntry{}}
+	langs := CanonicalLanguages()
+	if langRecall["unknown"] != nil || langFPR["unknown"] != nil {
+		langs = append(langs, "unknown")
+	}
+	for _, lang := range langs {
+		bd.Language[lang] = BreakdownEntry{Recall: stat(langRecall, lang), FPR: stat(langFPR, lang)}
+	}
+	sevKeys := append([]string(nil), severityOrder...)
+	if sevRecall[severityUnspecified] != nil {
+		sevKeys = append(sevKeys, severityUnspecified)
+	}
+	for _, sev := range sevKeys {
+		bd.Severity[sev] = BreakdownEntry{Recall: stat(sevRecall, sev), FPR: stat(sevFPR, sev)}
+	}
+	return bd
+}
+
+// Breakdown pools this single Scorecard's per-language and per-severity
+// counts; shorthand for BuildBreakdown of one run.
+func (sc Scorecard) Breakdown() Breakdown { return BuildBreakdown([]Scorecard{sc}) }
+
+func formatRateStat(rs RateStat) string {
+	if rs.Rate == nil {
+		return "n/a (n=0) (n<20)"
+	}
+	out := fmt.Sprintf("%.2f %d/%d [%.2f–%.2f]", *rs.Rate, rs.K, rs.N, *rs.WilsonLow, *rs.WilsonHigh)
+	if rs.LowN {
+		out += " (n<20)"
+	}
+	return out
+}
+
+// FormatBreakdown renders the breakdown as console lines (one per row, no
+// trailing newline): language rows in canonical order, then severity rows
+// most-severe first. Every ratio is printed as `rate k/n [wilson95]`, and a
+// cell resting on fewer than 20 distinct units carries "(n<20)".
+func FormatBreakdown(b Breakdown) []string {
+	var lines []string
+	row := func(key string, e BreakdownEntry) string {
+		return fmt.Sprintf("   %-12s recall=%-34s fpr=%s", key, formatRateStat(e.Recall), formatRateStat(e.FPR))
+	}
+	lines = append(lines, "   by language — recall: caught/expected defects; fpr: alarmed/clean fixtures; [Wilson 95%]")
+	langs := CanonicalLanguages()
+	if _, ok := b.Language["unknown"]; ok {
+		langs = append(langs, "unknown")
+	}
+	for _, l := range langs {
+		if e, ok := b.Language[l]; ok {
+			lines = append(lines, row(l, e))
+		}
+	}
+	lines = append(lines, "   by severity — recall: by answer-key min_severity; fpr: clean fixtures alarmed at >= that severity")
+	keys := append([]string(nil), severityOrder...)
+	keys = append(keys, severityUnspecified)
+	for _, k := range keys {
+		if e, ok := b.Severity[k]; ok {
+			lines = append(lines, row(k, e))
+		}
+	}
+	return lines
 }

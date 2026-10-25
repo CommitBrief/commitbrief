@@ -7,10 +7,12 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/CommitBrief/commitbrief/internal/provider"
+	"github.com/CommitBrief/commitbrief/internal/render"
 )
 
 // perfectScorecard builds a Scorecard for provider/model with nBuggy
@@ -209,7 +211,7 @@ func TestResultsJSONFieldNames(t *testing.T) {
 		"provider", "model", "measured_at", "prompt_sha256", "commitbrief_commit",
 		"runs", "n_buggy", "n_clean", "n_expected",
 		"recall", "recall_min", "recall_max", "precision", "fpr", "fpr_min", "fpr_max",
-		"silence_violation_rate", "errors",
+		"silence_violation_rate", "errors", "breakdown",
 		"input_tokens", "output_tokens", "cached_input_tokens",
 		"pricing", "usd_per_review", "eligible",
 	}
@@ -645,5 +647,217 @@ func TestResultsDefaultThresholds(t *testing.T) {
 	th := DefaultThresholds()
 	if th.RecallMin != 0.90 || th.FPRMax != 0.10 {
 		t.Errorf("DefaultThresholds() = %+v, want {RecallMin:0.90 FPRMax:0.10}", th)
+	}
+}
+
+// TestWilsonInterval pins the pure Wilson (z = 1.96) function. Boundary rows
+// use the closed forms (k=0 → upper z²/(n+z²), k=n → lower n/(n+z²)); the
+// 10/20 and 5/10 rows are the textbook values.
+func TestWilsonInterval(t *testing.T) {
+	const z2 = 1.96 * 1.96
+	tests := []struct {
+		name       string
+		k, n       int
+		lo, hi     float64
+		wantDefine bool
+	}{
+		{"zero of twenty", 0, 20, 0, z2 / (20 + z2), true},
+		{"twenty of twenty", 20, 20, 20 / (20 + z2), 1, true},
+		{"ten of twenty", 10, 20, 0.2993, 0.7007, true},
+		{"five of ten", 5, 10, 0.2366, 0.7634, true},
+		{"one of one", 1, 1, 0.2065, 1, true},
+		{"n zero undefined", 0, 0, 0, 0, false},
+		{"negative n undefined", 0, -1, 0, 0, false},
+		{"k above n undefined", 5, 4, 0, 0, false},
+		{"negative k undefined", -1, 4, 0, 0, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lo, hi, ok := WilsonInterval(tc.k, tc.n)
+			if ok != tc.wantDefine {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantDefine)
+			}
+			if !ok {
+				return
+			}
+			if math.Abs(lo-tc.lo) > 1e-3 || math.Abs(hi-tc.hi) > 1e-3 {
+				t.Errorf("WilsonInterval(%d, %d) = [%.4f, %.4f], want [%.4f, %.4f]", tc.k, tc.n, lo, hi, tc.lo, tc.hi)
+			}
+			if lo < 0 || hi > 1 || lo > hi || math.IsNaN(lo) || math.IsNaN(hi) {
+				t.Errorf("interval [%v, %v] not within [0,1] / ordered", lo, hi)
+			}
+		})
+	}
+}
+
+// TestRateStatLowNAndUndefined pins the n < 20 flag (on distinct units, not
+// pooled trials) and the n = 0 contract: null rate and interval, never NaN.
+func TestRateStatLowNAndUndefined(t *testing.T) {
+	if rs := newRateStat(19, 19, 1); !rs.LowN {
+		t.Error("n=19 must be low_n")
+	}
+	if rs := newRateStat(20, 20, 1); rs.LowN {
+		t.Error("n=20 must not be low_n")
+	}
+	// 3 runs × 10 distinct units = pooled n of 30, but only 10 independent
+	// units: still low_n, and the interval is the n=10 one.
+	rs := newRateStat(15, 30, 3)
+	if !rs.LowN || rs.NDistinct != 10 {
+		t.Errorf("pooled 30 over 3 runs: LowN=%v NDistinct=%d, want true/10", rs.LowN, rs.NDistinct)
+	}
+	wantLo, wantHi, _ := WilsonInterval(5, 10)
+	if rs.WilsonLow == nil || math.Abs(*rs.WilsonLow-wantLo) > 1e-3 || math.Abs(*rs.WilsonHigh-wantHi) > 1e-3 {
+		t.Errorf("pooled interval = %v..%v, want the n=10 interval %.4f..%.4f", rs.WilsonLow, rs.WilsonHigh, wantLo, wantHi)
+	}
+
+	empty := newRateStat(0, 0, 1)
+	if empty.Rate != nil || empty.WilsonLow != nil || empty.WilsonHigh != nil || !empty.LowN {
+		t.Errorf("n=0 stat = %+v, want null rate/interval and low_n", empty)
+	}
+	data, err := json.Marshal(empty)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	for _, k := range []string{"rate", "wilson_low", "wilson_high"} {
+		if v, ok := m[k]; !ok || v != nil {
+			t.Errorf("n=0 JSON %s = %v (present=%v), want explicit null", k, v, ok)
+		}
+	}
+}
+
+func breakdownFixtureScores() Scorecard {
+	return Scorecard{Provider: "p", Model: "m", Fixtures: []FixtureScore{
+		{Fixture: "a-go", Language: "go", TruePositives: 2, FalseNegatives: 1,
+			CaughtBySeverity: map[string]int{"high": 2}, MissedBySeverity: map[string]int{"critical": 1}},
+		{Fixture: "b-python", Language: "python", TruePositives: 1,
+			CaughtBySeverity: map[string]int{"unspecified": 1}},
+		{Fixture: "clean-go", Language: "go"},
+		{Fixture: "clean-go-medium", Language: "go", CleanAlarm: true, MaxProducedSeverity: render.SeverityMedium},
+		{Fixture: "clean-ts-low", Language: "typescript", CleanAlarm: true, MaxProducedSeverity: render.SeverityLow},
+		{Fixture: "clean-ts-err", Language: "typescript", CleanAlarm: true, Errored: true},
+	}}
+}
+
+// TestBuildBreakdownCounts pins per-language and per-severity attribution,
+// the severity-floor fpr semantics (low floor == headline CleanAlarm; an
+// errored clean run alarms at every floor), and the always-present
+// canonical-language rows with n = 0 for languages the corpus lacks.
+func TestBuildBreakdownCounts(t *testing.T) {
+	bd := BuildBreakdown([]Scorecard{breakdownFixtureScores()})
+
+	check := func(label string, rs RateStat, k, n int) {
+		t.Helper()
+		if rs.K != k || rs.N != n {
+			t.Errorf("%s = %d/%d, want %d/%d", label, rs.K, rs.N, k, n)
+		}
+	}
+	check("go recall", bd.Language["go"].Recall, 2, 3)
+	check("go fpr", bd.Language["go"].FPR, 1, 2)
+	check("python recall", bd.Language["python"].Recall, 1, 1)
+	check("python fpr", bd.Language["python"].FPR, 0, 0)
+	check("typescript fpr", bd.Language["typescript"].FPR, 2, 2)
+
+	for _, l := range []string{"java", "php"} {
+		e, ok := bd.Language[l]
+		if !ok {
+			t.Fatalf("language %q missing from breakdown", l)
+		}
+		if e.Recall.N != 0 || e.Recall.Rate != nil || !e.Recall.LowN || e.FPR.N != 0 {
+			t.Errorf("%s = %+v, want empty low_n cells", l, e)
+		}
+	}
+	if _, ok := bd.Language["unknown"]; ok {
+		t.Error("unknown language row present with no unknown fixtures")
+	}
+
+	check("critical recall", bd.Severity["critical"].Recall, 0, 1)
+	check("high recall", bd.Severity["high"].Recall, 2, 2)
+	check("unspecified recall", bd.Severity[severityUnspecified].Recall, 1, 1)
+	check("medium recall (none)", bd.Severity["medium"].Recall, 0, 0)
+
+	// 4 clean fixtures: go (silent), go (medium), ts (low), ts (errored).
+	check("fpr floor low", bd.Severity["low"].FPR, 3, 4)
+	check("fpr floor medium", bd.Severity["medium"].FPR, 2, 4)
+	check("fpr floor high", bd.Severity["high"].FPR, 1, 4)
+	check("fpr floor critical", bd.Severity["critical"].FPR, 1, 4)
+	check("fpr info (never a floor)", bd.Severity["info"].FPR, 0, 0)
+}
+
+// TestBuildBreakdownPoolsRuns pins sum-then-divide across runs and that the
+// distinct-unit n (what low_n and the interval use) stays per-run.
+func TestBuildBreakdownPoolsRuns(t *testing.T) {
+	one := breakdownFixtureScores()
+	bd := BuildBreakdown([]Scorecard{one, one, one})
+	rs := bd.Language["go"].Recall
+	if rs.K != 6 || rs.N != 9 || rs.NDistinct != 3 {
+		t.Errorf("go recall pooled = k%d n%d distinct%d, want k6 n9 distinct3", rs.K, rs.N, rs.NDistinct)
+	}
+	if rs.Rate == nil || *rs.Rate != round4(2.0/3.0) {
+		t.Errorf("go recall rate = %v, want %v", rs.Rate, round4(2.0/3.0))
+	}
+}
+
+// TestBuildRowCarriesBreakdown pins the additive breakdown on a row, that
+// the headline fpr equals the low-floor fpr, and that the row stays
+// finite-clean (no NaN reaches the JSON for n = 0 cells).
+func TestBuildRowCarriesBreakdown(t *testing.T) {
+	sc := breakdownFixtureScores()
+	row, err := BuildRow([]Scorecard{sc}, testPricing(), "sha", "c", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("BuildRow: %v", err)
+	}
+	if row.Breakdown == nil {
+		t.Fatal("row.Breakdown is nil")
+	}
+	low := row.Breakdown.Severity["low"].FPR
+	if low.Rate == nil || *low.Rate != row.FPR {
+		t.Errorf("low-floor fpr = %v, headline fpr = %v, want equal", low.Rate, row.FPR)
+	}
+	if f := nonFiniteField(row); f != "" {
+		t.Errorf("nonFiniteField = %q, want none", f)
+	}
+	if _, err := json.Marshal(row); err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	nan := math.NaN()
+	bad := row
+	bd := *row.Breakdown
+	bd.Language = map[string]BreakdownEntry{"go": {Recall: RateStat{Rate: &nan}}}
+	bad.Breakdown = &bd
+	if f := nonFiniteField(bad); f != "breakdown.language.go.recall.rate" {
+		t.Errorf("nonFiniteField with NaN breakdown rate = %q", f)
+	}
+}
+
+// TestResultsLoadsRowWithoutBreakdown pins backwards compatibility: a row
+// written before the additive breakdown existed still loads (schema 1).
+func TestResultsLoadsRowWithoutBreakdown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.json")
+	old := `{"schema":1,"generated_at":"x","corpus":{"fingerprint":"f","n_fixtures":0,"n_buggy":0,"n_clean":0,"n_expected":0,"languages":{}},"runs":1,"thresholds":{"recall_min":0.9,"fpr_max":0.1},"results":[{"provider":"p","model":"m"}]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bf, _, err := LoadResults(path)
+	if err != nil {
+		t.Fatalf("LoadResults: %v", err)
+	}
+	if bf.Results[0].Breakdown != nil {
+		t.Error("old row grew a breakdown on load")
+	}
+}
+
+// TestFormatBreakdown pins the console markers: every ratio shows k/n and
+// the interval, and a low-n or empty cell carries "(n<20)".
+func TestFormatBreakdown(t *testing.T) {
+	out := strings.Join(FormatBreakdown(BuildBreakdown([]Scorecard{breakdownFixtureScores()})), "\n")
+	for _, want := range []string{"by language", "by severity", "go ", "java", "php", "(n<20)", "n/a (n=0)", "2/3", "["} {
+		if !strings.Contains(out, want) {
+			t.Errorf("FormatBreakdown output missing %q:\n%s", want, out)
+		}
 	}
 }

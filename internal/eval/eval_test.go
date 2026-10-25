@@ -183,6 +183,85 @@ func TestEvalMockCorpus(t *testing.T) {
 	}
 	t.Logf("deterministic corpus: %d fixtures (n_clean=%d n_buggy=%d), all ideal-mock-perfect, languages: %s",
 		len(fixtures), nClean, nBuggy, strings.Join(dist, " "))
+
+	// Faz 05: language + severity breakdown with n and Wilson 95% intervals.
+	// With ideal scripted answers every recall is k == n and every fpr is
+	// k == 0; this guards the breakdown's attribution and totals, not the
+	// model. The summed cell denominators must reproduce the corpus totals.
+	bd := sc.Breakdown()
+	var langRecallN, langFPRN, sevRecallN int
+	for lang, e := range bd.Language {
+		langRecallN += e.Recall.N
+		langFPRN += e.FPR.N
+		if e.Recall.K != e.Recall.N || e.FPR.K != 0 {
+			t.Errorf("language %q: recall %d/%d fpr k=%d, want perfect under ideal mock", lang, e.Recall.K, e.Recall.N, e.FPR.K)
+		}
+	}
+	for sev, e := range bd.Severity {
+		sevRecallN += e.Recall.N
+		if e.Recall.K != e.Recall.N || e.FPR.K != 0 {
+			t.Errorf("severity %q: recall %d/%d fpr k=%d, want perfect under ideal mock", sev, e.Recall.K, e.Recall.N, e.FPR.K)
+		}
+	}
+	if langRecallN != sc.NExpected() || sevRecallN != sc.NExpected() {
+		t.Errorf("breakdown recall n: language=%d severity=%d, want %d (n_expected)", langRecallN, sevRecallN, sc.NExpected())
+	}
+	if langFPRN != sc.NClean() {
+		t.Errorf("breakdown fpr n over languages = %d, want %d (n_clean)", langFPRN, sc.NClean())
+	}
+	if _, ok := bd.Language["unknown"]; ok {
+		t.Error("corpus has a fixture with no language")
+	}
+	for _, l := range []string{"java", "php"} {
+		if e := bd.Language[l]; !e.Recall.LowN || !e.FPR.LowN {
+			t.Errorf("language %q must be low_n while the corpus has no %s fixtures", l, l)
+		}
+	}
+	for _, line := range FormatBreakdown(bd) {
+		t.Log(line)
+	}
+}
+
+// TestCorpusLanguageConsistency pins the closed language set and that every
+// fixture's directory suffix agrees with its expected.json `language`
+// (Faz 05). An unknown language, or a suffix/language disagreement, fails.
+func TestCorpusLanguageConsistency(t *testing.T) {
+	fixtures, err := LoadCorpus(corpusDir())
+	if err != nil {
+		t.Fatalf("LoadCorpus: %v", err)
+	}
+	for _, fx := range fixtures {
+		if err := fx.CheckLanguage(); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+func TestCheckLanguageRejects(t *testing.T) {
+	tests := []struct {
+		name    string
+		fx      Fixture
+		wantErr bool
+	}{
+		{"ok go", Fixture{Name: "x-go", Language: "go"}, false},
+		{"ok ts short suffix", Fixture{Name: "x-ts", Language: "typescript"}, false},
+		{"ok js short suffix", Fixture{Name: "x-js", Language: "javascript"}, false},
+		{"ok java", Fixture{Name: "x-y-java", Language: "java"}, false},
+		{"ok php", Fixture{Name: "x-php", Language: "php"}, false},
+		{"unknown language", Fixture{Name: "x-go", Language: "rust"}, true},
+		{"empty language", Fixture{Name: "x-go", Language: ""}, true},
+		{"short name in language field", Fixture{Name: "x-ts", Language: "ts"}, true},
+		{"suffix disagrees", Fixture{Name: "x-go", Language: "python"}, true},
+		{"no suffix", Fixture{Name: "plain", Language: "go"}, true},
+		{"unknown suffix", Fixture{Name: "x-rs", Language: "go"}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.fx.CheckLanguage(); (err != nil) != tc.wantErr {
+				t.Errorf("CheckLanguage() err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
 }
 
 func TestLoadCorpusSorted(t *testing.T) {
@@ -405,6 +484,61 @@ func TestCleanAlarm(t *testing.T) {
 		}, buggy)
 		if got.CleanAlarm {
 			t.Error("CleanAlarm = true, want false — fixture planted a defect, so it is not a clean control")
+		}
+	})
+}
+
+// TestScoreSeverityBreakdownFields pins the Score/ErrorScore side of the
+// severity breakdown: MaxProducedSeverity on a clean fixture, and the
+// Caught/MissedBySeverity attribution (min_severity key, "unspecified" when
+// unset) for a buggy fixture and for its errored counterpart.
+func TestScoreSeverityBreakdownFields(t *testing.T) {
+	t.Run("clean fixture tracks max produced severity", func(t *testing.T) {
+		clean := Fixture{Name: "clean-control", Language: "go"}
+		got := Score([]render.Finding{
+			{Severity: render.SeverityLow, File: "pkg/a.go", Line: 1},
+			{Severity: render.SeverityHigh, File: "pkg/a.go", Line: 2},
+			{Severity: render.SeverityInfo, File: "pkg/a.go", Line: 3},
+		}, clean)
+		if !got.CleanAlarm || got.MaxProducedSeverity != render.SeverityHigh {
+			t.Errorf("CleanAlarm=%v MaxProducedSeverity=%q, want true/high", got.CleanAlarm, got.MaxProducedSeverity)
+		}
+		if got.Language != "go" {
+			t.Errorf("Language = %q, want go", got.Language)
+		}
+		info := Score([]render.Finding{{Severity: render.SeverityInfo, File: "pkg/a.go", Line: 1}}, clean)
+		if info.MaxProducedSeverity != "" {
+			t.Errorf("info-only MaxProducedSeverity = %q, want empty", info.MaxProducedSeverity)
+		}
+	})
+
+	buggy := Fixture{
+		Name:     "buggy",
+		Language: "python",
+		Expected: []ExpectedFinding{
+			{ID: "a", File: "a.py", Line: 10, Category: "bug", MinSeverity: render.SeverityHigh},
+			{ID: "b", File: "b.py", Line: 20, Category: "bug"},
+		},
+	}
+
+	t.Run("buggy fixture attributes caught and missed by severity key", func(t *testing.T) {
+		got := Score([]render.Finding{{Severity: render.SeverityCritical, File: "a.py", Line: 10}}, buggy)
+		if got.CaughtBySeverity["high"] != 1 || got.MissedBySeverity[severityUnspecified] != 1 ||
+			len(got.CaughtBySeverity) != 1 || len(got.MissedBySeverity) != 1 {
+			t.Errorf("Caught=%v Missed=%v, want {high:1} / {unspecified:1}", got.CaughtBySeverity, got.MissedBySeverity)
+		}
+		if got.MaxProducedSeverity != "" {
+			t.Errorf("buggy fixture MaxProducedSeverity = %q, want empty", got.MaxProducedSeverity)
+		}
+	})
+
+	t.Run("ErrorScore counts every expected finding as missed by severity", func(t *testing.T) {
+		got := ErrorScore(buggy)
+		if got.MissedBySeverity["high"] != 1 || got.MissedBySeverity[severityUnspecified] != 1 || len(got.CaughtBySeverity) != 0 {
+			t.Errorf("Caught=%v Missed=%v, want nothing caught / {high:1, unspecified:1} missed", got.CaughtBySeverity, got.MissedBySeverity)
+		}
+		if got.Language != "python" {
+			t.Errorf("Language = %q, want python", got.Language)
 		}
 	})
 }
