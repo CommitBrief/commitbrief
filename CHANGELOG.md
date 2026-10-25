@@ -10,6 +10,30 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-10-25
+
+### Fixed
+- **`guard` now fails closed on a degraded review without `--sarif`.** When the review
+  degraded (an unparsable model response, live, replayed from cache, or a `--from-json`
+  document carrying `meta.degrade_reason`), `guard` exits 1 with `guard.degraded` instead
+  of reading the empty result as zero findings and passing. The `--sarif` path already
+  refused a degraded review. `review` and `diff --fail-on` keep their graceful-degrade
+  behaviour.
+- `leaks` no longer reports a missing `git` binary as an invalid `guard.secret_patterns`
+  entry; it shows the localized "git not found" / "not a repository" message.
+- The early `Error:` prefix follows the same language order as every other message
+  (`--lang`, repo config, user config, English) instead of `--lang` only.
+- `leaks --json` sets `meta.truncated: true` when `--max-commits` cut the history short
+  (additive; `meta.walk_truncated` is unchanged).
+- `--text` branch-name matching is bounded by the commit walk ceiling instead of
+  `--max-commits`, so a cut is reported as truncation rather than dropped silently.
+- **`gemini-cli` rejects an oversized prompt before starting `gemini`.** The prompt travels
+  as a command-line argument, so a large diff used to fail with an opaque `E2BIG`-shaped
+  error. It now returns a localized message with the prompt size and the limit, and
+  suggests narrowing with `--file`/`--dir` (or `--exclude-file`/`--exclude-dir`). An
+  `argument list too long` error from the OS is mapped to the same message for every
+  CLI-backed provider.
+
 ### Changed
 - **Building from source now requires Go 1.26 or later** (`go install`, `make build`);
   `go.mod` declares `go 1.26.0` and every CI workflow runs Go 1.26. Prebuilt binaries
@@ -2481,7 +2505,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.21.1...HEAD
+[1.21.1]: https://github.com/CommitBrief/commitbrief/compare/v1.21.0...v1.21.1
 [1.21.0]: https://github.com/CommitBrief/commitbrief/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/CommitBrief/commitbrief/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/CommitBrief/commitbrief/compare/v1.18.1...v1.19.0
