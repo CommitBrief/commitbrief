@@ -14,8 +14,11 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 - **Building from source now requires Go 1.26 or later** (`go install`, `make build`);
   `go.mod` declares `go 1.26.0` and every CI workflow runs Go 1.26. Prebuilt binaries
   (Homebrew, Scoop, GitHub Releases) are unaffected.
-- Dependency bumps: `anthropic-sdk-go` v1.80.0, `genai` v1.74.0, `go-git/v5` v5.19.3,
+- Dependency bumps: `anthropic-sdk-go` v1.82.0, `genai` v1.75.0, `go-git/v5` v5.19.3,
   `golang.org/x/sys` v0.49.0, `golang.org/x/term` v0.47.0, `golang.org/x/crypto` v0.56.0.
+  `anthropic-sdk-go` v1.82.0 links the OpenTelemetry API; CommitBrief configures no tracer
+  or exporter, so it stays a no-op and sends nothing.
+- CI: CodeQL analysis moves to `github/codeql-action` v4.
 
 ## [1.21.0] - 2026-10-21
 
