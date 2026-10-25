@@ -119,7 +119,7 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 	if !f.noWorktree {
 		tree, sErr := leaks.ScanWorktree(ctx, app.RepoRoot, opts)
 		if sErr != nil {
-			return leaksError(app, sErr)
+			return leaksError(app, userPatterns, sErr)
 		}
 		result = result.Merge(tree)
 	}
@@ -145,7 +145,7 @@ func runLeaks(cmd *cobra.Command, f leaksFlags, args []string) error {
 		}
 		hist, sErr := leaks.ScanHistory(ctx, app.RepoRoot, sel, opts)
 		if sErr != nil {
-			return leaksError(app, sErr)
+			return leaksError(app, userPatterns, sErr)
 		}
 		result = result.Merge(hist)
 	}
@@ -371,6 +371,10 @@ func emitLeaksJSON(cmd *cobra.Command, app *appContext, findings []render.Findin
 			// `guard --from-json` can tell a complete history scan from one
 			// that stopped at the commit walk ceiling.
 			WalkTruncated: res.WalkTruncated,
+			// Additive meta flag (omitted when false): the --max-commits
+			// window cut the history short. Unlike walk_truncated, passing a
+			// larger --max-commits lifts it.
+			Truncated: res.Truncated,
 		},
 	}); err != nil {
 		return err
@@ -447,11 +451,21 @@ func listLeakPatterns(cmd *cobra.Command, userPatterns []guard.UserSecretPattern
 	return nil
 }
 
-// leaksError wraps a scan failure. An invalid guard.secret_patterns regex is
-// by far the most likely cause, and it deserves the same localized message the
-// review path gives it.
-func leaksError(app *appContext, err error) error {
-	return errors.New(app.Catalog.T("guard.secret_patterns.invalid", err.Error()))
+// leaksError translates a scan failure. The guard.secret_patterns.invalid
+// wrapping is reserved for a genuinely bad user pattern, which is decided by
+// compiling the configured patterns again rather than by guessing from the
+// error text. The two git sentinels get their localized message
+// (common.error.git_missing / common.error.not_a_repo); anything else is
+// returned as it came, so its real cause is not mislabeled as a pattern
+// problem.
+func leaksError(app *appContext, userPatterns []guard.UserSecretPattern, err error) error {
+	if _, compileErr := guard.CompileUserPatterns(userPatterns); compileErr != nil {
+		return errors.New(app.Catalog.T("guard.secret_patterns.invalid", err.Error()))
+	}
+	if errors.Is(err, git.ErrNoGitCLI) || errors.Is(err, git.ErrNotARepo) {
+		return errors.New(localizeGitError(app.Catalog, err))
+	}
+	return err
 }
 
 func leaksCommitLimit() int {

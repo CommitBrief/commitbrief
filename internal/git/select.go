@@ -35,11 +35,12 @@ import (
 // users expect — AND across filter kinds, OR within one kind — with no
 // dependence on that surprising git behavior.
 
-// walkLimit bounds phase A itself: at most this many commits are inspected.
-// Even without patches, an unbounded `git log` on a 100k-commit repo is
-// megabytes of metadata for nothing. Phase A asks git for one commit more
-// than this, and only a surplus commit (history genuinely longer than the
-// limit) sets Selection.WalkTruncated, so the caller can say so out loud
+// walkLimit bounds phase A itself, and phase A′'s branch walk with it: at most
+// this many commits are inspected per phase. Even without patches, an
+// unbounded `git log` on a 100k-commit repo is megabytes of metadata for
+// nothing. Each phase asks git for one commit more than this, and only a
+// surplus commit (history genuinely longer than the limit) sets
+// Selection.WalkTruncated, so the caller can say so out loud
 // rather than silently reviewing a subset. A repository with exactly
 // walkLimit commits is therefore fully inspected and not flagged. It is a
 // variable only so tests can exercise the boundary without 10000 commits.
@@ -239,9 +240,14 @@ func SelectCommits(ctx context.Context, repoRoot string, f CommitFilter) (Select
 	// Phase A′: branches whose NAME matches --text contribute their own
 	// commits, which the rev-range walk above may never have visited.
 	if f.Text != "" {
-		fromRefs, refErr := commitsFromMatchingRefs(ctx, bin, repoRoot, f)
+		fromRefs, refsCut, refErr := commitsFromMatchingRefs(ctx, bin, repoRoot, f)
 		if refErr != nil {
 			return Selection{}, refErr
+		}
+		// Same rule as phase A: more than walkLimit unique branch commits
+		// means older ones were never inspected.
+		if refsCut {
+			sel.WalkTruncated = true
 		}
 		sel.Walked += len(fromRefs)
 		for _, c := range fromRefs {
@@ -381,12 +387,18 @@ func hydrateCommits(ctx context.Context, bin, repoRoot string, hashes []string) 
 // Best-effort by nature: a squash- or rebase-merged branch no longer owns its
 // commits, so this finds nothing for it. That is a property of git history,
 // not a bug here, and the docs say so.
-func commitsFromMatchingRefs(ctx context.Context, bin, repoRoot string, f CommitFilter) ([]CommitMeta, error) {
+//
+// Like phase A it is bounded by walkLimit, not by the caller's MaxCommits: the
+// final MaxCommits cut happens after the union is sorted, so capping here
+// would drop commits silently instead of reporting Truncated. The bool result
+// is true when more than walkLimit commits were available and the older ones
+// were not inspected (the caller maps it to Selection.WalkTruncated).
+func commitsFromMatchingRefs(ctx context.Context, bin, repoRoot string, f CommitFilter) ([]CommitMeta, bool, error) {
 	refs, err := listRefs(ctx, bin, repoRoot)
 	if err != nil {
 		// A repo with no refs at all (fresh init) is not an error condition
 		// for the caller — it just means no branch matched.
-		return nil, nil
+		return nil, false, nil
 	}
 	needle := strings.ToLower(f.Text)
 	var matching, others []string
@@ -398,13 +410,14 @@ func commitsFromMatchingRefs(ctx context.Context, bin, repoRoot string, f Commit
 		}
 	}
 	if len(matching) == 0 {
-		return nil, nil
+		return nil, false, nil
 	}
 	if len(others) > maxRefs {
 		others = others[:maxRefs]
 	}
 
-	args := []string{"rev-list", fmt.Sprintf("-n%d", f.limit())}
+	// walkLimit+1: the extra commit is the truncation probe, as in phase A.
+	args := []string{"rev-list", fmt.Sprintf("-n%d", walkLimit+1)}
 	args = append(args, dateArgs(f)...)
 	if !f.Merges {
 		args = append(args, "--no-merges")
@@ -417,7 +430,7 @@ func commitsFromMatchingRefs(ctx context.Context, bin, repoRoot string, f Commit
 
 	out, err := runGit(ctx, bin, repoRoot, args)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var hashes []string
 	for _, line := range strings.Split(out, "\n") {
@@ -425,7 +438,15 @@ func commitsFromMatchingRefs(ctx context.Context, bin, repoRoot string, f Commit
 			hashes = append(hashes, h)
 		}
 	}
-	return hydrateCommits(ctx, bin, repoRoot, hashes)
+	cut := len(hashes) > walkLimit
+	if cut {
+		hashes = hashes[:walkLimit]
+	}
+	commits, err := hydrateCommits(ctx, bin, repoRoot, hashes)
+	if err != nil {
+		return nil, false, err
+	}
+	return commits, cut, nil
 }
 
 // listRefs returns the short names of every local branch and remote-tracking

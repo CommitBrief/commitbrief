@@ -81,6 +81,12 @@ type jsonMeta struct {
 	// its fixed ceiling and older history was not scanned; every other
 	// producer omits it, so the v1 meta shape is unchanged.
 	WalkTruncated bool `json:"walk_truncated,omitempty"`
+
+	// --max-commits window (ADR-0036 §Update 2026-10-25). Additive optional boolean, emitted only
+	// as true by `leaks` when more commits matched than --max-commits allowed,
+	// so the oldest were not scanned. Distinct from walk_truncated, which is
+	// the walk's fixed ceiling that --max-commits cannot lift.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 type jsonUsage struct {
@@ -122,6 +128,7 @@ func JSON(w io.Writer, p Payload) error {
 			DegradeReason:   p.Meta.DegradeReason,
 			FilteredCommits: p.Meta.FilteredCommits,
 			WalkTruncated:   p.Meta.WalkTruncated,
+			Truncated:       p.Meta.Truncated,
 			Usage: jsonUsage{
 				InputTokens:       p.Meta.Usage.InputTokens,
 				OutputTokens:      p.Meta.Usage.OutputTokens,

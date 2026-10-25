@@ -4,6 +4,7 @@ package git
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -509,4 +510,72 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// newTopicRepo builds main with one commit plus a branch "big-topic" carrying
+// n commits that exist on no other ref, so phase A (HEAD = main) sees one
+// commit and phase A′ (--text big-topic) sees n.
+func newTopicRepo(t *testing.T, n int) *filterRepo {
+	t.Helper()
+	requireGitCLI(t)
+	r := &filterRepo{dir: t.TempDir()}
+	r.git(t, nil, "init", "-q", "-b", "main")
+	r.git(t, nil, "config", "user.name", "Test")
+	r.git(t, nil, "config", "user.email", "test@example.com")
+	r.git(t, nil, "config", "commit.gpgsign", "false")
+	r.commitAs(t, "Alice", "alice@example.com", "2026-01-10", "base.txt", "chore: base", "")
+	r.git(t, nil, "checkout", "-q", "-b", "big-topic")
+	for i := 1; i <= n; i++ {
+		r.commitAs(t, "Bob", "bob@example.com", fmt.Sprintf("2026-02-%02d", i),
+			fmt.Sprintf("t%d.txt", i), fmt.Sprintf("work item %d", i), "")
+	}
+	r.git(t, nil, "checkout", "-q", "main")
+	return r
+}
+
+// Phase A′ is bounded by walkLimit like phase A, not by MaxCommits: a branch
+// holding more matching commits than MaxCommits must surface as Truncated (the
+// final cut), never be cut silently inside the ref walk.
+func TestSelectCommitsBranchNameHonorsMaxCommitsAsTruncation(t *testing.T) {
+	r := newTopicRepo(t, 3)
+	sel := mustSelect(t, r.dir, CommitFilter{Text: "big-topic", MaxCommits: 1})
+	if !sel.Truncated {
+		t.Fatalf("expected Truncated when the branch holds 3 commits and MaxCommits is 1, got %v", subjects(sel))
+	}
+	if len(sel.Commits) != 1 {
+		t.Fatalf("expected 1 commit after the cut, got %d", len(sel.Commits))
+	}
+	if sel.WalkTruncated {
+		t.Fatal("WalkTruncated must stay false: the walk ceiling was not reached")
+	}
+}
+
+// Phase A′ sets WalkTruncated with the same off-by-one rule as phase A:
+// exactly walkLimit branch commits were fully inspected, one more was not.
+func TestSelectCommitsBranchNameWalkLimitBoundary(t *testing.T) {
+	r := newTopicRepo(t, 3)
+	f := CommitFilter{Text: "big-topic", MaxCommits: 100}
+
+	cases := []struct {
+		name          string
+		limit         int
+		wantTruncated bool
+		wantCommits   int
+	}{
+		{"limit above branch", 4, false, 3},
+		{"limit equals branch", 3, false, 3},
+		{"limit one below branch", 2, true, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withWalkLimit(t, tc.limit)
+			sel := mustSelect(t, r.dir, f)
+			if sel.WalkTruncated != tc.wantTruncated {
+				t.Fatalf("WalkTruncated = %v, want %v", sel.WalkTruncated, tc.wantTruncated)
+			}
+			if len(sel.Commits) != tc.wantCommits {
+				t.Fatalf("commits = %d (%v), want %d", len(sel.Commits), subjects(sel), tc.wantCommits)
+			}
+		})
+	}
 }

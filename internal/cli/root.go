@@ -284,8 +284,8 @@ func Execute() {
 	if err := root.ExecuteContext(ctx); err != nil {
 		// Best-effort error-prefix translation. appContext isn't built at
 		// this layer (cobra surfaces errors from RunE before/instead of
-		// resolveContext), so we honor only the --lang flag — the remaining
-		// chain steps need configs we cannot safely load here (ADR-0021).
+		// resolveContext), so pickErrorCatalog re-runs the ADR-0021 language
+		// chain itself, reading the config files quietly.
 		cat := pickErrorCatalog()
 		fmt.Fprintln(os.Stderr, cat.T("common.error_prefix"), localizeGitError(cat, err))
 		os.Exit(1)
@@ -344,17 +344,44 @@ func loadDefaultCommand() string {
 }
 
 // pickErrorCatalog returns the i18n catalog used for the top-level "Error:"
-// prefix when a command fails before appContext is resolved.
+// prefix (and for early errors) when a command fails before appContext is
+// resolved.
+//
+// It applies the same language chain as resolveContext (ADR-0021): --lang flag
+// → repo config (output.lang) → user config (output.lang) → English, with an
+// empty or unrecognized value falling through to the next source. The two
+// config files are read best-effort: a missing, unreadable or malformed file
+// is treated as absent, so choosing the error catalog can never produce an
+// error of its own. Unknown config keys are tolerated here for the same
+// reason — the language preference stays usable even when the command itself
+// is about to fail on that key. The system locale is not consulted.
 func pickErrorCatalog() *i18n.Catalog {
-	// Early-error catalog: before appContext exists we only have the --lang
-	// flag (no config loaded yet), so honor it when it names a UI-translated
-	// language and fall back to English otherwise. The system locale is not
-	// consulted (ADR-0021).
-	if cat, err := i18n.Load(lang.UICatalogFor(global.lang)); err == nil {
+	repoRoot := ""
+	if root, err := git.FindRepo(""); err == nil {
+		repoRoot = root
+	}
+	globalPath, repoPath := configFilePaths(repoRoot)
+	opts := config.LoadOptions{IgnoreUnknownKeys: true}
+	rawGlobal := loadRawConfigQuietly(globalPath, opts)
+	rawRepo := loadRawConfigQuietly(repoPath, opts)
+	res := lang.Resolve(global.lang, rawRepo, rawGlobal)
+
+	if cat, err := i18n.Load(res.UICatalog()); err == nil {
 		return cat
 	}
 	cat, _ := i18n.Load(i18n.DefaultLang)
 	return cat
+}
+
+// loadRawConfigQuietly reads one config file for pickErrorCatalog and returns
+// nil on any problem (config.LoadFileWith can hand back a partial value
+// alongside a parse error; that value is not trusted either).
+func loadRawConfigQuietly(path string, opts config.LoadOptions) *config.Config {
+	cfg, _, err := config.LoadFileWith(path, opts)
+	if err != nil {
+		return nil
+	}
+	return cfg
 }
 
 // enableDebugLog routes slog.Debug records (for example the count of findings

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/CommitBrief/commitbrief/internal/diff"
+	"github.com/CommitBrief/commitbrief/internal/git"
 )
 
 // ScanWorktree reads every tracked file in the working tree and reports the
@@ -90,7 +91,9 @@ func ScanWorktree(ctx context.Context, repoRoot string, opts Options) (Result, e
 func trackedFiles(ctx context.Context, repoRoot string) ([]string, error) {
 	bin, err := exec.LookPath("git")
 	if err != nil {
-		return nil, fmt.Errorf("leaks: %w", err)
+		// The shared sentinel (not the raw exec error) so the CLI can show
+		// the localized "git not found" message instead of a pattern error.
+		return nil, fmt.Errorf("leaks: %w", git.ErrNoGitCLI)
 	}
 	cmd := exec.CommandContext(ctx, bin, "ls-files", "-z")
 	cmd.Dir = repoRoot

@@ -109,4 +109,10 @@ type Meta struct {
 	// commit ceiling, so older history was never scanned (ADR-0036 §Update
 	// 2026-10-20). Optional additive JSON meta field, omitted when false.
 	WalkTruncated bool
+
+	// Truncated is set by `leaks` when --max-commits cut the selected history
+	// short: more commits matched than the window allowed, so the oldest were
+	// not scanned (ADR-0036 §Update 2026-10-25). Optional additive JSON meta field (meta.truncated),
+	// omitted when false. Unlike WalkTruncated, raising --max-commits lifts it.
+	Truncated bool
 }
