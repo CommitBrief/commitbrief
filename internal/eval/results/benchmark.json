@@ -1,0 +1,537 @@
+{
+  "schema": 1,
+  "generated_at": "2026-10-26T05:49:50Z",
+  "corpus": {
+    "fingerprint": "d8592a2c0e761715f0e55ec8476266a0589e8b75d951d06169e264a885247008",
+    "n_fixtures": 129,
+    "n_buggy": 96,
+    "n_clean": 33,
+    "n_expected": 99,
+    "languages": {
+      "go": 29,
+      "java": 20,
+      "javascript": 20,
+      "php": 20,
+      "python": 20,
+      "typescript": 20
+    }
+  },
+  "runs": 3,
+  "thresholds": {
+    "recall_min": 0.9,
+    "fpr_max": 0.1,
+    "language_recall_min": 0.7
+  },
+  "results": [
+    {
+      "provider": "gemini",
+      "model": "gemini-3.8-flash",
+      "measured_at": "2026-10-26T05:49:49Z",
+      "prompt_sha256": "61afb55b516dccd32b35bbeb79335e986e255807260a414e637aa0d20986ed0d",
+      "commitbrief_commit": "v1.21.1-4-g3a804f4",
+      "runs": 3,
+      "n_buggy": 96,
+      "n_clean": 33,
+      "n_expected": 99,
+      "recall": 0.9529,
+      "recall_min": 0.9394,
+      "recall_max": 0.9697,
+      "precision": 0.9159,
+      "fpr": 0.0303,
+      "fpr_min": 0.0303,
+      "fpr_max": 0.0303,
+      "silence_violation_rate": 0.0345,
+      "errors": 8,
+      "input_tokens": 3781.9767,
+      "output_tokens": 195.5194,
+      "cached_input_tokens": 114.5168,
+      "pricing": {
+        "input_per_1m": 0.75,
+        "output_per_1m": 3.75
+      },
+      "usd_per_review": 0.00357,
+      "eligible": true,
+      "breakdown": {
+        "language": {
+          "go": {
+            "recall": {
+              "rate": 0.9583,
+              "k": 69,
+              "n": 72,
+              "n_distinct": 24,
+              "wilson_low": 0.7976,
+              "wilson_high": 0.9926,
+              "low_n": false
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 24,
+              "n_distinct": 8,
+              "wilson_low": 0,
+              "wilson_high": 0.3244,
+              "low_n": true
+            }
+          },
+          "java": {
+            "recall": {
+              "rate": 0.9778,
+              "k": 44,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.7624,
+              "wilson_high": 0.9983,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0,
+              "wilson_high": 0.4345,
+              "low_n": true
+            }
+          },
+          "javascript": {
+            "recall": {
+              "rate": 0.8667,
+              "k": 39,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.6212,
+              "wilson_high": 0.9626,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0,
+              "wilson_high": 0.4345,
+              "low_n": true
+            }
+          },
+          "php": {
+            "recall": {
+              "rate": 0.9778,
+              "k": 44,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.7624,
+              "wilson_high": 0.9983,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0,
+              "wilson_high": 0.4345,
+              "low_n": true
+            }
+          },
+          "python": {
+            "recall": {
+              "rate": 0.9333,
+              "k": 42,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.7018,
+              "wilson_high": 0.9881,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0,
+              "wilson_high": 0.4345,
+              "low_n": true
+            }
+          },
+          "typescript": {
+            "recall": {
+              "rate": 1,
+              "k": 45,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.7961,
+              "wilson_high": 1,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.2,
+              "k": 3,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0.0362,
+              "wilson_high": 0.6245,
+              "low_n": true
+            }
+          }
+        },
+        "severity": {
+          "critical": {
+            "recall": {
+              "rate": 1,
+              "k": 27,
+              "n": 27,
+              "n_distinct": 9,
+              "wilson_low": 0.7008,
+              "wilson_high": 1,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0,
+              "wilson_high": 0.1043,
+              "low_n": false
+            }
+          },
+          "high": {
+            "recall": {
+              "rate": 0.9225,
+              "k": 119,
+              "n": 129,
+              "n_distinct": 43,
+              "wilson_low": 0.8038,
+              "wilson_high": 0.9719,
+              "low_n": false
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0,
+              "wilson_high": 0.1043,
+              "low_n": false
+            }
+          },
+          "info": {
+            "recall": {
+              "rate": null,
+              "k": 0,
+              "n": 0,
+              "n_distinct": 0,
+              "wilson_low": null,
+              "wilson_high": null,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": null,
+              "k": 0,
+              "n": 0,
+              "n_distinct": 0,
+              "wilson_low": null,
+              "wilson_high": null,
+              "low_n": true
+            }
+          },
+          "low": {
+            "recall": {
+              "rate": 1,
+              "k": 21,
+              "n": 21,
+              "n_distinct": 7,
+              "wilson_low": 0.6457,
+              "wilson_high": 1,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.0303,
+              "k": 3,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0.0054,
+              "wilson_high": 0.1532,
+              "low_n": false
+            }
+          },
+          "medium": {
+            "recall": {
+              "rate": 0.9667,
+              "k": 116,
+              "n": 120,
+              "n_distinct": 40,
+              "wilson_low": 0.8587,
+              "wilson_high": 0.9928,
+              "low_n": false
+            },
+            "fpr": {
+              "rate": 0.0202,
+              "k": 2,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0.0027,
+              "wilson_high": 0.1378,
+              "low_n": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-5.4-mini",
+      "measured_at": "2026-10-26T04:38:53Z",
+      "prompt_sha256": "61afb55b516dccd32b35bbeb79335e986e255807260a414e637aa0d20986ed0d",
+      "commitbrief_commit": "v1.21.1-4-g3a804f4",
+      "runs": 3,
+      "n_buggy": 96,
+      "n_clean": 33,
+      "n_expected": 99,
+      "recall": 0.9259,
+      "recall_min": 0.9192,
+      "recall_max": 0.9293,
+      "precision": 0.7275,
+      "fpr": 0.2929,
+      "fpr_min": 0.2727,
+      "fpr_max": 0.303,
+      "silence_violation_rate": 0.2931,
+      "errors": 0,
+      "input_tokens": 3899.6434,
+      "output_tokens": 166.5065,
+      "cached_input_tokens": 3332.2997,
+      "pricing": {
+        "input_per_1m": 0.75,
+        "output_per_1m": 4.5
+      },
+      "usd_per_review": 0.003674,
+      "eligible": false,
+      "breakdown": {
+        "language": {
+          "go": {
+            "recall": {
+              "rate": 0.875,
+              "k": 63,
+              "n": 72,
+              "n_distinct": 24,
+              "wilson_low": 0.69,
+              "wilson_high": 0.9566,
+              "low_n": false
+            },
+            "fpr": {
+              "rate": 0.1667,
+              "k": 4,
+              "n": 24,
+              "n_distinct": 8,
+              "wilson_low": 0.0366,
+              "wilson_high": 0.513,
+              "low_n": true
+            }
+          },
+          "java": {
+            "recall": {
+              "rate": 1,
+              "k": 45,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.7961,
+              "wilson_high": 1,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.1333,
+              "k": 2,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0.0177,
+              "wilson_high": 0.5676,
+              "low_n": true
+            }
+          },
+          "javascript": {
+            "recall": {
+              "rate": 0.8889,
+              "k": 40,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.647,
+              "wilson_high": 0.9722,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.5333,
+              "k": 8,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0.1897,
+              "wilson_high": 0.848,
+              "low_n": true
+            }
+          },
+          "php": {
+            "recall": {
+              "rate": 0.9778,
+              "k": 44,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.7624,
+              "wilson_high": 0.9983,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.4,
+              "k": 6,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0.1176,
+              "wilson_high": 0.7693,
+              "low_n": true
+            }
+          },
+          "python": {
+            "recall": {
+              "rate": 0.9111,
+              "k": 41,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.6739,
+              "wilson_high": 0.9807,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.2,
+              "k": 3,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0.0362,
+              "wilson_high": 0.6245,
+              "low_n": true
+            }
+          },
+          "typescript": {
+            "recall": {
+              "rate": 0.9333,
+              "k": 42,
+              "n": 45,
+              "n_distinct": 15,
+              "wilson_low": 0.7018,
+              "wilson_high": 0.9881,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.4,
+              "k": 6,
+              "n": 15,
+              "n_distinct": 5,
+              "wilson_low": 0.1176,
+              "wilson_high": 0.7693,
+              "low_n": true
+            }
+          }
+        },
+        "severity": {
+          "critical": {
+            "recall": {
+              "rate": 1,
+              "k": 27,
+              "n": 27,
+              "n_distinct": 9,
+              "wilson_low": 0.7008,
+              "wilson_high": 1,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0,
+              "k": 0,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0,
+              "wilson_high": 0.1043,
+              "low_n": false
+            }
+          },
+          "high": {
+            "recall": {
+              "rate": 0.8992,
+              "k": 116,
+              "n": 129,
+              "n_distinct": 43,
+              "wilson_low": 0.7743,
+              "wilson_high": 0.9587,
+              "low_n": false
+            },
+            "fpr": {
+              "rate": 0.0303,
+              "k": 3,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0.0054,
+              "wilson_high": 0.1532,
+              "low_n": false
+            }
+          },
+          "info": {
+            "recall": {
+              "rate": null,
+              "k": 0,
+              "n": 0,
+              "n_distinct": 0,
+              "wilson_low": null,
+              "wilson_high": null,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": null,
+              "k": 0,
+              "n": 0,
+              "n_distinct": 0,
+              "wilson_low": null,
+              "wilson_high": null,
+              "low_n": true
+            }
+          },
+          "low": {
+            "recall": {
+              "rate": 1,
+              "k": 21,
+              "n": 21,
+              "n_distinct": 7,
+              "wilson_low": 0.6457,
+              "wilson_high": 1,
+              "low_n": true
+            },
+            "fpr": {
+              "rate": 0.2929,
+              "k": 29,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0.166,
+              "wilson_high": 0.4631,
+              "low_n": false
+            }
+          },
+          "medium": {
+            "recall": {
+              "rate": 0.925,
+              "k": 111,
+              "n": 120,
+              "n_distinct": 40,
+              "wilson_low": 0.8014,
+              "wilson_high": 0.9742,
+              "low_n": false
+            },
+            "fpr": {
+              "rate": 0.1414,
+              "k": 14,
+              "n": 99,
+              "n_distinct": 33,
+              "wilson_low": 0.0602,
+              "wilson_high": 0.2974,
+              "low_n": false
+            }
+          }
+        }
+      }
+    }
+  ]
+}
