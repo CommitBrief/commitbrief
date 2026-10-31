@@ -192,6 +192,20 @@ func isASCIIDigit(b byte) bool { return b >= '0' && b <= '9' }
 // doesn't erase every other fixture's evidence. Only ctx cancellation
 // (an operator-level abort, not a model error) still stops the run early.
 func RunCorpus(ctx context.Context, p provider.Provider, model string, fixtures []Fixture) (Scorecard, error) {
+	return RunCorpusWith(ctx, p, model, fixtures, nil)
+}
+
+// AfterFixtureFunc is called by RunCorpusWith / RunCorpusNWith once per
+// fixture, right after its score (or ErrorScore) is recorded. A non-nil
+// error stops the run immediately; the caller owns what the error means
+// (the live harness uses it for the COMMITBRIEF_EVAL_BUDGET_USD cap).
+type AfterFixtureFunc func(FixtureScore) error
+
+// RunCorpusWith is RunCorpus with an optional per-fixture hook. A nil hook
+// behaves exactly like RunCorpus. When the hook returns an error the run
+// stops and the error is returned alongside the partial Scorecard (the
+// fixtures scored so far), so a caller can still report what was spent.
+func RunCorpusWith(ctx context.Context, p provider.Provider, model string, fixtures []Fixture, after AfterFixtureFunc) (Scorecard, error) {
 	sc := Scorecard{Provider: p.Name(), Model: model}
 	if model == "" {
 		sc.Model = p.DefaultModel()
@@ -215,7 +229,7 @@ func RunCorpus(ctx context.Context, p provider.Provider, model string, fixtures 
 			}
 			select {
 			case <-ctx.Done():
-				return Scorecard{}, ctx.Err()
+				return sc, ctx.Err()
 			case <-time.After(time.Duration(attempt) * 2 * time.Second):
 			}
 		}
@@ -230,9 +244,19 @@ func RunCorpus(ctx context.Context, p provider.Provider, model string, fixtures 
 			es.Usage = s.Usage
 			es.ErrorMsg = err.Error()
 			sc.Fixtures = append(sc.Fixtures, es)
+			if after != nil {
+				if herr := after(es); herr != nil {
+					return sc, herr
+				}
+			}
 			continue
 		}
 		sc.Fixtures = append(sc.Fixtures, s)
+		if after != nil {
+			if herr := after(s); herr != nil {
+				return sc, herr
+			}
+		}
 	}
 	return sc, nil
 }
@@ -243,14 +267,30 @@ func RunCorpus(ctx context.Context, p provider.Provider, model string, fixtures 
 // per-fixture errors within a run are already absorbed by RunCorpus and
 // never reach this level.
 func RunCorpusN(ctx context.Context, p provider.Provider, model string, fixtures []Fixture, n int) ([]Scorecard, error) {
+	return RunCorpusNWith(ctx, p, model, fixtures, n, nil)
+}
+
+// RunCorpusNWith is RunCorpusN with the per-fixture hook of RunCorpusWith,
+// shared across all n runs (so a hook can keep a running total over the
+// whole invocation). A hook error (or ctx cancellation) stops everything and
+// is returned wrapped (errors.Is / errors.As see through it), together with
+// the scorecards completed so far, the partial run last. Callers must check
+// err before treating the slice as a full set of k runs.
+func RunCorpusNWith(ctx context.Context, p provider.Provider, model string, fixtures []Fixture, n int, after AfterFixtureFunc) ([]Scorecard, error) {
 	if n < 1 {
 		n = 1
 	}
 	out := make([]Scorecard, 0, n)
 	for i := 0; i < n; i++ {
-		sc, err := RunCorpus(ctx, p, model, fixtures)
+		sc, err := RunCorpusWith(ctx, p, model, fixtures, after)
 		if err != nil {
-			return nil, fmt.Errorf("eval: run %d/%d: %w", i+1, n, err)
+			// Hand back everything scored so far — the completed runs plus
+			// the partial one — so the caller can still report spend and
+			// error counts for a run it had to abandon.
+			if len(sc.Fixtures) > 0 {
+				out = append(out, sc)
+			}
+			return out, fmt.Errorf("eval: run %d/%d: %w", i+1, n, err)
 		}
 		out = append(out, sc)
 	}

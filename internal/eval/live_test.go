@@ -6,6 +6,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -40,7 +41,10 @@ import (
 // Provider resolution (first match wins):
 //  1. COMMITBRIEF_EVAL_PROVIDER (+ COMMITBRIEF_EVAL_API_KEY,
 //     COMMITBRIEF_EVAL_MODEL) — explicit override.
-//  2. The default provider in the user's ~/.commitbrief/config.yml — so
+//  2. The standard env the CLI itself honors (GEMINI_API_KEY,
+//     OPENAI_API_KEY, … , COMMITBRIEF_PROVIDER, COMMITBRIEF_MODEL — see
+//     config.ApplyEnv), layered over
+//  3. The default provider in the user's ~/.commitbrief/config.yml — so
 //     `make eval-live` works against the configured provider with no env
 //     vars and the API key never passes through the shell.
 //
@@ -51,7 +55,19 @@ import (
 // or unlucky — pass; COMMITBRIEF_EVAL_OUT, if set, merges the pooled
 // result into that path as an ADR-0043 §4 results row (created if
 // missing). Both are read here, not baked into the harness, so k and the
-// output path are the caller's call on every invocation.
+// output path are the caller's call on every invocation. A relative OUT is
+// resolved against the module root (the nearest go.mod), not the package
+// directory `go test` runs in.
+//
+// Cost and scope controls (all optional, validated before the first call):
+//   - COMMITBRIEF_EVAL_FIXTURES=a,b,c runs only those Fixture.Name values
+//     (unknown name → fatal). A subset run refuses COMMITBRIEF_EVAL_OUT, so
+//     a partial row can never reach benchmark.json.
+//   - COMMITBRIEF_EVAL_BUDGET_USD=n stops the run once the estimated spend
+//     (uncached list rate, the same price as the row's usd_per_review)
+//     passes n dollars; no row is written, the spent amount is logged.
+//
+// Every run ends with a "RUN TOTALS" line: estimated cost and error counts.
 func TestEvalLive(t *testing.T) {
 	p, model := resolveLiveProvider(t)
 
@@ -60,11 +76,63 @@ func TestEvalLive(t *testing.T) {
 		t.Fatalf("LoadCorpus: %v", err)
 	}
 
-	runs := evalRuns(t)
-	scs, err := RunCorpusN(context.Background(), p, model, fixtures, runs)
+	// Scope and cost controls are validated before the first paid call.
+	fixturesCSV := os.Getenv("COMMITBRIEF_EVAL_FIXTURES")
+	rawOut := os.Getenv("COMMITBRIEF_EVAL_OUT")
+	if err := checkSubsetOut(fixturesCSV, rawOut); err != nil {
+		t.Fatal(err)
+	}
+	fixtures, err = selectFixtures(fixtures, fixturesCSV)
 	if err != nil {
+		t.Fatal(err)
+	}
+	outPath, err := resolveOutPath(rawOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capUSD, capped, err := parseBudget(os.Getenv("COMMITBRIEF_EVAL_BUDGET_USD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pricing := p.Pricing(model)
+	if err := checkBudgetPricing(capped, pricing, p.Name(), model); err != nil {
+		t.Fatal(err)
+	}
+	tracker := &budgetTracker{pricing: pricing}
+	var after AfterFixtureFunc
+	if capped {
+		tracker.capUSD = capUSD
+		after = tracker.observe
+	}
+
+	runs := evalRuns(t)
+	if fixturesCSV != "" {
+		t.Logf("── fixture subset: %d of the corpus (results file will not be written) ──", len(fixtures))
+	}
+	scs, err := RunCorpusNWith(context.Background(), p, model, fixtures, runs, after)
+	if err != nil {
+		// Report what the abandoned invocation did spend and which fixtures
+		// errored before failing, so a stopped paid run still diagnoses.
+		partial := summarizeRuns(scs, pricing)
+		t.Logf("── RUN TOTALS (stopped) — estimated cost ~$%.4f over %d reviews (uncached list rate), errors=%d (parse errors=%d) ──",
+			partial.USD, partial.Reviews, partial.Errors, partial.ParseErrors)
+		for _, sc := range scs {
+			for _, f := range sc.Fixtures {
+				if f.Errored {
+					t.Logf("   ⚠ %s: %s", f.Fixture, f.ErrorMsg)
+				}
+			}
+		}
+		var be *BudgetExceededError
+		if errors.As(err, &be) {
+			t.Fatalf("budget cap hit, run stopped, no results row written: spent ~$%.4f of $%.4f cap (estimate, uncached list rate)", be.SpentUSD, be.CapUSD)
+		}
 		t.Fatalf("RunCorpusN: %v", err)
 	}
+	totals := summarizeRuns(scs, pricing)
+	t.Logf("── RUN TOTALS — estimated cost ~$%.4f over %d reviews (uncached list rate), errors=%d (parse errors=%d) ──",
+		totals.USD, totals.Reviews, totals.Errors, totals.ParseErrors)
 
 	for i, sc := range scs {
 		label := fmt.Sprintf("RUN %d/%d", i+1, runs)
@@ -80,7 +148,6 @@ func TestEvalLive(t *testing.T) {
 	logScorecard(t, "DEV (tunable, last run)", last.Dev(), false)
 	logScorecard(t, "HELD-OUT (generalization, last run)", last.HeldOut(), false)
 
-	pricing := p.Pricing(model)
 	promptSHA := PromptSHA256()
 	commit := commitbriefCommit(t)
 	measuredAt := time.Now()
@@ -99,7 +166,6 @@ func TestEvalLive(t *testing.T) {
 		}
 	}
 
-	outPath := os.Getenv("COMMITBRIEF_EVAL_OUT")
 	if outPath == "" {
 		return
 	}
@@ -239,26 +305,12 @@ func resolveLiveProvider(t *testing.T) (provider.Provider, string) {
 		t.Fatalf("load %s: %v", path, err)
 	}
 
-	name := os.Getenv("COMMITBRIEF_EVAL_PROVIDER")
+	name, pc := liveProviderSettings(cfg)
 	if name == "" {
-		if cfg == nil || cfg.Provider == "" {
-			t.Skipf("set COMMITBRIEF_EVAL_PROVIDER or configure a default provider in %s", path)
-		}
-		name = cfg.Provider
-	}
-
-	var pc config.ProviderConfig
-	if cfg != nil {
-		pc = cfg.Providers[name]
-	}
-	if key := os.Getenv("COMMITBRIEF_EVAL_API_KEY"); key != "" {
-		pc.APIKey = key
-	}
-	if model := os.Getenv("COMMITBRIEF_EVAL_MODEL"); model != "" {
-		pc.Model = model
+		t.Skipf("set COMMITBRIEF_EVAL_PROVIDER or configure a default provider in %s", path)
 	}
 	if pc.APIKey == "" {
-		t.Skipf("provider %q has no api_key (in %s or COMMITBRIEF_EVAL_API_KEY)", name, path)
+		t.Skipf("provider %q has no api_key (in %s, its standard env var, or COMMITBRIEF_EVAL_API_KEY)", name, path)
 	}
 
 	p, err := provider.New(name, pc)
