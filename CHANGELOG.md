@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.21.2] - 2026-10-31
+
 ### Fixed
 - **Gemini thinking models no longer truncate the review JSON or under-report cost.** Thought
   tokens share `MaxOutputTokens` with the visible answer, so the 4096 default was often spent
@@ -2522,7 +2524,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.21.1...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.21.2...HEAD
+[1.21.2]: https://github.com/CommitBrief/commitbrief/compare/v1.21.1...v1.21.2
 [1.21.1]: https://github.com/CommitBrief/commitbrief/compare/v1.21.0...v1.21.1
 [1.21.0]: https://github.com/CommitBrief/commitbrief/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/CommitBrief/commitbrief/compare/v1.19.0...v1.20.0
