@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-10-26T05:49:50Z",
+  "generated_at": "2026-10-31T08:17:16Z",
   "corpus": {
     "fingerprint": "d8592a2c0e761715f0e55ec8476266a0589e8b75d951d06169e264a885247008",
     "n_fixtures": 129,
@@ -26,41 +26,41 @@
     {
       "provider": "gemini",
       "model": "gemini-3.8-flash",
-      "measured_at": "2026-10-26T05:49:49Z",
+      "measured_at": "2026-10-31T08:17:16Z",
       "prompt_sha256": "61afb55b516dccd32b35bbeb79335e986e255807260a414e637aa0d20986ed0d",
-      "commitbrief_commit": "v1.21.1-4-g3a804f4",
+      "commitbrief_commit": "v1.21.1-7-ge5c66e7",
       "runs": 3,
       "n_buggy": 96,
       "n_clean": 33,
       "n_expected": 99,
-      "recall": 0.9529,
-      "recall_min": 0.9394,
-      "recall_max": 0.9697,
-      "precision": 0.9159,
-      "fpr": 0.0303,
+      "recall": 0.9731,
+      "recall_min": 0.9596,
+      "recall_max": 0.9899,
+      "precision": 0.906,
+      "fpr": 0.0404,
       "fpr_min": 0.0303,
-      "fpr_max": 0.0303,
-      "silence_violation_rate": 0.0345,
-      "errors": 8,
+      "fpr_max": 0.0606,
+      "silence_violation_rate": 0.0402,
+      "errors": 2,
       "input_tokens": 3781.9767,
-      "output_tokens": 195.5194,
-      "cached_input_tokens": 114.5168,
+      "output_tokens": 1004.2817,
+      "cached_input_tokens": 100.8527,
       "pricing": {
         "input_per_1m": 0.75,
         "output_per_1m": 3.75
       },
-      "usd_per_review": 0.00357,
+      "usd_per_review": 0.006603,
       "eligible": true,
       "breakdown": {
         "language": {
           "go": {
             "recall": {
-              "rate": 0.9583,
-              "k": 69,
+              "rate": 0.9444,
+              "k": 68,
               "n": 72,
               "n_distinct": 24,
-              "wilson_low": 0.7976,
-              "wilson_high": 0.9926,
+              "wilson_low": 0.7782,
+              "wilson_high": 0.988,
               "low_n": false
             },
             "fpr": {
@@ -75,12 +75,12 @@
           },
           "java": {
             "recall": {
-              "rate": 0.9778,
-              "k": 44,
+              "rate": 1,
+              "k": 45,
               "n": 45,
               "n_distinct": 15,
-              "wilson_low": 0.7624,
-              "wilson_high": 0.9983,
+              "wilson_low": 0.7961,
+              "wilson_high": 1,
               "low_n": true
             },
             "fpr": {
@@ -95,12 +95,12 @@
           },
           "javascript": {
             "recall": {
-              "rate": 0.8667,
-              "k": 39,
+              "rate": 0.9556,
+              "k": 43,
               "n": 45,
               "n_distinct": 15,
-              "wilson_low": 0.6212,
-              "wilson_high": 0.9626,
+              "wilson_low": 0.7312,
+              "wilson_high": 0.9941,
               "low_n": true
             },
             "fpr": {
@@ -115,12 +115,12 @@
           },
           "php": {
             "recall": {
-              "rate": 0.9778,
-              "k": 44,
+              "rate": 1,
+              "k": 45,
               "n": 45,
               "n_distinct": 15,
-              "wilson_low": 0.7624,
-              "wilson_high": 0.9983,
+              "wilson_low": 0.7961,
+              "wilson_high": 1,
               "low_n": true
             },
             "fpr": {
@@ -135,21 +135,21 @@
           },
           "python": {
             "recall": {
-              "rate": 0.9333,
-              "k": 42,
+              "rate": 0.9556,
+              "k": 43,
               "n": 45,
               "n_distinct": 15,
-              "wilson_low": 0.7018,
-              "wilson_high": 0.9881,
+              "wilson_low": 0.7312,
+              "wilson_high": 0.9941,
               "low_n": true
             },
             "fpr": {
-              "rate": 0,
-              "k": 0,
+              "rate": 0.0667,
+              "k": 1,
               "n": 15,
               "n_distinct": 5,
-              "wilson_low": 0,
-              "wilson_high": 0.4345,
+              "wilson_low": 0.005,
+              "wilson_high": 0.5049,
               "low_n": true
             }
           },
@@ -197,12 +197,12 @@
           },
           "high": {
             "recall": {
-              "rate": 0.9225,
-              "k": 119,
+              "rate": 0.9457,
+              "k": 122,
               "n": 129,
               "n_distinct": 43,
-              "wilson_low": 0.8038,
-              "wilson_high": 0.9719,
+              "wilson_low": 0.8347,
+              "wilson_high": 0.9836,
               "low_n": false
             },
             "fpr": {
@@ -246,23 +246,23 @@
               "low_n": true
             },
             "fpr": {
-              "rate": 0.0303,
-              "k": 3,
+              "rate": 0.0404,
+              "k": 4,
               "n": 99,
               "n_distinct": 33,
-              "wilson_low": 0.0054,
-              "wilson_high": 0.1532,
+              "wilson_low": 0.0087,
+              "wilson_high": 0.1679,
               "low_n": false
             }
           },
           "medium": {
             "recall": {
-              "rate": 0.9667,
-              "k": 116,
+              "rate": 0.9917,
+              "k": 119,
               "n": 120,
               "n_distinct": 40,
-              "wilson_low": 0.8587,
-              "wilson_high": 0.9928,
+              "wilson_low": 0.8978,
+              "wilson_high": 0.9994,
               "low_n": false
             },
             "fpr": {
