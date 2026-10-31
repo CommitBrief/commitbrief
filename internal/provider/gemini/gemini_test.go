@@ -435,16 +435,20 @@ func TestReviewMaxTokensFinishReason(t *testing.T) {
 		}
 	})
 
-	t.Run("structured empty content passes through as empty", func(t *testing.T) {
-		srv := rawServer(t, emptyBody, nil)
+	t.Run("structured empty content is retried once, then passes through as empty", func(t *testing.T) {
+		var bodies []map[string]any
+		srv := rawServer(t, emptyBody, &bodies)
 		defer srv.Close()
 		c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
 		resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x"})
 		if err != nil {
 			t.Fatalf("structured MAX_TOKENS must not error: %v", err)
 		}
-		if resp.Content != "" || resp.Usage.OutputTokens != 16374 {
-			t.Errorf("Content = %q, OutputTokens = %d", resp.Content, resp.Usage.OutputTokens)
+		if len(bodies) != 2 {
+			t.Fatalf("requests = %d, want 2 (one in-provider retry)", len(bodies))
+		}
+		if resp.Content != "" || resp.Usage.OutputTokens != 2*16374 {
+			t.Errorf("Content = %q, OutputTokens = %d, want empty and summed 32748", resp.Content, resp.Usage.OutputTokens)
 		}
 	})
 
@@ -495,5 +499,205 @@ func TestFreeFormTruncationUsesRequestLang(t *testing.T) {
 	_, err := c.Review(context.Background(), provider.Request{UserPrompt: "x", FreeForm: true, Lang: "tr"})
 	if err == nil || !strings.Contains(err.Error(), "kesildi") {
 		t.Errorf("err = %v, want the Turkish truncation message", err)
+	}
+}
+
+// seqServer answers successive :generateContent calls with successive bodies
+// (the last one repeats) and records every request body.
+func seqServer(t *testing.T, bodies []string, captured *[]map[string]any) *httptest.Server {
+	t.Helper()
+	n := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		*captured = append(*captured, body)
+		idx := n
+		if idx >= len(bodies) {
+			idx = len(bodies) - 1
+		}
+		n++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, bodies[idx])
+	}))
+}
+
+func maxOutputOf(body map[string]any) float64 {
+	gc, _ := body["generationConfig"].(map[string]any)
+	v, _ := gc["maxOutputTokens"].(float64)
+	return v
+}
+
+const (
+	emptyMaxTokensBody = `{"candidates":[{"content":{"role":"model"},"finishReason":"MAX_TOKENS"}],` +
+		`"usageMetadata":{"promptTokenCount":10,"thoughtsTokenCount":16374,"totalTokenCount":16384}}`
+	recoveredBody = `{"candidates":[{"content":{"parts":[{"text":"{\"findings\":[]}"}],"role":"model"},"finishReason":"STOP"}],` +
+		`"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5,"thoughtsTokenCount":9000,"totalTokenCount":9015}}`
+)
+
+func TestEmptyMaxTokensRetriesWithDoubledCeiling(t *testing.T) {
+	var bodies []map[string]any
+	srv := seqServer(t, []string{emptyMaxTokensBody, recoveredBody}, &bodies)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	resp, err := c.Review(context.Background(), provider.Request{Model: ModelFlash38, UserPrompt: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("requests = %d, want 2", len(bodies))
+	}
+	if maxOutputOf(bodies[0]) != defaultThinkingMaxTokens || maxOutputOf(bodies[1]) != 2*defaultThinkingMaxTokens {
+		t.Errorf("ceilings = %v then %v, want %d then %d", maxOutputOf(bodies[0]), maxOutputOf(bodies[1]),
+			defaultThinkingMaxTokens, 2*defaultThinkingMaxTokens)
+	}
+	if resp.Content != `{"findings":[]}` {
+		t.Errorf("Content = %q, want the retry's content", resp.Content)
+	}
+	// Both calls are billed: 16374 thought + (5 candidates + 9000 thought).
+	if want := 16374 + 5 + 9000; resp.Usage.OutputTokens != want {
+		t.Errorf("OutputTokens = %d, want summed %d", resp.Usage.OutputTokens, want)
+	}
+	if resp.Usage.InputTokens != 20 {
+		t.Errorf("InputTokens = %d, want summed 20", resp.Usage.InputTokens)
+	}
+}
+
+func TestEmptyMaxTokensRetryAlsoEmptyFreeFormErrors(t *testing.T) {
+	var bodies []map[string]any
+	srv := seqServer(t, []string{emptyMaxTokensBody}, &bodies)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x", FreeForm: true})
+	if err == nil || !strings.Contains(err.Error(), "cut off") {
+		t.Fatalf("err = %v, want the truncation error", err)
+	}
+	if len(bodies) != 2 {
+		t.Errorf("requests = %d, want exactly 2 (a single retry)", len(bodies))
+	}
+	if resp.Usage.OutputTokens != 2*16374 {
+		t.Errorf("billed usage of both calls must survive the error: %d", resp.Usage.OutputTokens)
+	}
+}
+
+func TestNonEmptyTruncationIsNotRetried(t *testing.T) {
+	truncated := `{"candidates":[{"content":{"parts":[{"text":"{\"findings\":[{"}],"role":"model"},"finishReason":"MAX_TOKENS"}],` +
+		`"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":20,"thoughtsTokenCount":16000,"totalTokenCount":16030}}`
+	var bodies []map[string]any
+	srv := seqServer(t, []string{truncated}, &bodies)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bodies) != 1 {
+		t.Errorf("requests = %d, want 1 (non-empty truncation is the ADR-0031 path)", len(bodies))
+	}
+	if resp.Content != `{"findings":[{` {
+		t.Errorf("Content = %q", resp.Content)
+	}
+}
+
+func TestRetryCeilingCapAndHeadroom(t *testing.T) {
+	cases := []struct{ in, want int32 }{
+		{4096, 8192},
+		{16384, 32768},
+		{40000, maxOutputTokensCeiling},
+		{maxOutputTokensCeiling, maxOutputTokensCeiling},
+	}
+	for _, tc := range cases {
+		if got := retryCeiling(tc.in); got != tc.want {
+			t.Errorf("retryCeiling(%d) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+	// At the model maximum there is no headroom: no retry is issued.
+	var bodies []map[string]any
+	srv := seqServer(t, []string{emptyMaxTokensBody}, &bodies)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	if _, err := c.Review(context.Background(), provider.Request{UserPrompt: "x", MaxTokens: int(maxOutputTokensCeiling)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(bodies) != 1 {
+		t.Errorf("requests = %d, want 1 at the model maximum", len(bodies))
+	}
+}
+
+// retryFailsServer answers the first call with an empty MAX_TOKENS body and
+// runs onRetry for every later call (which then replies 429).
+func retryFailsServer(t *testing.T, onRetry func()) *httptest.Server {
+	t.Helper()
+	n := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n++
+		w.Header().Set("Content-Type", "application/json")
+		if n == 1 {
+			fmt.Fprint(w, emptyMaxTokensBody)
+			return
+		}
+		if onRetry != nil {
+			onRetry()
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}`)
+	}))
+}
+
+func TestEmptyMaxTokensRetryAPIErrorFallsBackToFirstResult(t *testing.T) {
+	srv := retryFailsServer(t, nil)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+
+	// Structured: the first (empty) result flows on so the CLI's own
+	// ADR-0031 handling and degrade path still run.
+	resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x"})
+	if err != nil {
+		t.Fatalf("a failed extra attempt must not fail the review: %v", err)
+	}
+	if resp.Content != "" || resp.Usage.OutputTokens != 16374 {
+		t.Errorf("Content = %q, OutputTokens = %d, want empty and the first call's 16374", resp.Content, resp.Usage.OutputTokens)
+	}
+
+	// Free-form: the existing truncation error, with the first call's usage.
+	// A fresh server, since retryFailsServer counts calls.
+	srv2 := retryFailsServer(t, nil)
+	defer srv2.Close()
+	c, _ = New(config.ProviderConfig{APIKey: "k", BaseURL: srv2.URL})
+	resp, err = c.Review(context.Background(), provider.Request{UserPrompt: "x", FreeForm: true})
+	if err == nil || !strings.Contains(err.Error(), "cut off") {
+		t.Fatalf("err = %v, want the truncation error", err)
+	}
+	if resp.Usage.OutputTokens != 16374 {
+		t.Errorf("first call's billed usage lost: %d", resp.Usage.OutputTokens)
+	}
+}
+
+func TestEmptyMaxTokensRetryContextCancelStaysAnError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := retryFailsServer(t, cancel)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	resp, err := c.Review(ctx, provider.Request{UserPrompt: "x"})
+	if err == nil {
+		t.Fatal("a cancelled context must surface as an error, not degrade")
+	}
+	if resp.Usage.OutputTokens != 16374 {
+		t.Errorf("first call's billed usage lost: %d", resp.Usage.OutputTokens)
+	}
+}
+
+func TestMaxOutputTokensClampedToModelMaximum(t *testing.T) {
+	const okBody = `{"candidates":[{"content":{"parts":[{"text":"ok"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1,"totalTokenCount":2}}`
+	var bodies []map[string]any
+	srv := rawServer(t, okBody, &bodies)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	// 98304 is what the CLI's repair ceiling asks for after a summed retry.
+	if _, err := c.Review(context.Background(), provider.Request{Model: ModelFlash38, UserPrompt: "x", MaxTokens: 98304}); err != nil {
+		t.Fatal(err)
+	}
+	if got := maxOutputOf(bodies[0]); got != float64(maxOutputTokensCeiling) {
+		t.Errorf("maxOutputTokens = %v, want clamped to %d", got, maxOutputTokensCeiling)
 	}
 }

@@ -25,6 +25,13 @@ var supportedModels = []string{
 	ModelFlashLite35,
 }
 
+// maxOutputTokensCeiling is the largest MaxOutputTokens value the empty-content
+// retry will request (client.go). Every catalog model is in the Gemini 3 family
+// with a 65536-token output limit; unknown/custom model IDs get the same cap,
+// and an API rejection of it surfaces as a normal error. There is no
+// per-model table because the catalog has no model that differs.
+const maxOutputTokensCeiling int32 = 65536
+
 // thinkingModels lists the models that think by default, so thought tokens
 // consume the MaxOutputTokens budget (see defaultMaxTokensFor). The Lite tier
 // is deliberately left out: it is the cost-oriented tier with minimal default

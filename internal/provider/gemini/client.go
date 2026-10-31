@@ -93,27 +93,79 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 		return provider.Response{}, mapError(err)
 	}
 	content := resp.Text()
+	usage := mapUsage(resp.UsageMetadata)
+	if hitMaxTokens(resp) && strings.TrimSpace(content) == "" {
+		// The whole output budget went to thinking and nothing visible was
+		// produced. Re-asking at the same ceiling would just repeat that, so
+		// retry the identical request once with the ceiling doubled (capped
+		// at the model maximum). Both calls are billed, so their usage is
+		// summed. A retry that is still empty falls through to the normal
+		// handling below; the ADR-0031 repair retry in internal/cli only
+		// raises the ceiling for truncated (non-empty) JSON, which is why
+		// this empty case is handled here. Truncated non-empty content is
+		// deliberately not retried: that is the ADR-0031 path.
+		if next := retryCeiling(cfg.MaxOutputTokens); next > cfg.MaxOutputTokens {
+			cfg.MaxOutputTokens = next
+			resp2, err2 := c.sdk.Models.GenerateContent(ctx, model, contents, cfg)
+			switch {
+			case err2 == nil:
+				resp = resp2
+				content = resp2.Text()
+				usage = addUsage(usage, mapUsage(resp2.UsageMetadata))
+			case ctx.Err() != nil:
+				// Cancellation or deadline is a real failure, not something
+				// to degrade around. The first call's billed usage rides
+				// along with the error.
+				return provider.Response{Model: model, Usage: usage}, mapError(err2)
+			default:
+				// A transport/API failure (429, 5xx, timeout) on the extra
+				// attempt must not turn into a hard failure that the first
+				// call's result did not warrant: fall back to that result
+				// (empty + MAX_TOKENS, first call's usage) so the existing
+				// handling below applies, exactly as before the retry
+				// existed.
+			}
+		}
+	}
 	if hitMaxTokens(resp) && req.FreeForm {
 		// A plain-text completion (commit message, summary) cut off by the
 		// output ceiling has no repair path, and handing the fragment back
 		// as if it were whole would be silent corruption. Structured
-		// reviews are different: the truncated (or empty) JSON flows on to
-		// the ADR-0031 repair retry. Truncated JSON gets the raised
-		// ceiling; empty content takes the schema-reset branch at the same
-		// ceiling (see repairRequest in internal/cli/review.go).
+		// reviews are different: the truncated JSON flows on to the
+		// ADR-0031 repair retry with a raised ceiling, and empty content
+		// (after the in-provider retry above also came back empty) takes
+		// its schema-reset branch at the same ceiling (see repairRequest in
+		// internal/cli/review.go).
 		//
 		// This error reaches the user, so it is localized like the
 		// clireview argument-limit error (EN/TR, request language, English
 		// fallback). The usage is returned with the error so the billed
 		// thought tokens are not lost to a caller that wants them.
-		usage := mapUsage(resp.UsageMetadata)
 		return provider.Response{Model: model, Usage: usage}, newTruncatedError(req.Lang, usage.OutputTokens)
 	}
 	return provider.Response{
 		Content: content,
 		Model:   model,
-		Usage:   mapUsage(resp.UsageMetadata),
+		Usage:   usage,
 	}, nil
+}
+
+// retryCeiling returns the output ceiling for the empty-content MAX_TOKENS
+// retry: double the current one, capped at the model maximum. A result that
+// is not above current means there is no headroom left and no retry is made.
+func retryCeiling(current int32) int32 {
+	if current > maxOutputTokensCeiling/2 {
+		return maxOutputTokensCeiling
+	}
+	return current * 2
+}
+
+func addUsage(a, b provider.Usage) provider.Usage {
+	return provider.Usage{
+		InputTokens:       a.InputTokens + b.InputTokens,
+		OutputTokens:      a.OutputTokens + b.OutputTokens,
+		CachedInputTokens: a.CachedInputTokens + b.CachedInputTokens,
+	}
 }
 
 func (c *Client) TestConnection(ctx context.Context) error {
@@ -138,6 +190,13 @@ func (c *Client) buildParams(req provider.Request, model string) ([]*sdk.Content
 	maxTokens := defaultMaxTokensFor(model)
 	if req.MaxTokens > 0 && req.MaxTokens <= math.MaxInt32 {
 		maxTokens = int32(req.MaxTokens)
+	}
+	// Never ask for more than the model can emit. The CLI's repair ceiling
+	// doubles the reported output tokens, which now include thought tokens
+	// and (after the empty-content retry) two summed calls, so it can exceed
+	// the model maximum.
+	if maxTokens > maxOutputTokensCeiling {
+		maxTokens = maxOutputTokensCeiling
 	}
 	contents := []*sdk.Content{
 		{Role: sdk.RoleUser, Parts: []*sdk.Part{sdk.NewPartFromText(req.UserPrompt)}},

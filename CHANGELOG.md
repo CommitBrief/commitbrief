@@ -17,7 +17,9 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   `gemini-3.5-flash` and `gemini-3.1-pro-preview` now default to a 16384 ceiling, thought
   tokens are counted in the reported output tokens so the verbose footer, `cost` and eval
   figures match the bill, and a free-form completion cut off at `MAX_TOKENS` is an explicit
-  error instead of silently truncated text.
+  error instead of silently truncated text. When a thinking model spends the whole output budget
+  and returns no visible text, the request is retried once at twice the ceiling (up to the model
+  maximum) and both calls' usage is summed.
 
 ### Changed
 - Eval corpus grown from 40 to 129 fixtures (96 buggy carrying 99 planted defects, 33 clean
