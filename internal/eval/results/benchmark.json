@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-10-31T08:17:16Z",
+  "generated_at": "2026-10-31T12:57:26Z",
   "corpus": {
     "fingerprint": "d8592a2c0e761715f0e55ec8476266a0589e8b75d951d06169e264a885247008",
     "n_fixtures": 129,
@@ -26,41 +26,41 @@
     {
       "provider": "gemini",
       "model": "gemini-3.8-flash",
-      "measured_at": "2026-10-31T08:17:16Z",
+      "measured_at": "2026-10-31T12:57:26Z",
       "prompt_sha256": "61afb55b516dccd32b35bbeb79335e986e255807260a414e637aa0d20986ed0d",
-      "commitbrief_commit": "v1.21.1-7-ge5c66e7",
+      "commitbrief_commit": "v1.21.1-9-ga1faf6f",
       "runs": 3,
       "n_buggy": 96,
       "n_clean": 33,
       "n_expected": 99,
       "recall": 0.9731,
-      "recall_min": 0.9596,
-      "recall_max": 0.9899,
-      "precision": 0.906,
-      "fpr": 0.0404,
+      "recall_min": 0.9697,
+      "recall_max": 0.9798,
+      "precision": 0.9003,
+      "fpr": 0.0303,
       "fpr_min": 0.0303,
-      "fpr_max": 0.0606,
-      "silence_violation_rate": 0.0402,
-      "errors": 2,
-      "input_tokens": 3781.9767,
-      "output_tokens": 1004.2817,
-      "cached_input_tokens": 100.8527,
+      "fpr_max": 0.0303,
+      "silence_violation_rate": 0.0345,
+      "errors": 1,
+      "input_tokens": 3772.3798,
+      "output_tokens": 953.9406,
+      "cached_input_tokens": 78.7752,
       "pricing": {
         "input_per_1m": 0.75,
         "output_per_1m": 3.75
       },
-      "usd_per_review": 0.006603,
+      "usd_per_review": 0.006407,
       "eligible": true,
       "breakdown": {
         "language": {
           "go": {
             "recall": {
-              "rate": 0.9444,
-              "k": 68,
+              "rate": 0.9306,
+              "k": 67,
               "n": 72,
               "n_distinct": 24,
-              "wilson_low": 0.7782,
-              "wilson_high": 0.988,
+              "wilson_low": 0.7596,
+              "wilson_high": 0.9827,
               "low_n": false
             },
             "fpr": {
@@ -75,12 +75,12 @@
           },
           "java": {
             "recall": {
-              "rate": 1,
-              "k": 45,
+              "rate": 0.9778,
+              "k": 44,
               "n": 45,
               "n_distinct": 15,
-              "wilson_low": 0.7961,
-              "wilson_high": 1,
+              "wilson_low": 0.7624,
+              "wilson_high": 0.9983,
               "low_n": true
             },
             "fpr": {
@@ -95,12 +95,12 @@
           },
           "javascript": {
             "recall": {
-              "rate": 0.9556,
-              "k": 43,
+              "rate": 1,
+              "k": 45,
               "n": 45,
               "n_distinct": 15,
-              "wilson_low": 0.7312,
-              "wilson_high": 0.9941,
+              "wilson_low": 0.7961,
+              "wilson_high": 1,
               "low_n": true
             },
             "fpr": {
@@ -144,12 +144,12 @@
               "low_n": true
             },
             "fpr": {
-              "rate": 0.0667,
-              "k": 1,
+              "rate": 0,
+              "k": 0,
               "n": 15,
               "n_distinct": 5,
-              "wilson_low": 0.005,
-              "wilson_high": 0.5049,
+              "wilson_low": 0,
+              "wilson_high": 0.4345,
               "low_n": true
             }
           },
@@ -197,12 +197,12 @@
           },
           "high": {
             "recall": {
-              "rate": 0.9457,
-              "k": 122,
+              "rate": 0.9535,
+              "k": 123,
               "n": 129,
               "n_distinct": 43,
-              "wilson_low": 0.8347,
-              "wilson_high": 0.9836,
+              "wilson_low": 0.8454,
+              "wilson_high": 0.9872,
               "low_n": false
             },
             "fpr": {
@@ -246,32 +246,32 @@
               "low_n": true
             },
             "fpr": {
-              "rate": 0.0404,
-              "k": 4,
+              "rate": 0.0303,
+              "k": 3,
               "n": 99,
               "n_distinct": 33,
-              "wilson_low": 0.0087,
-              "wilson_high": 0.1679,
+              "wilson_low": 0.0054,
+              "wilson_high": 0.1532,
               "low_n": false
             }
           },
           "medium": {
             "recall": {
-              "rate": 0.9917,
-              "k": 119,
+              "rate": 0.9833,
+              "k": 118,
               "n": 120,
               "n_distinct": 40,
-              "wilson_low": 0.8978,
-              "wilson_high": 0.9994,
+              "wilson_low": 0.8842,
+              "wilson_high": 0.9978,
               "low_n": false
             },
             "fpr": {
-              "rate": 0.0202,
-              "k": 2,
+              "rate": 0.0101,
+              "k": 1,
               "n": 99,
               "n_distinct": 33,
-              "wilson_low": 0.0027,
-              "wilson_high": 0.1378,
+              "wilson_low": 0.0008,
+              "wilson_high": 0.1216,
               "low_n": false
             }
           }
