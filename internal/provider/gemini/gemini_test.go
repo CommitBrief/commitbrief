@@ -325,3 +325,175 @@ func TestSystemInstructionPassed(t *testing.T) {
 		t.Errorf("system instruction not propagated; got %q", capturedSystem)
 	}
 }
+
+// rawServer replies to every :generateContent call with the given body and
+// records the decoded request bodies.
+func rawServer(t *testing.T, respBody string, captured *[]map[string]any) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if captured != nil {
+			*captured = append(*captured, body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, respBody)
+	}))
+}
+
+func TestMapUsageCountsThoughtTokens(t *testing.T) {
+	srv := rawServer(t, `{"candidates":[{"content":{"parts":[{"text":"ok"}],"role":"model"},"finishReason":"STOP"}],`+
+		`"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":50,"thoughtsTokenCount":700,"totalTokenCount":850}}`, nil)
+	defer srv.Close()
+
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.OutputTokens != 750 {
+		t.Errorf("OutputTokens = %d, want 750 (candidates 50 + thoughts 700)", resp.Usage.OutputTokens)
+	}
+	if resp.Usage.InputTokens != 100 {
+		t.Errorf("InputTokens = %d, want 100", resp.Usage.InputTokens)
+	}
+}
+
+func TestDefaultMaxTokensFor(t *testing.T) {
+	cases := map[string]int32{
+		ModelFlash38:     defaultThinkingMaxTokens,
+		ModelFlash35:     defaultThinkingMaxTokens,
+		ModelPro31:       defaultThinkingMaxTokens,
+		ModelFlashLite31: defaultMaxTokens,
+		ModelFlashLite35: defaultMaxTokens,
+		"custom-model":   defaultMaxTokens,
+	}
+	for model, want := range cases {
+		if got := defaultMaxTokensFor(model); got != want {
+			t.Errorf("defaultMaxTokensFor(%s) = %d, want %d", model, got, want)
+		}
+	}
+}
+
+func TestMaxOutputTokensSentToServer(t *testing.T) {
+	const okBody = `{"candidates":[{"content":{"parts":[{"text":"ok"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1,"totalTokenCount":2}}`
+	cases := []struct {
+		name  string
+		model string
+		max   int
+		want  float64
+	}{
+		{"thinking model default", ModelFlash38, 0, defaultThinkingMaxTokens},
+		{"lite model default", ModelFlashLite35, 0, defaultMaxTokens},
+		{"explicit wins on thinking model", ModelFlash38, 2048, 2048},
+		{"explicit larger than default", ModelPro31, 40000, 40000},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var bodies []map[string]any
+			srv := rawServer(t, okBody, &bodies)
+			defer srv.Close()
+			c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+			if _, err := c.Review(context.Background(), provider.Request{Model: tc.model, UserPrompt: "x", MaxTokens: tc.max}); err != nil {
+				t.Fatal(err)
+			}
+			if len(bodies) != 1 {
+				t.Fatalf("got %d requests, want 1", len(bodies))
+			}
+			gc, _ := bodies[0]["generationConfig"].(map[string]any)
+			if got, _ := gc["maxOutputTokens"].(float64); got != tc.want {
+				t.Errorf("maxOutputTokens = %v, want %v", gc["maxOutputTokens"], tc.want)
+			}
+			if _, ok := gc["thinkingConfig"]; ok {
+				t.Error("thinkingConfig must not be sent (model default stays)")
+			}
+		})
+	}
+}
+
+func TestReviewMaxTokensFinishReason(t *testing.T) {
+	truncated := `{"candidates":[{"content":{"parts":[{"text":"{\"findings\":[{\"severity\":"}],"role":"model"},"finishReason":"MAX_TOKENS"}],` +
+		`"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":20,"thoughtsTokenCount":16000,"totalTokenCount":16030}}`
+	emptyBody := `{"candidates":[{"content":{"role":"model"},"finishReason":"MAX_TOKENS"}],` +
+		`"usageMetadata":{"promptTokenCount":10,"thoughtsTokenCount":16374,"totalTokenCount":16384}}`
+
+	t.Run("structured truncated JSON passes through for the repair retry", func(t *testing.T) {
+		srv := rawServer(t, truncated, nil)
+		defer srv.Close()
+		c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+		resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x"})
+		if err != nil {
+			t.Fatalf("structured MAX_TOKENS must not error (repair retry needs the content): %v", err)
+		}
+		if resp.Content != `{"findings":[{"severity":` {
+			t.Errorf("Content = %q", resp.Content)
+		}
+		// The doubled-ceiling heuristic in review.go reads OutputTokens, so it
+		// has to include the thought tokens that actually exhausted the budget.
+		if resp.Usage.OutputTokens != 16020 {
+			t.Errorf("OutputTokens = %d, want 16020", resp.Usage.OutputTokens)
+		}
+	})
+
+	t.Run("structured empty content passes through as empty", func(t *testing.T) {
+		srv := rawServer(t, emptyBody, nil)
+		defer srv.Close()
+		c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+		resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x"})
+		if err != nil {
+			t.Fatalf("structured MAX_TOKENS must not error: %v", err)
+		}
+		if resp.Content != "" || resp.Usage.OutputTokens != 16374 {
+			t.Errorf("Content = %q, OutputTokens = %d", resp.Content, resp.Usage.OutputTokens)
+		}
+	})
+
+	t.Run("free-form truncation is an explicit error", func(t *testing.T) {
+		srv := rawServer(t, truncated, nil)
+		defer srv.Close()
+		c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+		resp, err := c.Review(context.Background(), provider.Request{UserPrompt: "x", FreeForm: true})
+		if err == nil || !strings.Contains(err.Error(), "cut off") {
+			t.Errorf("err = %v, want an output-limit truncation error", err)
+		}
+		if err != nil && strings.Contains(err.Error(), "raise") {
+			t.Errorf("error must not tell the user to raise a setting that does not exist: %v", err)
+		}
+		if err != nil && !strings.Contains(err.Error(), "cut off at the output token limit after 16020") {
+			t.Errorf("default-language error should be the English catalog text, got: %v", err)
+		}
+		if resp.Usage.OutputTokens != 16020 {
+			t.Errorf("billed usage must survive the error: OutputTokens = %d, want 16020", resp.Usage.OutputTokens)
+		}
+	})
+}
+
+func TestTruncatedErrorLocalized(t *testing.T) {
+	en := newTruncatedError("en", 16020).Error()
+	tr := newTruncatedError("tr", 16020).Error()
+	if !strings.Contains(en, "gemini") || !strings.Contains(en, "16020") || !strings.Contains(en, "cut off") {
+		t.Errorf("EN text = %q", en)
+	}
+	if !strings.Contains(tr, "gemini") || !strings.Contains(tr, "16020") || !strings.Contains(tr, "kesildi") {
+		t.Errorf("TR text = %q", tr)
+	}
+	if en == tr {
+		t.Error("EN and TR messages must differ")
+	}
+	// An unknown language falls back to English, never to an empty message.
+	if got := newTruncatedError("xx", 5).Error(); !strings.Contains(got, "cut off") {
+		t.Errorf("fallback text = %q", got)
+	}
+}
+
+func TestFreeFormTruncationUsesRequestLang(t *testing.T) {
+	body := `{"candidates":[{"content":{"parts":[{"text":"partial"}],"role":"model"},"finishReason":"MAX_TOKENS"}],` +
+		`"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":20,"thoughtsTokenCount":16000,"totalTokenCount":16030}}`
+	srv := rawServer(t, body, nil)
+	defer srv.Close()
+	c, _ := New(config.ProviderConfig{APIKey: "k", BaseURL: srv.URL})
+	_, err := c.Review(context.Background(), provider.Request{UserPrompt: "x", FreeForm: true, Lang: "tr"})
+	if err == nil || !strings.Contains(err.Error(), "kesildi") {
+		t.Errorf("err = %v, want the Turkish truncation message", err)
+	}
+}

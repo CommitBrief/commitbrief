@@ -62,6 +62,7 @@ provider.insecure_http_note: "⚠  %s base_url uses plain http to a non-loopback
 provider.cli.arg_too_long: "%s: the prompt is %d KB, over the ~%d KB this platform allows on a command line (%[1]s passes the prompt as a command-line argument). Narrow the diff with --file/--dir (or --exclude-file/--exclude-dir), or use claude-cli, which sends the prompt over stdin."
 provider.cli.arg_total_too_long: "%[1]s: the command line plus environment is %[2]d KB, over the ~%[3]d KB this platform allows. The environment counts toward the limit, so a very large environment can cause this on its own; unset unneeded environment variables, narrow the diff with --file/--dir (or --exclude-file/--exclude-dir), or use claude-cli, which sends the prompt over stdin."
 provider.cli.arg_rejected_by_os: "%[1]s: the operating system rejected the command line as too long (about %[2]d KB measured). Narrow the diff with --file/--dir (or --exclude-file/--exclude-dir), unset unneeded environment variables if yours is large, or use claude-cli, which sends the prompt over stdin."
+provider.gemini.output_truncated: "%s: the response was cut off at the output token limit after %d output tokens (thinking models spend part of that budget on reasoning). Retry with a smaller diff or another model."
 guard.tokens.exceeds: "⚠  Estimated prompt is %d tokens; %s's context window for this model is %d."
 guard.tokens.confirm_prompt: "Send it anyway?"
 guard.tokens.aborted_user: "aborted: token preflight"

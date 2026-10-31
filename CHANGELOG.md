@@ -10,6 +10,15 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Fixed
+- **Gemini thinking models no longer truncate the review JSON or under-report cost.** Thought
+  tokens share `MaxOutputTokens` with the visible answer, so the 4096 default was often spent
+  on thinking alone (`unexpected end of JSON input` / `empty content`). `gemini-3.8-flash`,
+  `gemini-3.5-flash` and `gemini-3.1-pro-preview` now default to a 16384 ceiling, thought
+  tokens are counted in the reported output tokens so the verbose footer, `cost` and eval
+  figures match the bill, and a free-form completion cut off at `MAX_TOKENS` is an explicit
+  error instead of silently truncated text.
+
 ### Changed
 - Eval corpus grown from 40 to 129 fixtures (96 buggy carrying 99 planted defects, 33 clean
   controls, 26 held-out) across Go, TypeScript, JavaScript, Python, Java and PHP, adding

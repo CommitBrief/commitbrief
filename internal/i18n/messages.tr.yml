@@ -62,6 +62,7 @@ provider.insecure_http_note: "⚠  %s base_url loopback olmayan bir host'a (%s) 
 provider.cli.arg_too_long: "%s: prompt %d KB; bu platformun komut satırında izin verdiği ~%d KB sınırını aşıyor (%[1]s prompt'u komut satırı argümanı olarak geçirir). Diff'i --file/--dir (ya da --exclude-file/--exclude-dir) ile daraltın veya prompt'u stdin ile gönderen claude-cli kullanın."
 provider.cli.arg_total_too_long: "%[1]s: komut satırı ve ortam birlikte %[2]d KB; bu platformun izin verdiği ~%[3]d KB sınırını aşıyor. Ortam değişkenleri de sınıra dahildir, bu yüzden çok büyük bir ortam tek başına soruna yol açabilir; gereksiz ortam değişkenlerini kaldırın, diff'i --file/--dir (ya da --exclude-file/--exclude-dir) ile daraltın veya prompt'u stdin ile gönderen claude-cli kullanın."
 provider.cli.arg_rejected_by_os: "%[1]s: işletim sistemi komut satırını çok uzun diye reddetti (ölçülen yaklaşık %[2]d KB). Diff'i --file/--dir (ya da --exclude-file/--exclude-dir) ile daraltın, ortamınız büyükse gereksiz ortam değişkenlerini kaldırın veya prompt'u stdin ile gönderen claude-cli kullanın."
+provider.gemini.output_truncated: "%s: yanıt, çıktı token sınırına ulaşınca %d token'da kesildi (thinking modelleri bu bütçenin bir kısmını akıl yürütmeye harcar). Daha küçük bir diff ya da başka bir modelle yeniden deneyin."
 guard.tokens.exceeds: "⚠  Tahmini prompt %d token; %s sağlayıcısının bu model için bağlam penceresi %d."
 guard.tokens.confirm_prompt: "Yine de gönderilsin mi?"
 guard.tokens.aborted_user: "iptal edildi: token preflight"

@@ -25,6 +25,17 @@ var supportedModels = []string{
 	ModelFlashLite35,
 }
 
+// thinkingModels lists the models that think by default, so thought tokens
+// consume the MaxOutputTokens budget (see defaultMaxTokensFor). The Lite tier
+// is deliberately left out: it is the cost-oriented tier with minimal default
+// thinking, so the historical 4096 ceiling stays; a truncation there is still
+// caught by the ADR-0031 repair retry. Unknown/custom model IDs also keep 4096.
+var thinkingModels = map[string]bool{
+	ModelPro31:   true,
+	ModelFlash35: true,
+	ModelFlash38: true,
+}
+
 func Models() []string {
 	out := make([]string, len(supportedModels))
 	copy(out, supportedModels)
