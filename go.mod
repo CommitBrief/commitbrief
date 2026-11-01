@@ -3,7 +3,7 @@ module github.com/CommitBrief/commitbrief
 go 1.26.0
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.82.0
+	github.com/anthropics/anthropic-sdk-go v1.84.0
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
@@ -14,7 +14,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
-	google.golang.org/genai v1.75.0
+	google.golang.org/genai v1.76.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
