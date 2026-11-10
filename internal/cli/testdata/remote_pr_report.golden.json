@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "content": "",
+  "findings": [
+    {
+      "severity": "info",
+      "file": "mock.go",
+      "line": 1,
+      "title": "t-info",
+      "description": "d",
+      "suggestion": "s",
+      "rule_id": "general.other",
+      "fingerprint": "ad043d1c4efe43808e5162db7e1eec70e8a36121222a701490566579fc1a78eb"
+    }
+  ],
+  "summary": {},
+  "meta": {
+    "provider": "mock",
+    "model": "mock-model",
+    "lang": "en",
+    "usage": {
+      "input_tokens": 100,
+      "output_tokens": 50,
+      "cached_input_tokens": 0
+    },
+    "cost_usd": 200,
+    "latency_ms": 0,
+    "cached": false,
+    "timestamp": "2026-01-01T00:00:00Z"
+  },
+  "remote": {
+    "status": "submitted",
+    "pr": {
+      "repo": "CommitBrief/web",
+      "number": 42
+    },
+    "head_oid": "stable",
+    "verdict": "comment",
+    "verdict_uncapped": "approve",
+    "max_verdict": "comment",
+    "review": {
+      "mode": "full",
+      "full_reason": "not_requested",
+      "attempts": 1,
+      "marker_written": true
+    },
+    "sync": {
+      "mode": "synced",
+      "posted": 1,
+      "updated": 0,
+      "unchanged": 0,
+      "resolved": 0,
+      "replied": 0,
+      "held": 0,
+      "post_failed": 0,
+      "unanchored": 0
+    },
+    "warnings": []
+  }
+}

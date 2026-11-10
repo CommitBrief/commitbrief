@@ -35,6 +35,10 @@ type jsonDocument struct {
 	Findings []Finding `json:"findings"`
 	Summary  Summary   `json:"summary"`
 	Meta     jsonMeta  `json:"meta"`
+	// Remote is the optional `remote pr` posting-mode container (ADR-0048).
+	// A nil pointer is omitted, so every other producer's document is
+	// byte-for-byte the v1 shape.
+	Remote *RemoteReport `json:"remote,omitempty"`
 }
 
 type Summary struct {
@@ -135,6 +139,13 @@ func JSON(w io.Writer, p Payload) error {
 				CachedInputTokens: p.Meta.Usage.CachedInputTokens,
 			},
 		},
+	}
+	if p.Remote != nil {
+		rep := *p.Remote
+		if rep.Warnings == nil {
+			rep.Warnings = []RemoteWarning{}
+		}
+		doc.Remote = &rep
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

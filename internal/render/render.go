@@ -55,6 +55,10 @@ type Payload struct {
 
 	Meta    Meta
 	Verbose bool
+
+	// Remote is the `remote pr` posting-mode report (ADR-0048). Only the JSON
+	// renderer reads it; nil for every other producer.
+	Remote *RemoteReport
 }
 
 type Meta struct {

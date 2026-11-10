@@ -10,6 +10,36 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **`remote pr --json` writes a machine-readable report in posting mode.** The run still posts
+  its inline comments and submits the verdict, and also writes one JSON v1 document to stdout
+  (or to `--output`): the full post-suppression `findings[]`, a `meta` block with token usage,
+  cost and latency summed over every provider call of the invocation (both attempts of a head
+  race retry, and any repair retries), and a new optional top-level `remote` container with the
+  `status`, PR and head OID, the verdict before and after the ceiling, whether the run was
+  full or incremental and why, the sync counters of the `Synced:` line, and a `warnings[]`
+  array of stable codes. `schema` stays `1`; every other command's document is unchanged.
+  Once a provider call has returned, every way the run ends (submitted, nothing new to review,
+  unparsable answer, head moved twice, a later failure) writes the document, so the spend is
+  never invisible. Exit codes are unchanged. `--markdown`, `--copy`, `--compact` and
+  `--output` without `--json` are still rejected in posting mode.
+- **`remote pr --max-verdict <approve|comment>`.** With `comment`, the review never submits
+  an `approve`: a PR with no findings, or only `info` findings, gets a `comment` review
+  instead. Inline comments, the reviewed marker and `--request-changes-on` are unaffected;
+  `request-changes` is rejected as a value because it is not a ceiling. The default,
+  `approve`, is today's behaviour. An `approve` submitted by an earlier run stays on GitHub.
+
+### Changed
+- **`remote pr <ID> --json` no longer stops at a usage error.** It used to fail before any
+  `gh` call; it now posts comments and submits a verdict and also writes the report. Use
+  `--no-post` for a local preview.
+- **The `remote pr` footer now counts a superseded race-retry attempt.** Tokens and cost in
+  the stderr footer are summed over both attempts when the PR head moved during the review,
+  and match `meta.usage` and `meta.cost_usd` of the same run.
+- **`remote pr` never runs `review.sandbox_command`.** It never did; the guarantee is now
+  enforced for the whole run on both paths (posting and `--no-post`) and pinned by a
+  regression test, rather than being a consequence of the code layout.
+
 ## [1.21.2] - 2026-10-31
 
 ### Fixed

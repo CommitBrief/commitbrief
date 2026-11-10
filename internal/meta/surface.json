@@ -1165,11 +1165,19 @@
     },
     {
       "command": "commitbrief remote pr",
+      "name": "max-verdict",
+      "type": "string",
+      "default": "approve",
+      "usage": "cap the review verdict (approve|comment); comment means the review never submits an approve (request-changes stays governed by --request-changes-on)",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief remote pr",
       "name": "no-post",
       "type": "bool",
       "default": "false",
       "no_opt_def_val": "true",
-      "usage": "review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review",
+      "usage": "review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review. --json alone does not imply --no-post",
       "scope": "command"
     },
     {

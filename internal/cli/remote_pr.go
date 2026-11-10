@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 
 type remotePRFlags struct {
 	requestChangesOn string
+	maxVerdict       string // "" and "approve" = no ceiling; "comment" = never approve (ADR-0048 §4)
 	repo             string
 	noPost           bool
 	sinceLastReview  bool
@@ -53,7 +55,12 @@ func newRemotePRCmd() *cobra.Command {
 			"The PR ID accepts gh-native forms: 42, owner/repo#42, or a full URL.\n" +
 			"With --since-last-review only the commits added since CommitBrief's\n" +
 			"previous review of the PR are reviewed; it falls back to a full review\n" +
-			"whenever that range cannot be determined safely. See ADR-0016.",
+			"whenever that range cannot be determined safely. With --max-verdict\n" +
+			"comment the review never submits an approve. With --json the run still\n" +
+			"posts and submits, and also writes one JSON document (findings, token\n" +
+			"usage and cost, and a remote block with the verdict, sync counters and\n" +
+			"warnings) to stdout or to --output; use --no-post for a local preview.\n" +
+			"See https://commitbrief.com/docs/1.x/remote-pr.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRemotePR(cmd, args[0], f, remote.NewRunner())
@@ -62,9 +69,11 @@ func newRemotePRCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.requestChangesOn, "request-changes-on", "",
 		"opt in to a request-changes verdict at/above this severity (critical|high|medium|low); "+
 			"omitted, the verdict is never request-changes (comment / approve only)")
+	cmd.Flags().StringVar(&f.maxVerdict, "max-verdict", maxVerdictApprove,
+		"cap the review verdict (approve|comment); comment means the review never submits an approve (request-changes stays governed by --request-changes-on)")
 	cmd.Flags().StringVar(&f.repo, "repo", "", "target repository owner/repo (overrides git context)")
 	cmd.Flags().BoolVar(&f.noPost, "no-post", false,
-		"review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review")
+		"review the PR diff and print locally (no GitHub writes); enables --json/--markdown/--output/--copy/--cli like a local review. --json alone does not imply --no-post")
 	cmd.Flags().BoolVar(&f.sinceLastReview, "since-last-review", false,
 		"review only the commits added since CommitBrief's last review of this PR (full review when that range is unknown)")
 	return cmd
@@ -91,6 +100,16 @@ func parseRequestChangesOn(raw string) (render.Severity, error) {
 }
 
 func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote.Runner) error {
+	// ADR-0048 §6: `remote pr` never executes review.sandbox_command. Neither
+	// path reaches applySandboxRerun today (the only process this command starts
+	// is `gh`); setting the gate on entry keeps it that way if a refactor ever
+	// routes it through runReview. The previous value is restored on return so
+	// the flag does not leak into later runs in the same process (mcp.go does
+	// the same).
+	savedNoSandbox := global.noSandbox
+	global.noSandbox = true
+	defer func() { global.noSandbox = savedNoSandbox }()
+
 	// The PR diff comes from `gh pr diff`, not from local git, so there is no
 	// commit history here to walk. Reject the commit filters up front, on both
 	// entry paths, rather than accepting flags that could not be honored.
@@ -117,8 +136,10 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 	cmd.SetContext(ctx)
 	cat := app.Catalog
 
-	// Local-render flags have no meaning here — the output channel is GitHub.
-	if global.json || global.markdown || global.output != "" || global.copy || global.compact {
+	// Human-readable local-render flags have no meaning here — the output
+	// channel is GitHub. --json (optionally with --output) is the one machine
+	// channel posting mode has (ADR-0048 §1); --output alone stays rejected.
+	if global.markdown || global.copy || global.compact || (global.output != "" && !global.json) {
 		return errors.New(cat.T("remote.output_flags"))
 	}
 	if f.repo == "" && app.RepoRoot == "" {
@@ -139,6 +160,30 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		}
 		threshold = t
 	}
+	ceiling, perr := parseMaxVerdict(f.maxVerdict)
+	if perr != nil {
+		if errors.Is(perr, errMaxVerdictRequestChanges) {
+			return errors.New(cat.T("remote.max_verdict_request_changes"))
+		}
+		return errors.New(cat.T("remote.max_verdict_invalid", f.maxVerdict))
+	}
+	f.maxVerdict = ceiling
+
+	// The --json document destination is opened now, before any GitHub write:
+	// an unwritable --output must fail while a retry is still safe.
+	var sink *reportSink
+	if global.json && global.output != "" {
+		sink, err = openReportSink(global.output)
+		if err != nil {
+			return err
+		}
+	}
+	reportWritten := false
+	defer func() {
+		if sink != nil {
+			sink.close(reportWritten)
+		}
+	}()
 
 	if err := remote.EnsureGH(); err != nil {
 		return errors.New(cat.T("remote.gh_missing"))
@@ -154,6 +199,17 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 	model := app.Config.Providers[app.Config.Provider].Model
 	if model == "" {
 		model = prov.DefaultModel()
+	}
+
+	// run is the per-invocation accumulator behind the footer and the --json
+	// document (ADR-0048 §2). The run's conditions are recorded as they are
+	// known, independent of --quiet and of whether a stderr note was printed.
+	run := &prRun{baseReason: fullReasonNotRequested}
+	if host, bad := insecureHTTPHost(app, prov.Name()); bad {
+		run.warn(render.RemoteWarning{Code: "insecure_http", Ref: host})
+	}
+	if costIsUnknown(app.Config, prov, model) {
+		run.warn(render.RemoteWarning{Code: "cost_unknown"})
 	}
 
 	// Standard review header line ("commitbrief vX · provider · cache"),
@@ -175,6 +231,7 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 
 	if global.failOn != "" {
 		prog.Info(cat.T("remote.fail_on_ignored"))
+		run.warn(render.RemoteWarning{Code: "fail_on_ignored"})
 	}
 
 	whoami, err := remote.Whoami(ctx, runner)
@@ -194,6 +251,39 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		prog.Fail(err)
 		return err
 	}
+	run.headOID = meta.LastOID()
+
+	// finish ends the run: it writes the --json document when the ending calls
+	// for one (ADR-0048 §2.1) and returns the run's error. A submitted run and a
+	// no_new_commits run always write; any other ending writes only once a
+	// provider call has returned usage, so the spend is never invisible. The
+	// exit code is unchanged: a failed document write only surfaces when the
+	// run itself succeeded.
+	finish := func(status string, runErr error) error {
+		if !global.json {
+			return runErr
+		}
+		if status != render.RemoteStatusSubmitted && status != render.RemoteStatusNoNewCommits && run.calls == 0 {
+			return runErr
+		}
+		docMeta := render.Meta{
+			Provider:    prov.Name(),
+			Model:       model,
+			Lang:        app.Lang.Code,
+			Usage:       run.usage,
+			Cost:        resolvePricing(app.Config, prov, model).Cost(run.usage),
+			CostUnknown: costIsUnknown(app.Config, prov, model),
+			Latency:     run.latency,
+			Timestamp:   time.Now().UTC(),
+		}
+		rep := run.buildRemoteReport(status, meta.BaseSlug(), meta.Number, ceiling)
+		werr := writeRemoteReport(cmd, sink, run.reportPayload(status, docMeta, rep))
+		reportWritten = werr == nil
+		if werr != nil && runErr == nil {
+			return werr
+		}
+		return runErr
+	}
 
 	loaded, err := rules.Load(app.RepoRoot)
 	if err != nil {
@@ -210,55 +300,63 @@ func runRemotePR(cmd *cobra.Command, prID string, f remotePRFlags, runner remote
 		switch {
 		case lerr != nil:
 			prog.Info(cat.T("remote.since_lookup_failed", lerr.Error()))
+			run.baseReason = fullReasonLookupFailed
 		case recorded == "":
 			prog.Info(cat.T("remote.since_no_marker"))
+			run.baseReason = fullReasonNoMarker
 		case recorded == meta.LastOID():
 			prog.Info(cat.T("remote.since_no_new_commits"))
-			return nil
+			run.setReview(render.RemoteModeNone, "", "")
+			return finish(render.RemoteStatusNoNewCommits, nil)
 		default:
 			prev = recorded
+			run.baseReason = fullReasonEmptyDiff
 		}
 	}
 
-	res, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, model, loaded, meta.LastOID(), meta.BaseSlug(), prev, prog)
+	res, oid, err := reviewPRDiff(ctx, runner, prID, f, app, prov, model, loaded, meta.LastOID(), meta.BaseSlug(), prev, prog, run)
 	if err != nil {
 		prog.Fail(err)
-		return err
+		return finish(statusFromError(err), err)
 	}
 	if res.noNewCommits {
 		prog.Info(cat.T("remote.since_no_new_commits"))
-		return nil
+		return finish(render.RemoteStatusNoNewCommits, nil)
 	}
+	run.findings, run.suppressed = res.findings, res.suppressed
 	// Unknown-scope marker warnings print once, here, not per attempt of the
 	// head-race retry loop. Progress has no warning channel (Info is the
 	// tree's only note kind), and a raw stderr write would corrupt the live
 	// redraw, so Info is the right sink.
 	for _, w := range res.suppressWarnings {
 		prog.Info(cat.T(suppressWarningKey(w), w.Path, w.Line, w.Token))
+		run.warn(render.RemoteWarning{Code: suppressWarningCode(w), Ref: w.Path + ":" + strconv.Itoa(w.Line)})
 	}
 
-	if err := submitPRReview(ctx, runner, prID, f, meta, oid, res, threshold, whoami, app, prog); err != nil {
+	if err := submitPRReview(ctx, runner, prID, f, meta, oid, res, threshold, whoami, app, prog, run); err != nil {
 		prog.Fail(err)
-		return err
+		return finish(render.RemoteStatusFailed, err)
 	}
 
 	// Standard review footer line ("✓ Done in … · N findings · tokens ·
 	// $cost"), printed below the now-finished tree (Close, not Clear, so the
-	// tree stays on screen). Honors --quiet.
+	// tree stays on screen). Honors --quiet. Tokens and cost come from the same
+	// accumulator as the document's meta, so a superseded race-retry attempt is
+	// counted and the two never disagree (ADR-0048 §9).
 	prog.Close()
 	if !global.quiet {
 		footerMeta := render.Meta{
 			Provider:    prov.Name(),
 			Model:       model,
-			Usage:       res.usage,
-			Cost:        resolvePricing(app.Config, prov, model).Cost(res.usage),
+			Usage:       run.usage,
+			Cost:        resolvePricing(app.Config, prov, model).Cost(run.usage),
 			CostUnknown: costIsUnknown(app.Config, prov, model),
 			Latency:     res.latency,
 		}
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), render.FooterLine(footerMeta, res.findings))
 	}
 	signalControlFooter(cmd, app, 0, res.suppressed)
-	return nil
+	return finish(render.RemoteStatusSubmitted, nil)
 }
 
 // runRemotePRLocal is the `remote pr <ID> --no-post` path: fetch the PR
@@ -291,6 +389,9 @@ func runRemotePRLocal(cmd *cobra.Command, prID string, f remotePRFlags, runner r
 	// never submits. Note it only when the user explicitly set it.
 	if cmd.Flags().Changed("request-changes-on") {
 		infof("%s", cat.T("remote.no_post_request_changes_ignored"))
+	}
+	if cmd.Flags().Changed("max-verdict") {
+		infof("%s", cat.T("remote.no_post_max_verdict_ignored"))
 	}
 	if f.sinceLastReview {
 		infof("%s", cat.T("remote.no_post_since_last_review_ignored"))
@@ -614,12 +715,13 @@ type prReviewResult struct {
 // race: if the PR head OID changed during the review it retries once,
 // then aborts (ADR-0016 §7). Returns the review result plus the OID it
 // was produced against (used to anchor inline comments).
-func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, lastOID, slug, prev string, prog *ui.Progress) (prReviewResult, string, error) {
+func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, lastOID, slug, prev string, prog *ui.Progress, run *prRun) (prReviewResult, string, error) {
 	for attempt := 0; ; attempt++ {
+		run.headOID = lastOID
 		if prev != "" && prev == lastOID {
 			return prReviewResult{noNewCommits: true}, lastOID, nil
 		}
-		res, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, model, loaded, lastOID, slug, prev, prog)
+		res, err := reviewOnePRDiff(ctx, runner, prID, f, app, prov, model, loaded, lastOID, slug, prev, prog, run)
 		if err != nil {
 			return prReviewResult{}, "", err
 		}
@@ -631,12 +733,13 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 			return res, lastOID, nil
 		}
 		if attempt >= 1 {
-			return prReviewResult{}, "", errors.New(app.Catalog.T("remote.too_volatile"))
+			return prReviewResult{}, "", &prStatusError{status: render.RemoteStatusTooVolatile, err: errors.New(app.Catalog.T("remote.too_volatile"))}
 		}
 		// Head moved: neutralize the just-finished review stage (it was
 		// valid work, just superseded) and note the retry before looping.
 		prog.Soft()
 		prog.Info(app.Catalog.T("remote.race_retry"))
+		run.warn(render.RemoteWarning{Code: "race_retry"})
 		lastOID = newOID
 	}
 }
@@ -644,7 +747,10 @@ func reviewPRDiff(ctx context.Context, runner remote.Runner, prID string, f remo
 // reviewOnePRDiff runs the structured review pipeline once against the
 // PR's current diff. Bot-mode: the secret scanner warns but never aborts
 // (ADR-0016 §3); the local-config guard and cost preflight are skipped.
-func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, headOID, slug, prev string, prog *ui.Progress) (prReviewResult, error) {
+func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, app *appContext, prov provider.Provider, model string, loaded rules.Loaded, headOID, slug, prev string, prog *ui.Progress, run *prRun) (prReviewResult, error) {
+	// Until the incremental range is evaluated, the attempt reads as a full
+	// review for the run's base reason (ADR-0048 §2 review.full_reason).
+	run.setReview(render.RemoteModeFull, run.baseReason, "")
 	rawDiff, err := remote.FetchDiff(ctx, runner, prID, f.repo)
 	if err != nil {
 		return prReviewResult{}, err
@@ -674,11 +780,15 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	var deltaPaths map[string]bool
 	var deltaAnchors map[string]diff.FileAnchors
 	if prev != "" {
-		delta, ok, derr := incrementalDelta(ctx, runner, slug, headOID, prev, app, prog)
+		delta, ok, why, derr := incrementalDelta(ctx, runner, slug, headOID, prev, app, prog)
 		if derr != nil {
 			return prReviewResult{}, derr
 		}
+		if !ok {
+			run.setReview(render.RemoteModeFull, why, "")
+		}
 		if ok {
+			run.setReview(render.RemoteModeIncremental, "", prev)
 			if delta.Empty() {
 				// Only filtered-out files changed since the last review.
 				return prReviewResult{findings: []render.Finding{}, anchors: anchors, incremental: true, deltaPaths: map[string]bool{}}, nil
@@ -709,6 +819,7 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 	if app.Config.Guard.SecretScan && !global.allowSecrets {
 		if hits := guard.ScanForSecrets(diffText); len(hits) > 0 {
 			prog.Info(app.Catalog.T("remote.secret_warn", len(hits)))
+			run.setSecretHits(len(hits))
 		}
 	}
 
@@ -725,17 +836,25 @@ func reviewOnePRDiff(ctx context.Context, runner remote.Runner, prID string, f r
 		Lang:         app.Lang.Code,
 	}
 	start := time.Now()
+	run.attempts++
 	outcome, err := tryStructuredReview(ctx, prov, req, func() {})
 	if err != nil {
 		return prReviewResult{}, wrapTimeoutErr(ctx, err, app.Catalog, app.Timeout)
 	}
 	latency := time.Since(start)
+	// The call returned usage: it is billed whatever happens next (a degraded
+	// answer, a superseded head), so it is counted before any ending below.
+	run.addCall(outcome.Usage, latency, outcome.Retries)
+	degraded := func() error {
+		run.degradedContent, run.degradeReason = outcome.Content, outcome.DegradeReason
+		return &prStatusError{status: render.RemoteStatusDegraded, err: errors.New(app.Catalog.T("remote.degraded"))}
+	}
 	if outcome.Format != cache.FormatJSON {
-		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
+		return prReviewResult{}, degraded()
 	}
 	findings, err := render.ParseFindings(outcome.Content)
 	if err != nil {
-		return prReviewResult{}, errors.New(app.Catalog.T("remote.degraded"))
+		return prReviewResult{}, degraded()
 	}
 	findings = stampIdentity(parsed, findings)
 
@@ -775,47 +894,56 @@ func suppressWarningKey(w suppress.Warning) string {
 	return "suppress.unknown_scope"
 }
 
+// suppressWarningCode is the machine-readable twin of suppressWarningKey.
+func suppressWarningCode(w suppress.Warning) string {
+	if w.UnknownRule {
+		return "suppress_unknown_rule"
+	}
+	return "suppress_unknown_scope"
+}
+
 // incrementalDelta returns the parsed, filtered prev...head diff when the
 // range can be reviewed on its own: prev must be an ancestor of head
 // (status "ahead", so no force-push), no new commit may be a merge commit
 // (a merge drags other people's code into the delta), the commit list must
 // be complete, and the diff itself must be retrievable. Otherwise ok is false
-// and one info line explains the fallback to a full review. An error is
+// and one info line explains the fallback to a full review; why then carries
+// the machine-readable full_reason (ADR-0048 §2). An error is
 // returned only for an invalid --file/--dir glob. Nothing here writes to
 // local git (ADR-0019): everything comes from the GitHub API.
-func incrementalDelta(ctx context.Context, runner remote.Runner, slug, headOID, prev string, app *appContext, prog *ui.Progress) (diff.Diff, bool, error) {
+func incrementalDelta(ctx context.Context, runner remote.Runner, slug, headOID, prev string, app *appContext, prog *ui.Progress) (delta diff.Diff, ok bool, why string, err error) {
 	cat := app.Catalog
-	cmp, err := remote.FetchCompare(ctx, runner, slug, prev, headOID)
+	cmp, cerr := remote.FetchCompare(ctx, runner, slug, prev, headOID)
 	switch {
-	case err != nil:
-		prog.Info(cat.T("remote.since_compare_failed", err.Error()))
-		return diff.Diff{}, false, nil
+	case cerr != nil:
+		prog.Info(cat.T("remote.since_compare_failed", cerr.Error()))
+		return diff.Diff{}, false, fullReasonCompareFailed, nil
 	case !cmp.Ahead():
 		prog.Info(cat.T("remote.since_not_ahead", cmp.Status))
-		return diff.Diff{}, false, nil
+		return diff.Diff{}, false, fullReasonNotAhead, nil
 	case !cmp.Complete():
 		prog.Info(cat.T("remote.since_compare_incomplete"))
-		return diff.Diff{}, false, nil
+		return diff.Diff{}, false, fullReasonIncomplete, nil
 	case cmp.HasMerge():
 		prog.Info(cat.T("remote.since_merge_commit"))
-		return diff.Diff{}, false, nil
+		return diff.Diff{}, false, fullReasonMergeCommit, nil
 	}
-	raw, err := remote.FetchCompareDiff(ctx, runner, slug, prev, headOID)
-	if err != nil {
-		prog.Info(cat.T("remote.since_diff_failed", err.Error()))
-		return diff.Diff{}, false, nil
+	raw, derr := remote.FetchCompareDiff(ctx, runner, slug, prev, headOID)
+	if derr != nil {
+		prog.Info(cat.T("remote.since_diff_failed", derr.Error()))
+		return diff.Diff{}, false, fullReasonDiffFailed, nil
 	}
-	delta, err := diff.Parse(git.Diff{Content: raw, Origin: git.OriginDiff})
-	if err != nil {
-		prog.Info(cat.T("remote.since_diff_failed", err.Error()))
-		return diff.Diff{}, false, nil
+	delta, perr := diff.Parse(git.Diff{Content: raw, Origin: git.OriginDiff})
+	if perr != nil {
+		prog.Info(cat.T("remote.since_diff_failed", perr.Error()))
+		return diff.Diff{}, false, fullReasonDiffFailed, nil
 	}
 	delta = diff.Filter(delta, buildMatcher(app.RepoRoot))
-	delta, err = keepAndDropPaths(delta)
-	if err != nil {
-		return diff.Diff{}, false, errors.New(cat.T("filter.glob.invalid", err.Error()))
+	delta, gerr := keepAndDropPaths(delta)
+	if gerr != nil {
+		return diff.Diff{}, false, "", errors.New(cat.T("filter.glob.invalid", gerr.Error()))
 	}
-	return delta, true, nil
+	return delta, true, "", nil
 }
 
 // submitPRReview syncs the inline comments with the PR's existing review
@@ -825,8 +953,11 @@ func incrementalDelta(ctx context.Context, runner remote.Runner, slug, headOID, 
 // appended to the review summary so the signal survives (ADR-0016 §9).
 // Per-comment failures never abort the verdict submission, and a failed
 // thread read degrades to plain posting (no sync).
-func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, review prReviewResult, threshold render.Severity, whoami string, app *appContext, prog *ui.Progress) error {
+func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f remotePRFlags, meta remote.PRMeta, oid string, review prReviewResult, threshold render.Severity, whoami string, app *appContext, prog *ui.Progress, run *prRun) error {
 	cat := app.Catalog
+	if run == nil {
+		run = &prRun{}
+	}
 	findings, anchors := review.findings, review.anchors
 	verdict := computeVerdict(findings, threshold)
 
@@ -838,12 +969,15 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		// A narrowed run that kept no file reviewed nothing: it must not
 		// post, update, resolve or reply (ADR-0046 §Update 2026-10-18).
 		prog.Info(cat.T("remote.sync_skipped_empty_scope"))
+		run.sync = &render.RemoteSync{Mode: render.RemoteSyncSkipped}
+		run.warn(render.RemoteWarning{Code: "sync_skipped_empty_scope"})
 	} else {
 		groups := buildSyncGroups(findings, anchors, review.deltaAnchors, whoami)
 		var threads []remote.Thread
 		threads, readErr = remote.FetchThreads(ctx, runner, slug, meta.Number)
 		if readErr != nil {
 			prog.Info(cat.T("remote.sync_read_failed", readErr.Error()))
+			run.warn(render.RemoteWarning{Code: "thread_read_failed", Detail: readErr.Error()})
 			threads = nil
 		}
 		if len(groups) > 0 || len(threads) > 0 {
@@ -873,9 +1007,11 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		// would terminate the active stage on the first one.
 		for _, w := range res.Warnings {
 			prog.Info(syncWarning(cat, w))
+			run.recordSyncWarning(w)
 		}
 		if res.StaleOpen > 0 {
 			prog.Info(cat.T("remote.sync_stale_open", res.StaleOpen, staleReason(cat, res.StaleReason)))
+			run.warn(render.RemoteWarning{Code: "duplicates_left_open", Count: res.StaleOpen, Detail: res.StaleReason})
 		}
 		if readErr != nil {
 			if res.Posted+res.PostFailed > 0 {
@@ -886,6 +1022,16 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 		}
 		if len(res.Unanchored) > 0 {
 			prog.Info(cat.T("remote.unanchored_appended", len(res.Unanchored)))
+			run.warn(render.RemoteWarning{Code: "findings_unanchored", Count: len(res.Unanchored)})
+		}
+		syncMode := render.RemoteSyncSynced
+		if readErr != nil {
+			syncMode = render.RemoteSyncPostOnly
+		}
+		run.sync = &render.RemoteSync{
+			Mode: syncMode, Posted: res.Posted, Updated: res.Updated, Unchanged: res.Unchanged,
+			Resolved: res.Resolved, Replied: res.Replied, Held: res.Held,
+			PostFailed: res.PostFailed, Unanchored: len(res.Unanchored),
 		}
 	}
 
@@ -895,6 +1041,18 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 	if review.incremental && verdict == remote.VerdictApprove && (res.OpenOurs > 0 || readErr != nil) {
 		verdict = remote.VerdictComment
 	}
+	// ADR-0048 §4/§5: the ceiling is the last step, after the incremental
+	// downgrade. Both values are recorded so a consumer can see a cap acted.
+	run.verdictUncap = verdict
+	// runRemotePR validates the flag before any gh call. A value that still
+	// fails to parse here must not lift the cap, so it fails closed: the
+	// strictest ceiling applies.
+	ceiling, cerr := parseMaxVerdict(f.maxVerdict)
+	if cerr != nil {
+		ceiling = maxVerdictComment
+	}
+	verdict = applyVerdictCeiling(verdict, ceiling)
+	run.verdict, run.verdictSet = verdict, true
 
 	body := remote.BuildReviewBody(verdict, whoami)
 	if section := remote.BuildUnanchoredSection(res.Unanchored); section != "" {
@@ -915,6 +1073,7 @@ func submitPRReview(ctx context.Context, runner remote.Runner, prID string, f re
 	if err := remote.SubmitReview(ctx, runner, prID, f.repo, verdict, body); err != nil {
 		return err
 	}
+	run.markerWritten = markerOID != ""
 	prog.Finish()
 	switch verdict {
 	case remote.VerdictApprove:

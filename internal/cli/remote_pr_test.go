@@ -468,7 +468,7 @@ func TestSubmitPRReviewAnchorsAndFallsBack(t *testing.T) {
 	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
 	prog := ui.NewProgress(io.Discard, ui.ColorNever, true) // silent
 	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
-		prReviewResult{findings: findings, anchors: anchors}, render.SeverityCritical, "tester", app, prog); err != nil {
+		prReviewResult{findings: findings, anchors: anchors}, render.SeverityCritical, "tester", app, prog, nil); err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}
 
@@ -537,7 +537,7 @@ func submitForTest(t *testing.T, r *fakeGH, findings []render.Finding) {
 	meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
 	prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
 	if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
-		prReviewResult{findings: findings, anchors: parsed.Anchors()}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog); err != nil {
+		prReviewResult{findings: findings, anchors: parsed.Anchors()}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog, nil); err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}
 }
@@ -632,7 +632,7 @@ func TestRemotePRSyncNarrowedEmptyScopeSkipsSync(t *testing.T) {
 	prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
 	f := render.Finding{Severity: render.SeverityInfo, File: "mock.go", Line: 1, Title: "t", Description: "d", Suggestion: "s", Fingerprint: fpOfTest("a")}
 	err = submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "oid",
-		prReviewResult{findings: []render.Finding{f}, anchors: map[string]diff.FileAnchors{}}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog)
+		prReviewResult{findings: []render.Finding{f}, anchors: map[string]diff.FileAnchors{}}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog, nil)
 	if err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}

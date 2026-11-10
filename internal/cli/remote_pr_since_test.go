@@ -456,7 +456,7 @@ func TestUnnarrowedRunStampsMarkerNarrowedDoesNot(t *testing.T) {
 		meta := remote.PRMeta{Number: 42, URL: "https://github.com/o/r/pull/42"}
 		prog := ui.NewProgress(io.Discard, ui.ColorNever, true)
 		if err := submitPRReview(context.Background(), r, "42", remotePRFlags{}, meta, "abc1234",
-			prReviewResult{findings: []render.Finding{}, anchors: anchors}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog); err != nil {
+			prReviewResult{findings: []render.Finding{}, anchors: anchors}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog, nil); err != nil {
 			t.Fatalf("submitPRReview: %v", err)
 		}
 		return r
@@ -549,7 +549,7 @@ func TestSubmitIncrementalDeltaLeftFindingLandsInReviewBody(t *testing.T) {
 		prReviewResult{
 			findings: []render.Finding{f}, anchors: pr,
 			incremental: true, deltaPaths: map[string]bool{"f.go": true}, deltaAnchors: delta,
-		}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog)
+		}, render.SeverityCritical, "tester", &appContext{Catalog: cat}, prog, nil)
 	if err != nil {
 		t.Fatalf("submitPRReview: %v", err)
 	}

@@ -103,11 +103,7 @@ func insecureRemoteBaseURL(raw string) (host string, insecure bool) {
 // provider's configured base_url, or "" when there is nothing to warn about
 // (not a user-declared-endpoint provider, https, or loopback).
 func insecureHTTPNote(app *appContext, name string) string {
-	m, ok := provider.MetadataFor(name)
-	if !ok || !m.PricingUserDeclared {
-		return ""
-	}
-	host, bad := insecureRemoteBaseURL(app.Config.Providers[name].BaseURL)
+	host, bad := insecureHTTPHost(app, name)
 	if !bad {
 		return ""
 	}
