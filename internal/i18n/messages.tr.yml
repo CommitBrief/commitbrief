@@ -172,6 +172,10 @@ providers.test.failed: "%s testi başarısız: %s"
 providers.test.unknown: "bilinmeyen sağlayıcı %q; bilinenler: %v"
 
 config.set.success: "%s ayarlandı (%s dosyasına yazıldı)"
+config.set.stdin_tty: "config set: \"-\" değeri stdin'den okunur, ancak stdin bir terminal. Değeri pipe ile verin, etkileşimli giriş için 'commitbrief setup' kullanın ya da \"-\" karakterini olduğu gibi saklamak için --literal ekleyin."
+config.set.stdin_read: "config set: değer stdin'den okunamadı."
+config.set.stdin_empty: "config set: stdin'den okunan değer boş. Bir değeri temizlemek için bunun yerine boş bir argüman verin."
+config.set.stdin_too_large: "config set: stdin'den okunan değer %d bayt sınırını aşıyor."
 config.unknown_key_ignored: "⚠  Bilinmeyen yapılandırma anahtar(lar)ı yok sayılıyor: %s. Bu ayar(lar) etkisiz — düzeltin ya da kaldırın."
 
 doctor.heading: "Doctor — %d kontrol çalıştırılıyor"

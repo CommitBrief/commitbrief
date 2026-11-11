@@ -174,6 +174,10 @@ providers.test.failed: "%s test failed: %s"
 providers.test.unknown: "unknown provider %q; known: %v"
 
 config.set.success: "Set %s (written to %s)"
+config.set.stdin_tty: "config set: a value of \"-\" reads stdin, but stdin is a terminal. Pipe the value in, use 'commitbrief setup' for interactive entry, or add --literal to store \"-\" itself."
+config.set.stdin_read: "config set: could not read the value from stdin."
+config.set.stdin_empty: "config set: the value read from stdin is empty. To clear a value, pass an empty argument instead."
+config.set.stdin_too_large: "config set: the value read from stdin exceeds the %d byte limit."
 # --ignore-unknown-config (Wave 0). The strict loader rejects a key the
 # schema has no field for; under the flag the run proceeds and this warning
 # names every key that was ignored, with the file it came from. The key list

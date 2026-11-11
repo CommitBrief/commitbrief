@@ -28,8 +28,18 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
   instead. Inline comments, the reviewed marker and `--request-changes-on` are unaffected;
   `request-changes` is rejected as a value because it is not a ceiling. The default,
   `approve`, is today's behaviour. An `approve` submitted by an earlier run stays on GitHub.
+- **`config set <key> -` reads the value from stdin.** A secret such as an API key no longer
+  has to appear in the process arguments, where `ps` shows it:
+  `printf '%s' "$KEY" | commitbrief config set providers.anthropic.api_key -`. One trailing
+  newline is removed, the value is capped at 64 KiB, an empty stdin is rejected, and a
+  terminal on stdin is refused with a pointer to `commitbrief setup`. A validation error
+  never echoes a value that came from stdin. The new `--literal` flag stores a value of `-`
+  as-is; before this, `config set <key> -` stored a literal `-`. Every other `config set`
+  form is unchanged.
 
 ### Changed
+- **`config set <key> -` now reads stdin instead of storing a literal `-`.** If a script relied
+  on the old behaviour, add `--literal`.
 - **`remote pr <ID> --json` no longer stops at a usage error.** It used to fail before any
   `gh` call; it now posts comments and submits a verdict and also writes the report. Use
   `--no-post` for a local preview.

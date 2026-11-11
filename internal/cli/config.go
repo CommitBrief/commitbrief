@@ -5,8 +5,10 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,7 +19,17 @@ import (
 	"github.com/CommitBrief/commitbrief/internal/lang"
 	"github.com/CommitBrief/commitbrief/internal/provider"
 	"github.com/CommitBrief/commitbrief/internal/setup"
+	"github.com/CommitBrief/commitbrief/internal/ui"
 )
+
+// configStdinValueMax caps how much `config set <key> -` reads from stdin.
+// A secret or setting never legitimately approaches this; the cap only keeps
+// a mistaken `cat bigfile | commitbrief config set ... -` from being slurped.
+const configStdinValueMax = 64 << 10
+
+// configStdinIsTTY reports whether the command's stdin is an interactive
+// terminal. It is a variable so tests can force the TTY branch without a pty.
+var configStdinIsTTY = ui.IsStdinTTY
 
 // newConfigCmd exposes the typed configuration surface so users don't have
 // to hand-edit YAML for one-line changes. `show` dumps the merged config
@@ -83,7 +95,7 @@ Examples:
 }
 
 func newConfigSetCmd() *cobra.Command {
-	var local bool
+	var local, literal bool
 	cmd := &cobra.Command{
 		Use:   "set <key> <value>",
 		Short: "Write a single configuration value by dotted path",
@@ -96,7 +108,16 @@ Examples:
   commitbrief config set cache.ttl_days 14
 
 Booleans accept true/false, yes/no, 1/0, on/off.
-By default writes to ~/.commitbrief/config.yml; --local writes to the repo.`,
+By default writes to ~/.commitbrief/config.yml; --local writes to the repo.
+
+Pass - as the value to read it from stdin, so a secret never shows up in the
+process arguments:
+
+  printf '%s' "$ANTHROPIC_API_KEY" | commitbrief config set providers.anthropic.api_key -
+
+A single trailing newline is removed; the value is capped at 64 KiB; an empty
+stdin is rejected; stdin must not be a terminal (use 'commitbrief setup' for
+interactive entry). To store a literal "-", add --literal.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app, err := resolveContext(local)
@@ -107,7 +128,18 @@ By default writes to ~/.commitbrief/config.yml; --local writes to the repo.`,
 			if err != nil {
 				return err
 			}
-			if err := writeConfigField(path, args[0], args[1]); err != nil {
+			value := args[1]
+			fromStdin := value == "-" && !literal
+			if fromStdin {
+				value, err = readConfigValueFromStdin(cmd, app.Catalog.T)
+				if err != nil {
+					return err
+				}
+			}
+			if err := writeConfigField(path, args[0], value); err != nil {
+				if fromStdin {
+					return redactConfigValue(err)
+				}
 				return err
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), app.Catalog.T("config.set.success", args[0], path))
@@ -115,7 +147,52 @@ By default writes to ~/.commitbrief/config.yml; --local writes to the repo.`,
 		},
 	}
 	cmd.Flags().BoolVar(&local, "local", false, "write to repo .commitbrief/config.yml instead of user-level")
+	cmd.Flags().BoolVar(&literal, "literal", false, `store a value of "-" literally instead of reading stdin`)
 	return cmd
+}
+
+// readConfigValueFromStdin reads the value for `config set <key> -` from the
+// command's stdin. Errors never include what was read.
+func readConfigValueFromStdin(cmd *cobra.Command, t func(string, ...any) string) (string, error) {
+	in := cmd.InOrStdin()
+	if configStdinIsTTY(in) {
+		return "", errors.New(t("config.set.stdin_tty"))
+	}
+	data, err := io.ReadAll(io.LimitReader(in, configStdinValueMax+1))
+	if err != nil {
+		return "", errors.New(t("config.set.stdin_read"))
+	}
+	if len(data) > configStdinValueMax {
+		return "", errors.New(t("config.set.stdin_too_large", configStdinValueMax))
+	}
+	value := string(data)
+	if strings.HasSuffix(value, "\r\n") {
+		value = strings.TrimSuffix(value, "\r\n")
+	} else {
+		value = strings.TrimSuffix(value, "\n")
+	}
+	if value == "" {
+		return "", errors.New(t("config.set.stdin_empty"))
+	}
+	return value, nil
+}
+
+// quotedLiteralRE matches a Go double-quoted string literal, escapes included.
+var quotedLiteralRE = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
+
+// redactConfigValue masks every quoted literal in err's message. Validation
+// messages echo the offending value only through %q; for a value that arrived
+// over stdin (typically a secret) that echo must not reach the terminal or a
+// log. Masking by shape rather than by searching for the value keeps short
+// values (a single letter that also occurs in the fixed text) from mangling
+// the message or betraying their position.
+func redactConfigValue(err error) error {
+	msg := err.Error()
+	redacted := quotedLiteralRE.ReplaceAllString(msg, `"<redacted>"`)
+	if redacted == msg {
+		return err
+	}
+	return errors.New(redacted)
 }
 
 // configFieldGet reads a value from cfg using dotted-path notation. The

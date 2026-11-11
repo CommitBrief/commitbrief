@@ -981,6 +981,15 @@
     },
     {
       "command": "commitbrief config set",
+      "name": "literal",
+      "type": "bool",
+      "default": "false",
+      "no_opt_def_val": "true",
+      "usage": "store a value of \"-\" literally instead of reading stdin",
+      "scope": "command"
+    },
+    {
+      "command": "commitbrief config set",
       "name": "local",
       "type": "bool",
       "default": "false",
