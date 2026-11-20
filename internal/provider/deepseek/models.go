@@ -5,13 +5,16 @@ package deepseek
 const (
 	Name = "deepseek"
 
-	ModelChat     = "deepseek-chat"
-	ModelReasoner = "deepseek-reasoner"
+	// deepseek-chat and deepseek-reasoner were retired on 2026-07-24 and
+	// are no longer reachable. deepseek-flash (DeepSeek-V4.1-Flash) and
+	// deepseek-v4-pro replace them; both think by default.
+	ModelFlash = "deepseek-flash"
+	ModelV4Pro = "deepseek-v4-pro"
 
-	DefaultModel = ModelChat
+	DefaultModel = ModelFlash
 )
 
-var supportedModels = []string{ModelChat, ModelReasoner}
+var supportedModels = []string{ModelFlash, ModelV4Pro}
 
 func Models() []string {
 	out := make([]string, len(supportedModels))

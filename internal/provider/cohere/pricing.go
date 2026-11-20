@@ -5,7 +5,10 @@ package cohere
 import "github.com/CommitBrief/commitbrief/internal/provider"
 
 // Cohere per-1M-token pricing snapshot (USD). Source:
-// https://cohere.com/pricing — refresh on price change. No automatic
+// https://cohere.com/pricing — refresh on price change. As of 2026-11-20 the
+// page publishes per-token rates only in its legacy section (Command R+
+// 08-2024 $2.50/$10); the Command R 08-2024 and Command A rates below are
+// the last published list prices. No automatic
 // prompt-cache discount is surfaced through the compatibility endpoint,
 // so CachedInputPer1M is left at 0.
 var pricingTable = map[string]provider.Pricing{

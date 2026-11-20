@@ -5,14 +5,17 @@ package openai
 const defaultContextWindow = 128_000
 
 var contextWindows = map[string]int{
-	ModelGPT4o:     128_000,
-	ModelGPT4oMini: 128_000,
-	ModelGPT55:     1_050_000,
-	ModelGPT54Mini: 400_000,
-	ModelGPT55Pro:  1_050_000,
-	ModelGPT6Astra: 1_050_000,
-	ModelGPT6Sol:   1_050_000,
-	ModelGPT6Luna:  1_050_000,
+	ModelGPT4o:      128_000,
+	ModelGPT4oMini:  128_000,
+	ModelGPT55:      1_050_000,
+	ModelGPT54Mini:  400_000,
+	ModelGPT55Pro:   1_050_000,
+	ModelGPT6Astra:  1_050_000,
+	ModelGPT6Sol:    1_050_000,
+	ModelGPT6Luna:   1_050_000,
+	ModelGPT62Astra: 1_050_000,
+	ModelGPT62Sol:   1_050_000,
+	ModelGPT61Terra: 1_050_000,
 }
 
 func contextWindowFor(model string) int {

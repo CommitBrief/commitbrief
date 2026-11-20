@@ -14,6 +14,9 @@ var contextWindows = map[string]int{
 	ModelFlashLite31: 1_000_000,
 	ModelFlash38:     1_000_000,
 	ModelFlashLite35: 1_000_000,
+	ModelCarbon4:     1_000_000,
+	ModelNeon4:       1_000_000,
+	ModelHydrogen4:   1_000_000,
 }
 
 func contextWindowFor(model string) int {

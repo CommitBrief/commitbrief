@@ -61,6 +61,33 @@
             "output_per_1m": 50,
             "cached_input_per_1m": 0.25
           }
+        },
+        {
+          "id": "claude-fable-5-2",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 8,
+            "output_per_1m": 40,
+            "cached_input_per_1m": 0.2
+          }
+        },
+        {
+          "id": "claude-sonnet-5-5",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 2,
+            "output_per_1m": 10,
+            "cached_input_per_1m": 0.1
+          }
+        },
+        {
+          "id": "claude-haiku-5-5",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 0.1,
+            "output_per_1m": 0.5,
+            "cached_input_per_1m": 0.01
+          }
         }
       ]
     },
@@ -79,12 +106,12 @@
     {
       "name": "cohere",
       "kind": "api",
-      "default_model": "command-r-plus",
+      "default_model": "command-r-plus-08-2024",
       "api_key_env": "COHERE_API_KEY",
       "default_base_url": "https://api.cohere.ai/compatibility/v1",
       "models": [
         {
-          "id": "command-r-plus",
+          "id": "command-r-plus-08-2024",
           "default": true,
           "context_window": 128000,
           "pricing": {
@@ -93,7 +120,7 @@
           }
         },
         {
-          "id": "command-r",
+          "id": "command-r-08-2024",
           "context_window": 128000,
           "pricing": {
             "input_per_1m": 0.15,
@@ -113,27 +140,27 @@
     {
       "name": "deepseek",
       "kind": "api",
-      "default_model": "deepseek-chat",
+      "default_model": "deepseek-flash",
       "api_key_env": "DEEPSEEK_API_KEY",
       "default_base_url": "https://api.deepseek.com",
       "models": [
         {
-          "id": "deepseek-chat",
+          "id": "deepseek-flash",
           "default": true,
-          "context_window": 64000,
+          "context_window": 1000000,
           "pricing": {
-            "input_per_1m": 0.27,
-            "output_per_1m": 1.1,
-            "cached_input_per_1m": 0.07
+            "input_per_1m": 0.15,
+            "output_per_1m": 0.6,
+            "cached_input_per_1m": 0.003
           }
         },
         {
-          "id": "deepseek-reasoner",
-          "context_window": 64000,
+          "id": "deepseek-v4-pro",
+          "context_window": 1000000,
           "pricing": {
-            "input_per_1m": 0.55,
-            "output_per_1m": 2.19,
-            "cached_input_per_1m": 0.14
+            "input_per_1m": 0.66,
+            "output_per_1m": 1.98,
+            "cached_input_per_1m": 0.022
           }
         }
       ]
@@ -189,6 +216,33 @@
             "output_per_1m": 2.5,
             "cached_input_per_1m": 0.03
           }
+        },
+        {
+          "id": "gemini-4-carbon",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 4,
+            "output_per_1m": 20,
+            "cached_input_per_1m": 0.2
+          }
+        },
+        {
+          "id": "gemini-4-neon",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 3,
+            "output_per_1m": 15,
+            "cached_input_per_1m": 0.15
+          }
+        },
+        {
+          "id": "gemini-4-hydrogen",
+          "context_window": 1000000,
+          "pricing": {
+            "input_per_1m": 1.5,
+            "output_per_1m": 7.5,
+            "cached_input_per_1m": 0.075
+          }
         }
       ]
     },
@@ -208,23 +262,23 @@
         {
           "id": "mistral-large-latest",
           "default": true,
-          "context_window": 128000,
+          "context_window": 1000000,
           "pricing": {
-            "input_per_1m": 2,
-            "output_per_1m": 6
+            "input_per_1m": 0.7,
+            "output_per_1m": 2.1
           }
         },
         {
           "id": "mistral-small-latest",
-          "context_window": 32000,
+          "context_window": 256000,
           "pricing": {
-            "input_per_1m": 0.2,
+            "input_per_1m": 0.15,
             "output_per_1m": 0.6
           }
         },
         {
           "id": "codestral-latest",
-          "context_window": 256000,
+          "context_window": 128000,
           "pricing": {
             "input_per_1m": 0.3,
             "output_per_1m": 0.9
@@ -357,6 +411,33 @@
             "input_per_1m": 0.15,
             "output_per_1m": 0.6,
             "cached_input_per_1m": 0.075
+          }
+        },
+        {
+          "id": "gpt-6.2-astra",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 8,
+            "output_per_1m": 40,
+            "cached_input_per_1m": 0.4
+          }
+        },
+        {
+          "id": "gpt-6.2-sol",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 2,
+            "output_per_1m": 10,
+            "cached_input_per_1m": 0.1
+          }
+        },
+        {
+          "id": "gpt-6.1-terra",
+          "context_window": 1050000,
+          "pricing": {
+            "input_per_1m": 1,
+            "output_per_1m": 5,
+            "cached_input_per_1m": 0.05
           }
         }
       ]

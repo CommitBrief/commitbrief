@@ -20,10 +20,13 @@ import (
 
 func TestModelsList(t *testing.T) {
 	got := Models()
-	if len(got) != 6 {
-		t.Errorf("Models() length = %d, want 6", len(got))
+	if len(got) != 9 {
+		t.Errorf("Models() length = %d, want 9", len(got))
 	}
 	want := map[string]bool{
+		ModelFable52:  true,
+		ModelSonnet55: true,
+		ModelHaiku55:  true,
 		ModelOpus55:   true,
 		ModelSonnet5:  true,
 		ModelFable51:  true,
@@ -121,6 +124,9 @@ func TestPricingTableCoversAllModels(t *testing.T) {
 // pricingTable now has to change these expected values too.
 func TestPricingTableExactValues(t *testing.T) {
 	want := map[string]provider.Pricing{
+		ModelFable52:  {InputPer1M: 8.00, OutputPer1M: 40.00, CachedInputPer1M: 0.20},
+		ModelSonnet55: {InputPer1M: 2.00, OutputPer1M: 10.00, CachedInputPer1M: 0.10},
+		ModelHaiku55:  {InputPer1M: 0.10, OutputPer1M: 0.50, CachedInputPer1M: 0.01},
 		ModelOpus55:   {InputPer1M: 4.00, OutputPer1M: 20.00, CachedInputPer1M: 0.20},
 		ModelSonnet5:  {InputPer1M: 2.00, OutputPer1M: 10.00, CachedInputPer1M: 0.20},
 		ModelFable51:  {InputPer1M: 10.00, OutputPer1M: 50.00, CachedInputPer1M: 0.25},
@@ -453,8 +459,8 @@ func TestSetTimeoutDrivesTheRequestOption(t *testing.T) {
 var _ provider.TimeoutSetter = (*Client)(nil)
 
 // TestBuildParamsToolChoiceByModel locks the model-specific tool_choice
-// split introduced for Opus 5.5 and Fable 5.1 (see noForcedToolChoiceModels
-// in models.go): those two never get a forced tool_choice, every other
+// split introduced for Opus 5.5 and Fable 5.1 and extended to Fable 5.2 and
+// Sonnet 5.5 (see noForcedToolChoiceModels in models.go): those never get a forced tool_choice, every other
 // Anthropic model still does.
 func TestBuildParamsToolChoiceByModel(t *testing.T) {
 	p, err := New(config.ProviderConfig{APIKey: "sk-test"})
@@ -463,8 +469,8 @@ func TestBuildParamsToolChoiceByModel(t *testing.T) {
 	}
 	c := p.(*Client)
 
-	forced := []string{ModelOpus48, ModelSonnet46, ModelHaiku45, ModelSonnet5}
-	auto := []string{ModelOpus55, ModelFable51}
+	forced := []string{ModelOpus48, ModelSonnet46, ModelHaiku45, ModelSonnet5, ModelHaiku55}
+	auto := []string{ModelOpus55, ModelFable51, ModelFable52, ModelSonnet55}
 
 	for _, model := range forced {
 		t.Run(model+"/forced", func(t *testing.T) {
@@ -525,7 +531,7 @@ func TestBuildParamsFreeFormSkipsToolChoice(t *testing.T) {
 	}
 	c := p.(*Client)
 
-	for _, model := range []string{ModelOpus48, ModelOpus55, ModelFable51} {
+	for _, model := range []string{ModelOpus48, ModelOpus55, ModelFable51, ModelFable52} {
 		params := c.buildParams(provider.Request{Model: model, UserPrompt: "x", FreeForm: true})
 		if len(params.Tools) != 0 {
 			t.Errorf("%s: FreeForm request should not set Tools", model)
@@ -545,13 +551,13 @@ func TestBuildParamsFreeFormSkipsToolChoice(t *testing.T) {
 }
 
 // TestDefaultMaxTokensForAdaptiveThinkingModels locks the raised default
-// max_tokens ceiling for the three models whose adaptive thinking shares the
+// max_tokens ceiling for the models whose adaptive thinking shares the
 // max_tokens budget with the visible response (see
 // adaptiveThinkingDefaultMaxTokensModels in models.go). Sonnet 5 has
 // adaptive thinking on by default just like Opus 5.5 and Fable 5.1, even
 // though — unlike them — it still accepts a forced tool_choice.
 func TestDefaultMaxTokensForAdaptiveThinkingModels(t *testing.T) {
-	for _, model := range []string{ModelOpus55, ModelFable51, ModelSonnet5} {
+	for _, model := range []string{ModelOpus55, ModelFable51, ModelSonnet5, ModelFable52, ModelSonnet55, ModelHaiku55} {
 		if got := defaultMaxTokensFor(model); got != defaultAdaptiveThinkingMaxTokens {
 			t.Errorf("defaultMaxTokensFor(%s) = %d, want %d", model, got, defaultAdaptiveThinkingMaxTokens)
 		}
@@ -568,7 +574,7 @@ func TestDefaultMaxTokensForAdaptiveThinkingModels(t *testing.T) {
 
 // TestBuildParamsClampsMaxTokensForNonStreaming locks the fix for the
 // repair-retry path (internal/cli/review.go repairCeiling) requesting up to
-// 2x a truncated response's own output tokens. On the three adaptive-thinking
+// 2x a truncated response's own output tokens. On the adaptive-thinking
 // models that defaults to 16000, doubling to 32000 exceeds
 // anthropic-sdk-go's local non-streaming pre-check (CalculateNonStreamingTimeout),
 // which rejects the call before any network I/O when no per-request timeout
@@ -583,7 +589,7 @@ func TestBuildParamsClampsMaxTokensForNonStreaming(t *testing.T) {
 
 	const repairRequestTokens = 32000 // 2x defaultAdaptiveThinkingMaxTokens (16000)
 
-	for _, model := range []string{ModelOpus55, ModelFable51, ModelSonnet5} {
+	for _, model := range []string{ModelOpus55, ModelFable51, ModelSonnet5, ModelFable52, ModelSonnet55, ModelHaiku55} {
 		t.Run(model, func(t *testing.T) {
 			params := c.buildParams(provider.Request{Model: model, UserPrompt: "x", MaxTokens: repairRequestTokens})
 			if params.MaxTokens != nonStreamingMaxTokensCap {

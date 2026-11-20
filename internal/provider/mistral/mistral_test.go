@@ -35,7 +35,7 @@ func TestPricingAndContextWindow(t *testing.T) {
 	if pricingFor("unknown").InputPer1M != 0 {
 		t.Error("unknown model should yield zero pricing")
 	}
-	if contextWindowFor(ModelCodestral) != 256_000 {
+	if contextWindowFor(ModelCodestral) != 128_000 {
 		t.Errorf("codestral context window wrong: %d", contextWindowFor(ModelCodestral))
 	}
 	if contextWindowFor("unknown") != defaultContextWindow {

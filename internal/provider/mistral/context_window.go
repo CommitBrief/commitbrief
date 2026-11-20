@@ -5,9 +5,9 @@ package mistral
 const defaultContextWindow = 128_000
 
 var contextWindows = map[string]int{
-	ModelLarge:     128_000,
-	ModelSmall:     32_000,
-	ModelCodestral: 256_000,
+	ModelLarge:     1_000_000,
+	ModelSmall:     256_000,
+	ModelCodestral: 128_000,
 }
 
 func contextWindowFor(model string) int {
