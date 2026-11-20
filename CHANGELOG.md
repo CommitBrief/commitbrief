@@ -10,6 +10,8 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-11-20
+
 ### Added
 - **Anthropic**: cataloged `claude-fable-5-2` ($8 / $40), `claude-sonnet-5-5` ($2 / $10)
   and `claude-haiku-5-5` ($0.10 / $0.50 for prompts up to 100K tokens), all with a
@@ -2600,7 +2602,8 @@ Anthropic provider.
 - Initial-commit `CommitDiff` via `go-git` returns `ErrUnsupported` and
   is handled by the CLI fallback (ADR-0002 mitigation).
 
-[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.22.0...HEAD
+[Unreleased]: https://github.com/CommitBrief/commitbrief/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/CommitBrief/commitbrief/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/CommitBrief/commitbrief/compare/v1.21.2...v1.22.0
 [1.21.2]: https://github.com/CommitBrief/commitbrief/compare/v1.21.1...v1.21.2
 [1.21.1]: https://github.com/CommitBrief/commitbrief/compare/v1.21.0...v1.21.1
