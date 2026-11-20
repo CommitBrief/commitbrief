@@ -61,6 +61,25 @@ var pricingTable = map[string]provider.Pricing{
 		OutputPer1M:      0.50,
 		CachedInputPer1M: 0.01,
 	},
+	// gpt-6.2-astra, gpt-6.2-sol and gpt-6.1-terra bill prompts above 272K
+	// input tokens at 2x input / 1.5x output for the whole request; the base
+	// tier is snapshotted, same simplification as gpt-5.5 above. Source:
+	// https://developers.openai.com/api/docs/pricing (accessed 2026-11-20).
+	ModelGPT62Astra: {
+		InputPer1M:       8.00,
+		OutputPer1M:      40.00,
+		CachedInputPer1M: 0.40,
+	},
+	ModelGPT62Sol: {
+		InputPer1M:       2.00,
+		OutputPer1M:      10.00,
+		CachedInputPer1M: 0.10,
+	},
+	ModelGPT61Terra: {
+		InputPer1M:       1.00,
+		OutputPer1M:      5.00,
+		CachedInputPer1M: 0.05,
+	},
 }
 
 func pricingFor(model string) provider.Pricing {

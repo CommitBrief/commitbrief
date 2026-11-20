@@ -18,14 +18,17 @@ import (
 func TestModelsList(t *testing.T) {
 	got := Models()
 	want := map[string]bool{
-		ModelGPT4o:     true,
-		ModelGPT4oMini: true,
-		ModelGPT55:     true,
-		ModelGPT54Mini: true,
-		ModelGPT55Pro:  true,
-		ModelGPT6Astra: true,
-		ModelGPT6Sol:   true,
-		ModelGPT6Luna:  true,
+		ModelGPT4o:      true,
+		ModelGPT4oMini:  true,
+		ModelGPT55:      true,
+		ModelGPT54Mini:  true,
+		ModelGPT55Pro:   true,
+		ModelGPT6Astra:  true,
+		ModelGPT6Sol:    true,
+		ModelGPT6Luna:   true,
+		ModelGPT62Astra: true,
+		ModelGPT62Sol:   true,
+		ModelGPT61Terra: true,
 	}
 	if len(got) != len(want) {
 		t.Errorf("Models() length = %d, want %d", len(got), len(want))
@@ -110,6 +113,9 @@ func TestModelCapabilitiesTable(t *testing.T) {
 		{ModelGPT6Astra, true, defaultReasoningMaxTokens, false},
 		{ModelGPT6Sol, true, defaultReasoningMaxTokens, false},
 		{ModelGPT6Luna, true, defaultReasoningMaxTokens, false},
+		{ModelGPT62Astra, false, defaultReasoningMaxTokens, false},
+		{ModelGPT62Sol, false, defaultReasoningMaxTokens, false},
+		{ModelGPT61Terra, false, defaultReasoningMaxTokens, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.model, func(t *testing.T) {
@@ -174,6 +180,9 @@ func TestPricingTableExactValues(t *testing.T) {
 			OutputPer1M:      0.50,
 			CachedInputPer1M: 0.01,
 		},
+		ModelGPT62Astra: {InputPer1M: 8.00, OutputPer1M: 40.00, CachedInputPer1M: 0.40},
+		ModelGPT62Sol:   {InputPer1M: 2.00, OutputPer1M: 10.00, CachedInputPer1M: 0.10},
+		ModelGPT61Terra: {InputPer1M: 1.00, OutputPer1M: 5.00, CachedInputPer1M: 0.05},
 	}
 	for _, model := range Models() {
 		t.Run(model, func(t *testing.T) {

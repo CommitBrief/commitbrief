@@ -104,7 +104,7 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 		// raises the ceiling for truncated (non-empty) JSON, which is why
 		// this empty case is handled here. Truncated non-empty content is
 		// deliberately not retried: that is the ADR-0031 path.
-		if next := retryCeiling(cfg.MaxOutputTokens); next > cfg.MaxOutputTokens {
+		if next := retryCeiling(model, cfg.MaxOutputTokens); next > cfg.MaxOutputTokens {
 			cfg.MaxOutputTokens = next
 			resp2, err2 := c.sdk.Models.GenerateContent(ctx, model, contents, cfg)
 			switch {
@@ -153,9 +153,10 @@ func (c *Client) Review(ctx context.Context, req provider.Request) (provider.Res
 // retryCeiling returns the output ceiling for the empty-content MAX_TOKENS
 // retry: double the current one, capped at the model maximum. A result that
 // is not above current means there is no headroom left and no retry is made.
-func retryCeiling(current int32) int32 {
-	if current > maxOutputTokensCeiling/2 {
-		return maxOutputTokensCeiling
+func retryCeiling(model string, current int32) int32 {
+	ceiling := maxOutputTokensFor(model)
+	if current > ceiling/2 {
+		return ceiling
 	}
 	return current * 2
 }
@@ -195,8 +196,8 @@ func (c *Client) buildParams(req provider.Request, model string) ([]*sdk.Content
 	// doubles the reported output tokens, which now include thought tokens
 	// and (after the empty-content retry) two summed calls, so it can exceed
 	// the model maximum.
-	if maxTokens > maxOutputTokensCeiling {
-		maxTokens = maxOutputTokensCeiling
+	if ceiling := maxOutputTokensFor(model); maxTokens > ceiling {
+		maxTokens = ceiling
 	}
 	contents := []*sdk.Content{
 		{Role: sdk.RoleUser, Parts: []*sdk.Part{sdk.NewPartFromText(req.UserPrompt)}},

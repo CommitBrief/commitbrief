@@ -5,8 +5,11 @@ package cohere
 const (
 	Name = "cohere"
 
-	ModelCommandRPlus = "command-r-plus"
-	ModelCommandR     = "command-r"
+	// The bare command-r-plus / command-r aliases point at the 2024-03/04
+	// releases Cohere deprecated on 2025-09-15; the catalog pins the dated
+	// 08-2024 releases Cohere names as their replacements.
+	ModelCommandRPlus = "command-r-plus-08-2024"
+	ModelCommandR     = "command-r-08-2024"
 	ModelCommandA     = "command-a-03-2025"
 
 	DefaultModel = ModelCommandRPlus

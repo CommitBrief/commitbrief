@@ -18,8 +18,8 @@ import (
 
 func TestModelsList(t *testing.T) {
 	got := Models()
-	if len(got) != 5 {
-		t.Errorf("Models() length = %d, want 5", len(got))
+	if len(got) != 8 {
+		t.Errorf("Models() length = %d, want 8", len(got))
 	}
 }
 
@@ -121,6 +121,9 @@ func TestPricingTableExactValues(t *testing.T) {
 			OutputPer1M:      2.50,
 			CachedInputPer1M: 0.03,
 		},
+		ModelCarbon4:   {InputPer1M: 4.00, OutputPer1M: 20.00, CachedInputPer1M: 0.20},
+		ModelNeon4:     {InputPer1M: 3.00, OutputPer1M: 15.00, CachedInputPer1M: 0.15},
+		ModelHydrogen4: {InputPer1M: 1.50, OutputPer1M: 7.50, CachedInputPer1M: 0.075},
 	}
 	for _, model := range Models() {
 		t.Run(model, func(t *testing.T) {
@@ -366,6 +369,9 @@ func TestDefaultMaxTokensFor(t *testing.T) {
 		ModelPro31:       defaultThinkingMaxTokens,
 		ModelFlashLite31: defaultMaxTokens,
 		ModelFlashLite35: defaultMaxTokens,
+		ModelCarbon4:     defaultThinkingMaxTokens,
+		ModelNeon4:       defaultThinkingMaxTokens,
+		ModelHydrogen4:   defaultThinkingMaxTokens,
 		"custom-model":   defaultMaxTokens,
 	}
 	for model, want := range cases {
@@ -606,9 +612,16 @@ func TestRetryCeilingCapAndHeadroom(t *testing.T) {
 		{maxOutputTokensCeiling, maxOutputTokensCeiling},
 	}
 	for _, tc := range cases {
-		if got := retryCeiling(tc.in); got != tc.want {
+		if got := retryCeiling(ModelFlash38, tc.in); got != tc.want {
 			t.Errorf("retryCeiling(%d) = %d, want %d", tc.in, got, tc.want)
 		}
+	}
+	// gemini-4-carbon has a lower output limit; the retry caps at it.
+	if got := retryCeiling(ModelCarbon4, 20000); got != 32768 {
+		t.Errorf("retryCeiling(carbon, 20000) = %d, want 32768", got)
+	}
+	if got := retryCeiling(ModelCarbon4, 32768); got != 32768 {
+		t.Errorf("retryCeiling(carbon, 32768) = %d, want 32768 (no headroom)", got)
 	}
 	// At the model maximum there is no headroom: no retry is issued.
 	var bodies []map[string]any
@@ -699,5 +712,20 @@ func TestMaxOutputTokensClampedToModelMaximum(t *testing.T) {
 	}
 	if got := maxOutputOf(bodies[0]); got != float64(maxOutputTokensCeiling) {
 		t.Errorf("maxOutputTokens = %v, want clamped to %d", got, maxOutputTokensCeiling)
+	}
+}
+
+// TestBuildParamsClampsToPerModelCeiling locks the per-model output ceiling:
+// gemini-4-carbon's API limit (32768) is below the 65536 default, so a larger
+// request must be clamped to it while other models keep the default cap.
+func TestBuildParamsClampsToPerModelCeiling(t *testing.T) {
+	c := &Client{}
+	_, cfg := c.buildParams(provider.Request{UserPrompt: "x", MaxTokens: 50000}, ModelCarbon4)
+	if cfg.MaxOutputTokens != 32768 {
+		t.Errorf("carbon MaxOutputTokens = %d, want 32768", cfg.MaxOutputTokens)
+	}
+	_, cfg = c.buildParams(provider.Request{UserPrompt: "x", MaxTokens: 50000}, ModelFlash38)
+	if cfg.MaxOutputTokens != 50000 {
+		t.Errorf("flash MaxOutputTokens = %d, want 50000 (under default ceiling)", cfg.MaxOutputTokens)
 	}
 }

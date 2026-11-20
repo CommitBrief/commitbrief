@@ -24,8 +24,12 @@ import (
 )
 
 const (
-	defaultBaseURL   = "https://api.deepseek.com"
-	defaultMaxTokens = 4096
+	defaultBaseURL = "https://api.deepseek.com"
+	// defaultMaxTokens is the output ceiling when the caller sets none. Both
+	// catalog models think by default and reasoning tokens are billed out of
+	// the same budget, so the historical 4096 could be spent before the
+	// findings JSON is written.
+	defaultMaxTokens = 16384
 	testPingPrompt   = "ping"
 	testPingMaxTok   = 8
 )

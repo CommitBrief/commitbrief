@@ -10,6 +10,40 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 
 ## [Unreleased]
 
+### Added
+- **Anthropic**: cataloged `claude-fable-5-2` ($8 / $40), `claude-sonnet-5-5` ($2 / $10)
+  and `claude-haiku-5-5` ($0.10 / $0.50 for prompts up to 100K tokens), all with a
+  1M-token context window. Fable 5.2 and Sonnet 5.5 reject a forced `tool_choice`, so they
+  get `auto` like Opus 5.5 and Fable 5.1; all three get the raised adaptive-thinking
+  default `max_tokens`.
+- **OpenAI**: cataloged `gpt-6.2-astra` ($8 / $40), `gpt-6.2-sol` ($2 / $10) and
+  `gpt-6.1-terra` ($1 / $5), the newest model in each GPT-6 tier. All three are reasoning
+  models with a 1,050,000-token context window, served through Chat Completions.
+- **Gemini**: cataloged the Gemini 4 family: `gemini-4-carbon` ($4 / $20, the rate from
+  2026-12-01), `gemini-4-neon` ($3 / $15) and `gemini-4-hydrogen` ($1.50 / $7.50). All
+  three think by default.
+
+### Changed
+- **Behaviour change — DeepSeek default model `deepseek-chat` → `deepseek-flash`.** DeepSeek
+  retired `deepseek-chat` and `deepseek-reasoner` on 2026-07-24, so every DeepSeek review
+  on the old default failed. The catalog is now `deepseek-flash` (DeepSeek-V4.1-Flash, the
+  vendor's named successor) and `deepseek-v4-pro`. The default is a maintainer stop-gap
+  under ADR-0043 §5b, not a measured pick. The default output ceiling rises from 4096 to
+  16384 because both models think by default. Pricing snapshots the off-peak rate; peak
+  hours bill at twice that.
+- **Behaviour change — Cohere default model `command-r-plus` → `command-r-plus-08-2024`.**
+  Cohere deprecated the bare `command-r-plus` and `command-r` aliases on 2025-09-15. The
+  catalog now pins the dated `command-r-plus-08-2024` and `command-r-08-2024` releases
+  that Cohere names as their replacements. The default is a maintainer stop-gap under
+  ADR-0043 §5b. A config that pins the old alias still sends it unchanged, but the cost
+  footer shows no price for it.
+- **Mistral**: refreshed the price snapshot (`mistral-large-latest` is now Mistral Large 4
+  at $0.70 / $2.10; `mistral-small-latest` is Mistral Small 4 at $0.15 / $0.60) and the
+  context windows (Large 1M, Small 256K, Codestral 128K).
+- **Gemini**: the output-token ceiling is now per model. `gemini-4-carbon` reports a
+  32,768-token limit through the API, below the 65,536 of the rest of the catalog, and
+  both the request and the empty-content retry are capped at it.
+
 ## [1.22.0] - 2026-11-14
 
 ### Added

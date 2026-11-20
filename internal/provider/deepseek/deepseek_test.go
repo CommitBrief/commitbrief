@@ -19,7 +19,7 @@ func TestModelsAndSupport(t *testing.T) {
 	if len(Models()) != 2 {
 		t.Errorf("Models() = %v, want 2", Models())
 	}
-	if !IsModelSupported(ModelChat) || IsModelSupported("gpt-4o") {
+	if !IsModelSupported(ModelFlash) || IsModelSupported("gpt-4o") {
 		t.Error("model support check wrong")
 	}
 	Models()[0] = "tampered"
@@ -29,9 +29,9 @@ func TestModelsAndSupport(t *testing.T) {
 }
 
 func TestPricingAndContextWindow(t *testing.T) {
-	p := pricingFor(ModelChat)
+	p := pricingFor(ModelFlash)
 	if p.InputPer1M == 0 || p.OutputPer1M == 0 {
-		t.Errorf("deepseek-chat pricing missing: %+v", p)
+		t.Errorf("deepseek-flash pricing missing: %+v", p)
 	}
 	if pricingFor("unknown").InputPer1M != 0 {
 		t.Error("unknown model should yield zero pricing")
@@ -77,7 +77,7 @@ func TestReviewWithFakeServer(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id": "x", "object": "chat.completion", "created": 1, "model": ModelChat,
+			"id": "x", "object": "chat.completion", "created": 1, "model": ModelFlash,
 			"choices": []map[string]any{{"index": 0, "finish_reason": "stop",
 				"message": map[string]any{"role": "assistant", "content": "deepseek review"}}},
 			"usage": map[string]any{"prompt_tokens": 30, "completion_tokens": 12, "total_tokens": 42},
